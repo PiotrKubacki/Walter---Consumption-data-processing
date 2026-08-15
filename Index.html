@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --tuc-orange: #E67529;
+      --tuc-warm-bg: #FBF6F1;
+      --tuc-ink: #3A3129;
+      --tuc-line: #E8DED4;
+      --good: #2E7D32; --warn: #B26A00; --bad: #B3261E;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Open Sans', sans-serif; background: var(--tuc-warm-bg); color: var(--tuc-ink); }
+    header {
+      background: var(--tuc-orange); color: #fff; padding: 14px 22px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    /* TODO: paste the TUC owl logo <img src="data:image/png;base64,..."> here,
+       reusing the base64 block from an existing app's Index.html */
+    header h1 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; margin: 0; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+    .card {
+      background: #fff; border: 1px solid var(--tuc-line); border-radius: 10px;
+      padding: 18px 20px; margin-bottom: 18px;
+    }
+    h2 { font-family: 'Poppins', sans-serif; font-size: 16px; margin: 0 0 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--tuc-line); vertical-align: top; }
+    th { font-family: 'Poppins', sans-serif; font-weight: 600; white-space: nowrap; }
+    button {
+      font-family: 'Poppins', sans-serif; font-size: 14px; border: 0; border-radius: 8px;
+      padding: 8px 16px; cursor: pointer; background: var(--tuc-orange); color: #fff;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+    .flag  { color: var(--warn); }
+    .error { color: var(--bad); }
+    .ok    { color: var(--good); }
+    .pill  { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; background: var(--tuc-warm-bg); border: 1px solid var(--tuc-line); margin: 0 4px 2px 0; }
+    .muted { color: #8a7f73; }
+    .mono  { font-family: monospace; font-size: 12px; }
+    #status { margin: 10px 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🏦 CDP · Consumption Data Processing</h1>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Upload folder</h2>
+      <div id="status" class="muted">Loading file list…</div>
+      <table id="fileTable" style="display:none">
+        <thead><tr><th>File</th><th>Format</th><th>Updated</th><th>Size</th><th></th></tr></thead>
+        <tbody id="fileRows"></tbody>
+      </table>
+      <p style="margin-top:12px"><button id="refreshBtn" onclick="loadFiles()">🐱 Refresh list</button></p>
+    </div>
+    <div id="verifyArea"></div>
+  </main>
+
+  <script>
+    function loadFiles() {
+      document.getElementById('status').textContent = 'Loading file list…';
+      document.getElementById('refreshBtn').disabled = true;
+      google.script.run
+        .withSuccessHandler(renderFiles)
+        .withFailureHandler(showError)
+        .apiListUploadFiles();
+    }
+
+    function renderFiles(files) {
+      document.getElementById('refreshBtn').disabled = false;
+      const tbody = document.getElementById('fileRows');
+      tbody.innerHTML = '';
+      if (!files.length) {
+        document.getElementById('status').textContent = 'Upload folder is empty.';
+        document.getElementById('fileTable').style.display = 'none';
+        return;
+      }
+      document.getElementById('status').textContent = files.length + ' file(s) in the upload folder.';
+      document.getElementById('fileTable').style.display = '';
+      for (const f of files) {
+        const tr = document.createElement('tr');
+        const known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
+        tr.innerHTML =
+          '<td>' + esc(f.name) + '</td>' +
+          '<td class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</td>' +
+          '<td>' + esc(f.updated) + '</td>' +
+          '<td>' + Math.round(f.sizeBytes / 1024) + ' KB</td>' +
+          '<td>' + (known
+            ? '<button onclick="parseFile(\'' + f.id + '\', this)">🐱 Parse &amp; verify</button>'
+            : '<span class="error">no parser — not processed</span>') + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function parseFile(fileId, btn) {
+      btn.disabled = true; btn.textContent = 'Parsing…';
+      google.script.run
+        .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Parse & verify'; renderVerify(res); })
+        .withFailureHandler(function (err) { btn.disabled = false; btn.textContent = '🐱 Parse & verify'; showError(err); })
+        .apiParseAndVerify(fileId);
+    }
+
+    function renderVerify(res) {
+      const area = document.getElementById('verifyArea');
+      if (!res.ok) {
+        area.innerHTML = '<div class="card"><h2>' + esc(res.fileName) + '</h2><p class="error">' + esc(res.error) + '</p></div>';
+        return;
+      }
+      const v = res.verify;
+      let html = '<div class="card"><h2>' + esc(res.fileName) + ' <span class="pill">' + esc(res.format) + '</span></h2>';
+      if (v.header) {
+        html += '<p class="muted mono">HDR: ' + esc(v.header.format) + ' v' + esc(v.header.version) +
+                ' · sender ' + esc(v.header.sender) + ' · period ' + esc(v.header.periodFrom) + ' → ' + esc(v.header.periodTo) + '</p>';
+      }
+      for (const f of (v.fileFlags || [])) html += '<p class="flag">⚠ ' + esc(f) + '</p>';
+      if (v.parseErrorCount) {
+        html += '<p class="error">' + v.parseErrorCount + ' row(s) failed to parse.</p><ul class="mono">';
+        for (const e of v.parseErrorSamples) html += '<li>line ' + e.line + ': ' + esc(e.reason) + '</li>';
+        html += '</ul>';
+      }
+      html += '<table><thead><tr>' +
+        '<th>ICP · Register</th><th>Customer</th><th>Records</th><th>Range</th>' +
+        '<th>Days covered</th><th>kWh</th><th>Read quality</th><th>Flags</th>' +
+        '</tr></thead><tbody>';
+      for (const r of v.icpRegisters) {
+        const lk = r.lookup;
+        const cust = lk.customerId
+          ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(lk.registeredName) + '</a>' : esc(lk.registeredName))
+            + '<div class="muted">' + esc(lk.customerId) + (lk.fuel === 'GAS' ? ' · GAS' : '') + '</div>'
+          : '<span class="error">unresolved</span>';
+        html += '<tr>' +
+          '<td class="mono">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+          '<td>' + cust + '</td>' +
+          '<td>' + pills(r.recordCounts) + '</td>' +
+          '<td class="mono">' + esc(r.dateFrom) + '<br>' + esc(r.dateTo) + '</td>' +
+          '<td>' + pills(r.daysCovered) + '</td>' +
+          '<td>' + pills(r.kWh) + '</td>' +
+          '<td>' + pills(r.qualityMix) + '</td>' +
+          '<td>' + flagsHtml(r) + '</td>' +
+          '</tr>';
+      }
+      html += '</tbody></table></div>';
+      area.innerHTML = html;
+      area.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function pills(obj) {
+      let s = '';
+      for (const k of Object.keys(obj)) {
+        if (!obj[k]) continue;
+        s += '<span class="pill">' + esc(k) + ' ' + esc(String(obj[k])) + '</span>';
+      }
+      return s || '<span class="muted">—</span>';
+    }
+
+    function flagsHtml(r) {
+      let s = '';
+      for (const f of (r.lookup.flags || [])) s += '<div class="flag">⚠ ' + esc(f) + '</div>';
+      for (const f of (r.flags || []))        s += '<div class="flag">⚠ ' + esc(f) + '</div>';
+      if (r.gaps && r.gaps.length) {
+        s += '<details><summary class="flag">gaps (' + (r.gaps.length + (r.gapsTruncated || 0)) + ')</summary><div class="mono">';
+        for (const g of r.gaps) s += g.layer + ': ' + esc(g.from) + ' → ' + esc(g.to) + '<br>';
+        if (r.gapsTruncated) s += '… +' + r.gapsTruncated + ' more<br>';
+        s += '</div></details>';
+      }
+      return s || '<span class="ok">clean</span>';
+    }
+
+    function showError(err) {
+      document.getElementById('status').innerHTML = '<span class="error">' + esc(err.message || String(err)) + '</span>';
+      document.getElementById('refreshBtn').disabled = false;
+    }
+
+    function esc(s) {
+      return String(s === undefined || s === null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    loadFiles();
+  </script>
+</body>
+</html>
