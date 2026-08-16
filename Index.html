@@ -46,7 +46,7 @@
 </head>
 <body>
   <header>
-    <h1>🏦 CDP · Consumption Data Processing</h1>
+    <h1><span style="filter:brightness(0) invert(1)">⚡</span> CDP · Consumption Data Processing</h1>
   </header>
   <main>
     <div class="card">
@@ -92,7 +92,7 @@
           '<td>' + Math.round(f.sizeBytes / 1024) + ' KB</td>' +
           '<td>' + (known
             ? '<button onclick="parseFile(\'' + f.id + '\', this)">🐱 Parse &amp; verify</button>'
-            : '<span class="error">no parser — not processed</span>') + '</td>';
+            : '<span class="error">no parser — not processed</span> <button onclick="debugFile(\'' + f.id + '\')">🔍</button>') + '</td>';
         tbody.appendChild(tr);
       }
     }
@@ -114,8 +114,7 @@
       const v = res.verify;
       let html = '<div class="card"><h2>' + esc(res.fileName) + ' <span class="pill">' + esc(res.format) + '</span></h2>';
       if (v.header) {
-        html += '<p class="muted mono">HDR: ' + esc(v.header.format) + ' v' + esc(v.header.version) +
-                ' · sender ' + esc(v.header.sender) + ' · period ' + esc(v.header.periodFrom) + ' → ' + esc(v.header.periodTo) + '</p>';
+        html += '<p class="muted mono">HDR: ' + esc(v.header.raw || (v.header.format + ' v' + v.header.version)) + '</p>';
       }
       for (const f of (v.fileFlags || [])) html += '<p class="flag">⚠ ' + esc(f) + '</p>';
       if (v.parseErrorCount) {
@@ -169,6 +168,22 @@
         s += '</div></details>';
       }
       return s || '<span class="ok">clean</span>';
+    }
+
+    function debugFile(fileId) {
+      google.script.run
+        .withSuccessHandler(function (d) {
+          const area = document.getElementById('verifyArea');
+          area.innerHTML = '<div class="card"><h2>🔍 ' + esc(d.name) + '</h2>' +
+            '<p class="mono">mime: ' + esc(d.mime) + '</p>' +
+            '<p class="mono">first bytes (hex): ' + esc(d.firstBytesHex) + '</p>' +
+            '<p class="mono">first chars (utf-8): ' + esc(d.firstCharsUtf8) + '</p>' +
+            (d.extractedHead ? '<p class="mono">extracted sheet text (head): ' + esc(d.extractedHead) + '</p>' : '') +
+            '</div>';
+          area.scrollIntoView({ behavior: 'smooth' });
+        })
+        .withFailureHandler(showError)
+        .apiDebugFirstBytes(fileId);
     }
 
     function showError(err) {

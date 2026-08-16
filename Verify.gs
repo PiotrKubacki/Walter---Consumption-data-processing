@@ -125,7 +125,7 @@ function cdpLoadLookups_() {
     ea: loadSheetByHeaders_(requireConfig_('ea_icp_sheet_id'), 'EA ICPs (Imports)',
       ['ICP identifier', 'Trader participant id', 'Network participant id', 'Network participant name', 'Customer ID']),
     gas: cfg.gas_icp_sheet_id
-      ? loadSheetByHeaders_(cfg.gas_icp_sheet_id, 'Gas ICP lookup', ['ICP', 'Customer ID'])
+      ? loadSheetByHeaders_(cfg.gas_icp_sheet_id, 'Gas ICP lookup', ['ICP identifier', 'Customer ID'])
       : null,
     customers: loadSheetByHeaders_(requireConfig_('betty_customers_sheet_id'), 'Betty Customers (Imports)',
       ['Customer ID', 'Registered name', 'Trading name']),
@@ -172,7 +172,7 @@ function cdpLookupIcp_(icpId) {
     result.customerId  = String(eaRow[L.ea.headerMap['Customer ID']] || '').trim();
   } else if (L.gas) {
     // Not in EA registry: try the gas sheet
-    const gKey = L.gas.headerMap['ICP'];
+    const gKey = L.gas.headerMap['ICP identifier'];
     const gRow = L.gas.data.find(r => String(r[gKey]).trim() === String(icpId).trim());
     if (gRow) {
       result.fuel = 'GAS';

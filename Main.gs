@@ -68,3 +68,29 @@ function apiParseAndVerify(fileId) {
   const verify = buildVerifySummary_(parsed, file.getName());
   return { ok: true, fileName: file.getName(), format: sniff.format, verify: verify };
 }
+
+/**
+ * Debug: report a file's mime type and the first bytes/chars so an
+ * undetected format can be diagnosed. Read-only.
+ */
+function apiDebugFirstBytes(fileId) {
+  const file = DriveApp.getFileById(fileId);
+  const blob = file.getBlob();
+  const bytes = blob.getBytes().slice(0, 64);
+  const hex = bytes.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join(' ');
+  let utf8 = '';
+  try { utf8 = blob.getDataAsString().slice(0, 200); } catch (e) { utf8 = '(unreadable: ' + e.message + ')'; }
+  const mime = file.getMimeType();
+  let extracted = '';
+  if (mime === MimeType.GOOGLE_SHEETS || /spreadsheetml|ms-excel/.test(mime)) {
+    try { extracted = extractSpreadsheetText_(file).slice(0, 400); }
+    catch (e) { extracted = '(extraction failed: ' + e.message + ')'; }
+  }
+  return {
+    name: file.getName(),
+    mime: mime,
+    firstBytesHex: hex,
+    firstCharsUtf8: utf8.replace(/\u0000/g, '\u2400'),
+    extractedHead: extracted,
+  };
+}

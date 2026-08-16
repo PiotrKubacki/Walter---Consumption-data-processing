@@ -23,9 +23,45 @@ const EIEP = {
 };
 
 function eiepSniff_(content) {
-  const firstLine = String(content || '').split(/\r?\n/, 1)[0] || '';
-  const f = firstLine.split(',');
-  return f[0] === 'HDR' && (f[1] === 'ICPCONS' || f[1] === 'ICPSUMM');
+  const lines = String(content || '').split(/\r?\n/);
+  let seen = 0;
+  for (const raw of lines) {
+    if (!raw || raw.trim() === '') continue;
+    const f = splitCsvLine_(raw);
+    if (f[0] === 'HDR' && (f[1] === 'ICPCONS' || f[1] === 'ICPSUMM')) return true;
+    // v1.4 files may lead with a labelled column-header row before the HDR;
+    // keep scanning a few lines before giving up.
+    if (++seen >= 5) return false;
+  }
+  return false;
+}
+
+/**
+ * Split a CSV line into fields, stripping a UTF-8 BOM, surrounding
+ * quotes, and unescaping doubled quotes. Handles commas inside quoted
+ * fields (rare in EIEP but seen in Excel-resaved files).
+ */
+function splitCsvLine_(raw) {
+  let s = String(raw);
+  if (s.charCodeAt(0) === 0xFEFF) s = s.slice(1); // BOM
+  if (s.indexOf('"') === -1) return s.split(',');
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else if (ch === '"') {
+      inQ = true;
+    } else if (ch === ',') {
+      out.push(cur); cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out;
 }
 
 /**
@@ -36,12 +72,18 @@ function eiepSniff_(content) {
  */
 function eiepParse_(content, fileName) {
   const lines = String(content).split(/\r?\n/);
-  const firstFields = (lines[0] || '').split(',');
-  const format = firstFields[1];
+  let format = null;
+  for (const raw of lines) {
+    if (!raw || raw.trim() === '') continue;
+    const f = splitCsvLine_(raw);
+    if (f[0] === 'HDR') { format = f[1]; break; }
+  }
+  if (!format) throw new Error('No HDR row found in ' + fileName);
 
   // ---- Pass 1: collect raw DET rows + DES row (ICPSUMM) ----
   let header = null;
   let desFields = null;
+  let detLabels = null; // v1.4: labelled column-header row prefixed DET
   const rawDets = [];
   const errors = [];
   const fileFlags = [];
@@ -49,7 +91,7 @@ function eiepParse_(content, fileName) {
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     if (!raw || raw.trim() === '') continue;
-    const fields = raw.split(',');
+    const fields = splitCsvLine_(raw);
     const type = fields[0];
     if (type === 'HDR') {
       header = {
@@ -57,23 +99,32 @@ function eiepParse_(content, fileName) {
         recipient: fields[4], audience: fields[5], fileDate: fields[6],
         rowCount: fields[8], periodFrom: fields[9], periodTo: fields[10],
       };
-      if (header.version && header.version !== '1.1') {
-        fileFlags.push('HDR version "' + header.version + '" is not the expected 1.1 \u2014 ' +
+      if (header.version && header.version !== '1.1' && header.version !== '1.4') {
+        fileFlags.push('HDR version "' + header.version + '" is not a known layout (1.1/1.4) \u2014 ' +
           'spec update lands 30 Oct 2026; verify column layout (design record \u00a711.2).');
       }
     } else if (type === 'DES') {
       desFields = fields;
     } else if (type === 'DET') {
+      // v1.4 label row: field values are column names, not data.
+      if (!detLabels && isDetLabelRow_(fields)) {
+        detLabels = fields;
+        continue;
+      }
       rawDets.push({ line: i + 1, fields: fields });
     }
   }
   if (!header) throw new Error('No HDR row found in ' + fileName);
 
+  // Column indices: label-driven when a v1.4 label row exists,
+  // spec-fixed v1.1 indices otherwise.
+  const cols = detLabels ? icpconsColsFromLabels_(detLabels, fileFlags) : EIEP.icpconsCols;
+
   // ---- Date interpretation decision (design record \u00a76.1) ----
   // Try strict spec format first; if any date fails strict, run the
   // dual-interpretation heuristic over the whole file.
   const dateCols = format === 'ICPCONS'
-    ? [EIEP.icpconsCols.intervalStart, EIEP.icpconsCols.intervalEnd]
+    ? [cols.intervalStart, cols.intervalEnd]
     : icpsummDateCols_(desFields, rawDets);
 
   const dateMode = decideDateMode_(rawDets, dateCols, fileFlags);
@@ -83,11 +134,11 @@ function eiepParse_(content, fileName) {
   for (const det of rawDets) {
     const f = det.fields;
     if (format === 'ICPCONS') {
-      if (f.length < EIEP.expectedIcpconsDetFields - 1) {
+      const c = cols;
+      if (f.length <= c.kWh) {
         errors.push({ line: det.line, reason: 'Field count = ' + f.length });
         continue;
       }
-      const c = EIEP.icpconsCols;
       const start = parseEiepDate_(f[c.intervalStart], dateMode);
       const end   = parseEiepDate_(f[c.intervalEnd],   dateMode);
       if (!start || !end) {
@@ -142,15 +193,50 @@ function eiepParse_(content, fileName) {
 
 // ---------------- Granularity ----------------
 // End-time string test is DST-safe (legacy approach kept):
-// :00/:30-ending timestamps are half-hour intervals. Everything
-// else is an aggregate: ~1 day => DAILY, larger => PERIOD.
+// :00/:30-ending timestamps are half-hour intervals. Seconds are
+// optional (v1.4 / Excel-converted files render "00:30" without
+// them). Everything else is an aggregate: ~1 day => DAILY,
+// larger => PERIOD.
 function classifyGranularity_(endStr, start, end) {
-  if (/:(00|30):00$/.test(endStr || '') ) {
+  if (/:(00|30)(:00)?$/.test(String(endStr || '').trim())) {
     const spanMins = (end - start) / 60000;
     if (spanMins <= 35) return 'HH';
   }
   const spanMins = (end - start) / 60000;
   return (spanMins >= 1320 && spanMins <= 1560) ? 'DAILY' : 'PERIOD';
+}
+
+// ---------------- v1.4 labelled column-header row ----------------
+// v1.4 files lead with a DET-prefixed row of column NAMES, e.g.:
+// DET,consumer_auth_code,ICP,response_code,NZDT_adjustment,
+//     meter_register,energy_flow_direction,register_content_code,
+//     period_of_availability,period_start,period_end,read_status,
+//     consumption_kWh
+function isDetLabelRow_(fields) {
+  const joined = fields.slice(1).join(',').toLowerCase();
+  return joined.indexOf('icp') !== -1 &&
+         (joined.indexOf('period_start') !== -1 || joined.indexOf('consumption') !== -1);
+}
+
+function icpconsColsFromLabels_(labels, fileFlags) {
+  const idx = {};
+  for (let i = 1; i < labels.length; i++) idx[String(labels[i] || '').trim().toLowerCase()] = i;
+  const pick = (names, fallback) => {
+    for (const n of names) if (n in idx) return idx[n];
+    return fallback;
+  };
+  const cols = {
+    icp:           pick(['icp'], EIEP.icpconsCols.icp),
+    meterId:       pick(['meter_register', 'meter_serial_number', 'meter_number'], EIEP.icpconsCols.meterId),
+    tariff:        pick(['register_content_code', 'register_code', 'tariff'], EIEP.icpconsCols.tariff),
+    intervalStart: pick(['period_start', 'interval_start'], EIEP.icpconsCols.intervalStart),
+    intervalEnd:   pick(['period_end', 'interval_end'], EIEP.icpconsCols.intervalEnd),
+    readQuality:   pick(['read_status', 'read_type'], EIEP.icpconsCols.readQuality),
+    kWh:           pick(['consumption_kwh', 'consumption', 'kwh', 'units'], EIEP.icpconsCols.kWh),
+  };
+  fileFlags.push('v1.4 labelled columns used: ICP@' + cols.icp + ', start@' + cols.intervalStart +
+    ', end@' + cols.intervalEnd + ', kWh@' + cols.kWh + ', status@' + cols.readQuality + '.');
+  return cols;
 }
 
 function normaliseReadQuality_(v) {
@@ -222,7 +308,7 @@ function decideDateMode_(rawDets, dateCols, fileFlags) {
       const v = det.fields[col];
       if (v === undefined || v === '') continue;
       sawAny = true;
-      if (!/^\d{2}\/\d{2}\/\d{4}(\s+\d{2}:\d{2}:\d{2})?$/.test(v)) {
+      if (!/^\d{2}\/\d{2}\/\d{4}(\s+\d{2}:\d{2}(:\d{2})?)?$/.test(v)) {
         allStrict = false;
         if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(v)) textish = true;
       }
@@ -298,9 +384,9 @@ function parseEiepDate_(s, mode) {
 }
 
 function parseStrictDdmmyyyy_(s) {
-  const m = (s || '').match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  const m = (s || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
   if (!m) return null;
-  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]);
+  return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
 }
 
 function parseFlexibleDate_(s, dayFirst) {
