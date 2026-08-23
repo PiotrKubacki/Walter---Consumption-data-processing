@@ -94,12 +94,19 @@ function eiepParse_(content, fileName) {
     const fields = splitCsvLine_(raw);
     const type = fields[0];
     if (type === 'HDR') {
+      const versionShaped = /^\d+(\.\d+)?$/.test(String(fields[2] || '').trim());
       header = {
-        format: fields[1], version: fields[2], sender: fields[3],
-        recipient: fields[4], audience: fields[5], fileDate: fields[6],
-        rowCount: fields[8], periodFrom: fields[9], periodTo: fields[10],
+        format: fields[1],
+        version: versionShaped ? fields[2] : '',
+        sender: versionShaped ? fields[3] : fields[2],
+        raw: raw.length > 160 ? raw.slice(0, 160) + '\u2026' : raw,
+        periodFrom: versionShaped ? fields[9] : '',
+        periodTo: versionShaped ? fields[10] : '',
       };
-      if (header.version && header.version !== '1.1' && header.version !== '1.4') {
+      if (!versionShaped) {
+        fileFlags.push('HDR variant without a version field (sender ' + header.sender +
+          ') \u2014 data columns are resolved independently of the HDR, but note the layout.');
+      } else if (header.version !== '1.1' && header.version !== '1.4') {
         fileFlags.push('HDR version "' + header.version + '" is not a known layout (1.1/1.4) \u2014 ' +
           'spec update lands 30 Oct 2026; verify column layout (design record \u00a711.2).');
       }
@@ -192,17 +199,13 @@ function eiepParse_(content, fileName) {
 }
 
 // ---------------- Granularity ----------------
-// End-time string test is DST-safe (legacy approach kept):
-// :00/:30-ending timestamps are half-hour intervals. Seconds are
-// optional (v1.4 / Excel-converted files render "00:30" without
-// them). Everything else is an aggregate: ~1 day => DAILY,
-// larger => PERIOD.
+// Interval layer: 30-min rows (:00/:30 endings, seconds optional)
+// plus any sub-3-hour span \u2014 DST transition days produce odd
+// 60/90-min intervals that are still interval data, not aggregates.
+// Aggregates: ~1 day => DAILY, larger => PERIOD.
 function classifyGranularity_(endStr, start, end) {
-  if (/:(00|30)(:00)?$/.test(String(endStr || '').trim())) {
-    const spanMins = (end - start) / 60000;
-    if (spanMins <= 35) return 'HH';
-  }
   const spanMins = (end - start) / 60000;
+  if (spanMins <= 180) return 'HH';
   return (spanMins >= 1320 && spanMins <= 1560) ? 'DAILY' : 'PERIOD';
 }
 

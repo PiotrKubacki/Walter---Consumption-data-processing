@@ -51,6 +51,18 @@ function buildVerifySummary_(parsed, fileName) {
       flags.push('Multiple layers present (' + layersPresent.join(' + ') +
         ') \u2014 totals must use one layer; cross-check: ' +
         layersPresent.map(g => g + '=' + kwh[g] + ' kWh over ' + daysCovered[g] + ' days').join(', '));
+      // Stray-record detail: a minor layer with only a few rows is usually
+      // an anomaly (odd spans, reversed dates) \u2014 show the rows so the
+      // operator (and the builder) can see exactly what they are.
+      const dominant = layersPresent.reduce((a, b) => byGran[a].length >= byGran[b].length ? a : b);
+      for (const g of layersPresent) {
+        if (g === dominant || byGran[g].length > 5) continue;
+        for (const r of byGran[g]) {
+          const spanMins = Math.round((r.periodEnd - r.periodStart) / 60000);
+          flags.push('Stray ' + g + ' row (line ' + r.line + '): ' + fmt_(r.periodStart) + ' \u2192 ' +
+            fmt_(r.periodEnd) + ' (span ' + spanMins + ' min), ' + r.kWh + ' kWh, ' + r.readQuality);
+        }
+      }
     }
 
     // Gap detection (\u00a76.5)
