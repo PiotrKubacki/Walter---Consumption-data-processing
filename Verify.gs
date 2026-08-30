@@ -133,16 +133,29 @@ let _cdpLookupCache_ = null;
 function cdpLoadLookups_() {
   if (_cdpLookupCache_) return _cdpLookupCache_;
   const cfg = getConfig_();
-  _cdpLookupCache_ = {
-    ea: loadSheetByHeaders_(requireConfig_('ea_icp_sheet_id'), 'EA ICPs (Imports)',
-      ['ICP identifier', 'Trader participant id', 'Network participant id', 'Network participant name', 'Customer ID']),
-    gas: cfg.gas_icp_sheet_id
-      ? loadSheetByHeaders_(cfg.gas_icp_sheet_id, 'Gas ICP lookup', ['ICP identifier', 'Customer ID'])
-      : null,
-    customers: loadSheetByHeaders_(requireConfig_('betty_customers_sheet_id'), 'Betty Customers (Imports)',
-      ['Customer ID', 'Registered name', 'Trading name']),
-  };
+  const ea = loadSheetByHeaders_(requireConfig_('ea_icp_sheet_id'), 'EA ICPs (Imports)',
+    ['ICP identifier', 'Trader participant id', 'Network participant id', 'Network participant name', 'Customer ID']);
+  const gas = cfg.gas_icp_sheet_id
+    ? loadSheetByHeaders_(cfg.gas_icp_sheet_id, 'Gas ICP lookup', ['ICP identifier', 'Customer ID'])
+    : null;
+  const customers = loadSheetByHeaders_(requireConfig_('betty_customers_sheet_id'), 'Betty Customers (Imports)',
+    ['Customer ID', 'Registered name', 'Trading name']);
+  // Index once: per-row linear scans are the main lookup cost on big sheets.
+  ea.index = indexRows_(ea, 'ICP identifier');
+  if (gas) gas.index = indexRows_(gas, 'ICP identifier');
+  customers.index = indexRows_(customers, 'Customer ID');
+  _cdpLookupCache_ = { ea: ea, gas: gas, customers: customers };
   return _cdpLookupCache_;
+}
+
+function indexRows_(sheetData, keyHeader) {
+  const keyCol = sheetData.headerMap[keyHeader];
+  const map = {};
+  for (const row of sheetData.data) {
+    const k = String(row[keyCol]).trim();
+    if (k && !(k in map)) map[k] = row;
+  }
+  return map;
 }
 
 function loadSheetByHeaders_(sheetId, label, requiredHeaders) {
@@ -175,8 +188,7 @@ function cdpLookupIcp_(icpId) {
   };
 
   // Electricity registry first
-  const eaKey = L.ea.headerMap['ICP identifier'];
-  const eaRow = L.ea.data.find(r => String(r[eaKey]).trim() === String(icpId).trim());
+  const eaRow = L.ea.index[String(icpId).trim()];
   if (eaRow) {
     result.traderId    = String(eaRow[L.ea.headerMap['Trader participant id']]  || CDP_NOT_FOUND).trim();
     result.networkId   = String(eaRow[L.ea.headerMap['Network participant id']] || CDP_NOT_FOUND).trim();
@@ -184,8 +196,7 @@ function cdpLookupIcp_(icpId) {
     result.customerId  = String(eaRow[L.ea.headerMap['Customer ID']] || '').trim();
   } else if (L.gas) {
     // Not in EA registry: try the gas sheet
-    const gKey = L.gas.headerMap['ICP identifier'];
-    const gRow = L.gas.data.find(r => String(r[gKey]).trim() === String(icpId).trim());
+    const gRow = L.gas.index[String(icpId).trim()];
     if (gRow) {
       result.fuel = 'GAS';
       result.customerId = String(gRow[L.gas.headerMap['Customer ID']] || '').trim();
@@ -202,8 +213,7 @@ function cdpLookupIcp_(icpId) {
     result.flags.push('No Customer ID on lookup row');
     return result;
   }
-  const cKey = L.customers.headerMap['Customer ID'];
-  const cRow = L.customers.data.find(r => String(r[cKey]).trim() === result.customerId);
+  const cRow = L.customers.index[result.customerId];
   if (!cRow) {
     result.flags.push('Customer ID not found in Betty Customers (Imports)');
     return result;

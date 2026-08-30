@@ -6,42 +6,63 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --tuc-orange: #E67529;
-      --tuc-warm-bg: #FBF6F1;
-      --tuc-ink: #3A3129;
-      --tuc-line: #E8DED4;
+      --tuc-accent: #4281A4;
+      --tuc-warm-bg: #F2F6F9;
+      --tuc-ink: #12242E;
+      --tuc-line: #D9E6ED;
       --good: #2E7D32; --warn: #B26A00; --bad: #B3261E;
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: 'Open Sans', sans-serif; background: var(--tuc-warm-bg); color: var(--tuc-ink); }
     header {
-      background: var(--tuc-orange); color: #fff; padding: 14px 22px;
+      background: var(--tuc-accent); color: #fff; padding: 14px 22px;
       display: flex; align-items: center; gap: 12px;
     }
-    /* TODO: paste the TUC owl logo <img src="data:image/png;base64,..."> here,
-       reusing the base64 block from an existing app's Index.html */
+    /* TODO: paste the TUC owl logo <img src="data:image/png;base64,..."> here */
     header h1 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; margin: 0; }
-    main { max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+    main { margin: 24px 18px; }
     .card {
       background: #fff; border: 1px solid var(--tuc-line); border-radius: 10px;
-      padding: 18px 20px; margin-bottom: 18px;
+      padding: 6px 20px 18px; margin-bottom: 18px;
     }
+    .card > details > summary {
+      font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 600;
+      padding: 12px 0; cursor: pointer; list-style: none;
+    }
+    .card > details > summary::before { content: '▸ '; color: var(--tuc-accent); }
+    .card > details[open] > summary::before { content: '▾ '; }
     h2 { font-family: 'Poppins', sans-serif; font-size: 16px; margin: 0 0 12px; }
     table { border-collapse: collapse; width: 100%; font-size: 13px; }
-    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--tuc-line); vertical-align: top; }
+    th, td { text-align: center; padding: 6px 10px; border-bottom: 1px solid var(--tuc-line); vertical-align: middle; }
+    th.tL, td.tL { text-align: left; }
+    th.tR, td.tR { text-align: right; }
     th { font-family: 'Poppins', sans-serif; font-weight: 600; white-space: nowrap; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--tuc-accent); }
     button {
       font-family: 'Poppins', sans-serif; font-size: 14px; border: 0; border-radius: 8px;
-      padding: 8px 16px; cursor: pointer; background: var(--tuc-orange); color: #fff;
+      padding: 0 16px; cursor: pointer; background: var(--tuc-accent); color: #fff;
+      height: 38px; min-width: 170px; display: inline-flex; align-items: center;
+      justify-content: center; gap: 6px; line-height: 1; vertical-align: middle;
     }
     button:disabled { opacity: .5; cursor: default; }
+    button.icon {
+      min-width: 0; width: 34px; height: 34px; padding: 0;
+      background: transparent; color: var(--tuc-accent);
+      border: 1px solid var(--tuc-line);
+    }
+    button.icon:hover { background: var(--tuc-warm-bg); }
+    button.icon svg { width: 18px; height: 18px; display: block; margin: auto; }
+
+
     .flag  { color: var(--warn); }
     .error { color: var(--bad); }
     .ok    { color: var(--good); }
     .pill  { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; background: var(--tuc-warm-bg); border: 1px solid var(--tuc-line); margin: 0 4px 2px 0; }
-    .muted { color: #8a7f73; }
+    .muted { color: #7497AA; }
     .mono  { font-family: monospace; font-size: 12px; }
-    #status { margin: 10px 0; font-size: 13px; }
+    #status, #runStatus { margin: 10px 0; font-size: 13px; }
+    progress { width: 240px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -49,53 +70,389 @@
     <h1><span style="filter:brightness(0) invert(1)">⚡</span> CDP · Consumption Data Processing</h1>
   </header>
   <main>
-    <div class="card">
-      <h2>Upload folder</h2>
+    <div class="card"><details open>
+      <summary>Upload folder</summary>
       <div id="status" class="muted">Loading file list…</div>
       <table id="fileTable" style="display:none">
-        <thead><tr><th>File</th><th>Format</th><th>Updated</th><th>Size</th><th></th></tr></thead>
+        <thead><tr>
+          <th><input type="checkbox" id="selAll" onclick="toggleAll(this)"></th>
+          <th class="sortable tL" onclick="sortFiles('name')">File <span id="fs_name"></span></th>
+          <th class="sortable" onclick="sortFiles('format')">Format <span id="fs_format"></span></th>
+          <th class="sortable" onclick="sortFiles('updated')">Updated <span id="fs_updated"></span></th>
+          <th class="sortable tR" onclick="sortFiles('sizeBytes')">Size <span id="fs_sizeBytes"></span></th>
+          <th></th>
+        </tr></thead>
         <tbody id="fileRows"></tbody>
       </table>
-      <p style="margin-top:12px"><button id="refreshBtn" onclick="loadFiles()">🐱 Refresh list</button></p>
-    </div>
+      <p style="margin-top:12px">
+        <button id="refreshBtn" onclick="loadFiles()">🐱 Refresh list</button>
+        <button id="analyseBtn" onclick="startAnalysis()">🐱 Analyse selected</button>
+        <button id="pauseBtn" style="display:none" onclick="togglePause(this)">⏸ Pause</button>
+        <button id="stopBtn" style="display:none" onclick="stopAnalysis()">⏹ Stop</button>
+        <button id="trashBtn" onclick="trashSelected()">❌ <span id="trashLabel">Delete selected</span></button>
+      </p>
+      <div id="runStatus"></div>
+    </details></div>
     <div id="verifyArea"></div>
   </main>
 
   <script>
+    var uploadFiles = [];
+    var selection = {};
+    var fileSort = { key: 'name', dir: 1 };
+    var batchData = null;
+    var batchFileIds = [];
+    var batchSort = { key: null, dir: 1 };
+    var run = { active: false, paused: false, stopped: false };
+    var inspectCopies = {};
+
+    function fmtNum(n) {
+      if (n === null || n === undefined || n === '') return '—';
+      return Number(n).toLocaleString('en-NZ');
+    }
+
+    // ---------------- Upload folder ----------------
+
     function loadFiles() {
       document.getElementById('status').textContent = 'Loading file list…';
       document.getElementById('refreshBtn').disabled = true;
       google.script.run
-        .withSuccessHandler(renderFiles)
+        .withSuccessHandler(function (files) {
+          uploadFiles = files;
+          document.getElementById('refreshBtn').disabled = false;
+          renderFiles();
+        })
         .withFailureHandler(showError)
         .apiListUploadFiles();
     }
 
-    function renderFiles(files) {
-      document.getElementById('refreshBtn').disabled = false;
-      const tbody = document.getElementById('fileRows');
+    function sortFiles(key) {
+      fileSort.dir = (fileSort.key === key) ? -fileSort.dir : 1;
+      fileSort.key = key;
+      renderFiles();
+    }
+
+    function sortMark(spanPrefix, sort, key) {
+      var el = document.getElementById(spanPrefix + key);
+      if (el) el.textContent = sort.key === key ? (sort.dir === 1 ? '▲' : '▼') : '';
+    }
+
+    function renderFiles() {
+      var tbody = document.getElementById('fileRows');
       tbody.innerHTML = '';
-      if (!files.length) {
+      ['name','format','updated','sizeBytes'].forEach(function (k) { sortMark('fs_', fileSort, k); });
+      if (!uploadFiles.length) {
         document.getElementById('status').textContent = 'Upload folder is empty.';
         document.getElementById('fileTable').style.display = 'none';
         return;
       }
-      document.getElementById('status').textContent = files.length + ' file(s) in the upload folder.';
+      var sorted = uploadFiles.slice().sort(function (a, b) {
+        var x = a[fileSort.key], y = b[fileSort.key];
+        if (typeof x === 'string') { x = x.toLowerCase(); y = String(y).toLowerCase(); }
+        return (x < y ? -1 : x > y ? 1 : 0) * fileSort.dir;
+      });
+      document.getElementById('status').textContent = uploadFiles.length + ' file(s) in the upload folder.';
       document.getElementById('fileTable').style.display = '';
-      for (const f of files) {
-        const tr = document.createElement('tr');
-        const known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
+      for (var i = 0; i < sorted.length; i++) {
+        var f = sorted[i];
+        var known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
+        var tr = document.createElement('tr');
         tr.innerHTML =
-          '<td>' + esc(f.name) + '</td>' +
+          '<td><input type="checkbox" ' + (selection[f.id] ? 'checked' : '') + ' onclick="toggleSel(\'' + f.id + '\', this)"></td>' +
+          '<td class="tL">' + esc(f.name) + '</td>' +
           '<td class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</td>' +
           '<td>' + esc(f.updated) + '</td>' +
-          '<td>' + Math.round(f.sizeBytes / 1024) + ' KB</td>' +
-          '<td>' + (known
+          '<td class="tR">' + Math.round(f.sizeBytes / 1024) + ' KB</td>' +
+          '<td class="tL">' + (known
             ? '<button onclick="parseFile(\'' + f.id + '\', this)">🐱 Parse &amp; verify</button>'
-            : '<span class="error">no parser — not processed</span> <button onclick="debugFile(\'' + f.id + '\')">🔍</button>') + '</td>';
+            : '<span class="error">no parser</span> <button onclick="debugFile(\'' + f.id + '\')">🔍</button>') + '</td>';
         tbody.appendChild(tr);
       }
+      syncSelAll();
     }
+
+    function toggleSel(id, cb) { if (cb.checked) selection[id] = true; else delete selection[id]; syncSelAll(); }
+    function toggleAll(cb) {
+      selection = {};
+      if (cb.checked) for (var i = 0; i < uploadFiles.length; i++) selection[uploadFiles[i].id] = true;
+      renderFiles();
+    }
+    function syncSelAll() {
+      var n = Object.keys(selection).length;
+      var all = document.getElementById('selAll');
+      all.checked = n > 0 && n === uploadFiles.length;
+      all.indeterminate = n > 0 && n < uploadFiles.length;
+      document.getElementById('analyseBtn').textContent = '🐱 Analyse selected' + (n ? ' (' + n + ')' : '');
+      document.getElementById('trashLabel').textContent = 'Delete selected' + (n ? ' (' + n + ')' : '');
+    }
+    function selectedIds() { return Object.keys(selection); }
+
+    function trashSelected() {
+      var ids = selectedIds();
+      if (!ids.length) { alert('Tick the file(s) to delete first.'); return; }
+      var names = uploadFiles.filter(function (f) { return selection[f.id]; }).map(function (f) { return f.name; });
+      if (!confirm('Move ' + ids.length + ' file(s) to Drive Trash?\n\n' + names.join('\n'))) return;
+      var btn = document.getElementById('trashBtn');
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) { btn.disabled = false; selection = {}; loadFiles(); })
+        .withFailureHandler(function (e) { btn.disabled = false; showError(e); })
+        .apiTrashFiles(ids);
+    }
+
+    // ---------------- Chunked analysis with pause/stop ----------------
+
+    function startAnalysis() {
+      var ids = selectedIds();
+      if (!ids.length) { alert('Tick the file(s) to analyse first (header checkbox selects all).'); return; }
+      run = { active: true, paused: false, stopped: false, ids: ids, idx: 0, prepared: [], skipped: [] };
+      inspectCopies = {}; // server sweeps INSPECT copies at analysis start
+      document.getElementById('analyseBtn').disabled = true;
+      document.getElementById('pauseBtn').style.display = '';
+      document.getElementById('stopBtn').style.display = '';
+      document.getElementById('verifyArea').innerHTML = '';
+      prepareNext();
+    }
+
+    function togglePause(btn) {
+      run.paused = !run.paused;
+      btn.textContent = run.paused ? '▶ Resume' : '⏸ Pause';
+      setRunStatus();
+      if (!run.paused) prepareNext();
+    }
+
+    function stopAnalysis() {
+      run.stopped = true; run.active = false;
+      resetRunUi();
+      document.getElementById('runStatus').innerHTML = '<span class="muted">Analysis stopped.</span>';
+    }
+
+    function resetRunUi() {
+      document.getElementById('analyseBtn').disabled = false;
+      var p = document.getElementById('pauseBtn');
+      p.style.display = 'none'; p.textContent = '⏸ Pause';
+      document.getElementById('stopBtn').style.display = 'none';
+    }
+
+    function setRunStatus(extra) {
+      var name = run.idx < run.ids.length ? nameForId(run.ids[run.idx]) : '';
+      document.getElementById('runStatus').innerHTML =
+        '<progress max="' + (run.ids.length + 1) + '" value="' + run.idx + '"></progress> ' +
+        (run.paused ? '<span class="flag">paused</span> ' : '') +
+        '<span class="muted">' + (extra || ('preparing ' + (run.idx + 1) + '/' + run.ids.length + ': ' + esc(name))) + '</span>';
+    }
+
+    function nameForId(id) {
+      for (var i = 0; i < uploadFiles.length; i++) if (uploadFiles[i].id === id) return uploadFiles[i].name;
+      return id;
+    }
+
+    function prepareNext() {
+      if (!run.active || run.stopped || run.paused) return;
+      if (run.idx >= run.ids.length) { analysePhase(); return; }
+      setRunStatus();
+      var id = run.ids[run.idx];
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (run.stopped) return;
+          if (res.ok) run.prepared.push(id); else run.skipped.push({ name: res.name, reason: res.reason });
+          run.idx++;
+          prepareNext();
+        })
+        .withFailureHandler(function (e) {
+          if (run.stopped) return;
+          run.skipped.push({ name: nameForId(id), reason: e.message || String(e) });
+          run.idx++;
+          prepareNext();
+        })
+        .apiPrepareFile(id);
+    }
+
+    function analysePhase() {
+      if (!run.active || run.stopped) return;
+      setRunStatus('analysing ' + run.prepared.length + ' file(s)…');
+      batchFileIds = run.prepared.slice();
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (run.stopped) return;
+          run.active = false;
+          resetRunUi();
+          document.getElementById('runStatus').innerHTML = '';
+          for (var i = 0; i < run.skipped.length; i++) res.skipped.push(run.skipped[i]);
+          batchData = res;
+          batchSort = { key: null, dir: 1 };
+          renderBatch();
+        })
+        .withFailureHandler(function (e) { run.active = false; resetRunUi(); showError(e); })
+        .apiAnalyseCached(run.prepared);
+    }
+
+    // ---------------- Batch rendering ----------------
+
+    function sortBatch(key) {
+      batchSort.dir = (batchSort.key === key) ? -batchSort.dir : 1;
+      batchSort.key = key;
+      renderBatch();
+    }
+
+    function batchVal(r, key) {
+      var a = r.analysis;
+      if (key === 'grade') return a.grade;
+      if (key === 'icp') return r.icp;
+      if (key === 'customer') return (r.lookup.registeredName || '').toLowerCase();
+      if (key === 'file') return (r.sources.join(', ') || '').toLowerCase();
+      if (key === 'layer') return a.layer;
+      if (key === 'window') return a.windowFrom;
+      if (key === 'coverage') return a.daysCovered;
+      if (key === 'avm') return a.avm === null ? -1 : a.avm;
+      if (key === 'annual') return a.annualKwh === null ? -1 : a.annualKwh;
+      return '';
+    }
+
+    function renderBatch() {
+      var res = batchData;
+      var area = document.getElementById('verifyArea');
+      var html = '<div class="card"><details open><summary>⚡ Batch analysis (' + res.rows.length + ' ICP-registers)</summary>';
+      html += '<p class="muted">' + res.files.length + ' file(s) analysed';
+      if (res.skipped.length) html += ' · ' + res.skipped.length + ' skipped (' + res.skipped.map(function (s) { return esc(s.name) + ': ' + esc(s.reason); }).join('; ') + ')';
+      html += '</p>';
+      var fileFlagItems = [];
+      for (var i = 0; i < res.files.length; i++) {
+        var f = res.files[i];
+        for (var j = 0; j < (f.fileFlags || []).length; j++) fileFlagItems.push('<p class="flag">⚠ ' + esc(f.name) + ': ' + esc(f.fileFlags[j]) + '</p>');
+        if (f.errors) fileFlagItems.push('<p class="error">' + esc(f.name) + ': ' + f.errors + ' row error(s)</p>');
+      }
+      if (fileFlagItems.length) {
+        html += '<details' + (fileFlagItems.join('').indexOf('class="error"') !== -1 ? ' open' : '') + '>' +
+          '<summary class="flag">File notices (' + fileFlagItems.length + ')</summary>' + fileFlagItems.join('') + '</details>';
+      }
+      // Analysed files table with inspect buttons (always visible)
+      html += '<details><summary class="muted">Analysed files (' + res.files.length + ')</summary>' +
+        '<table style="margin-bottom:14px"><thead><tr><th class="tL">Analysed file</th><th class="tR">Records</th><th class="tR">Row errors</th></tr></thead><tbody>';
+      for (var i = 0; i < res.files.length; i++) {
+        var f = res.files[i];
+        html += '<tr><td class="tL">' + esc(f.name) + '</td>' +
+          '<td class="tR">' + fmtNum(f.records) + '</td>' +
+          '<td class="tR">' + (f.errors ? '<span class="error">' + fmtNum(f.errors) + '</span>' : '0') + '</td></tr>';
+      }
+      html += '</tbody></table></details>';
+
+      var cols = [
+        ['grade', 'Grade', ''], ['icp', 'ICP · Register', 'tL'], ['customer', 'Customer', 'tL'], ['file', 'File', 'tL'],
+        ['layer', 'Layer', ''], ['window', 'Window', 'tL'], ['coverage', 'Coverage', 'tR'], ['avm', 'AVM kWh/mo', 'tR'], ['annual', 'Annual kWh', 'tR'],
+      ];
+      html += '<table><thead><tr>';
+      for (var c = 0; c < cols.length; c++) {
+        var mark = batchSort.key === cols[c][0] ? (batchSort.dir === 1 ? ' ▲' : ' ▼') : '';
+        html += '<th class="sortable ' + cols[c][2] + '" onclick="sortBatch(\'' + cols[c][0] + '\')">' + cols[c][1] + mark + '</th>';
+      }
+      html += '<th class="tL">Flags</th><th></th></tr></thead><tbody>';
+
+      var rows = res.rows.slice();
+      if (batchSort.key) {
+        rows.sort(function (a, b) {
+          var x = batchVal(a, batchSort.key), y = batchVal(b, batchSort.key);
+          return (x < y ? -1 : x > y ? 1 : 0) * batchSort.dir;
+        });
+      }
+      for (var i = 0; i < rows.length; i++) html += batchRowHtml(rows[i]);
+      html += '</tbody></table>';
+
+      html += '<div style="margin-top:16px;border-top:1px solid var(--tuc-line);padding-top:12px">' +
+        '<h2>🔌 Betty round-trip</h2>' +
+        '<p><button onclick="bettyIds()">🐱 Show Customer ID list for Betty</button></p>' +
+        '<div id="bettyIdsArea"></div>' +
+        '<p style="margin-top:10px">Then upload the template Betty exported: ' +
+        '<input type="file" id="bettyFile" accept=".xlsx" style="display:none" onchange="bettyFileChosen(this)"> ' +
+        '<button onclick="document.getElementById(\'bettyFile\').click()">📁 Choose template</button> ' +
+        '<span id="bettyFileName" class="muted">no file chosen</span> ' +
+        '<button id="bettyFillBtn" onclick="bettyFill()">🐱 Fill template</button></p>' +
+        '<div id="bettyFillArea"></div>' +
+        '</div>';
+      html += '</details></div>';
+      area.innerHTML = html;
+    }
+
+    var SHEET_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>' +
+      '<line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+
+    function inspectIconForName(name) {
+      var fileId = null;
+      if (batchData) for (var i = 0; i < batchData.files.length; i++) if (batchData.files[i].name === name) { fileId = batchData.files[i].id; break; }
+      if (!fileId) return '';
+      if (inspectCopies[fileId]) {
+        return '<a href="' + esc(inspectCopies[fileId].url) + '" target="_blank" title="Open inspection copy: ' + esc(name) + '">' +
+          '<button class="icon">' + SHEET_SVG + '</button></a>' +
+          '<button class="icon" style="color:var(--bad)" title="Delete inspection copy" onclick="deleteCopy(\'' + fileId + '\', this)">✕</button>';
+      }
+      return '<button class="icon" title="Inspect in Sheets: ' + esc(name) + '" onclick="openCopy(\'' + fileId + '\', this)">' + SHEET_SVG + '</button>';
+    }
+
+    function refreshInspectUi() {
+      if (batchData) renderBatch();
+      renderFiles();
+    }
+
+    function batchRowHtml(r) {
+      var a = r.analysis;
+      var lk = r.lookup;
+      var cust = lk.customerId
+        ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(lk.registeredName) + '</a>' : esc(lk.registeredName))
+          + '<div class="muted">' + esc(lk.customerId) + (lk.fuel === 'GAS' ? ' · GAS' : '') + '</div>'
+        : '<span class="error">unresolved</span>';
+      var flagItems = [];
+      var arrs = [lk.flags || [], a.breaches || [], a.flags || []];
+      for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) flagItems.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
+      var fl = collapseFlags(flagItems);
+      var profileHtml = '';
+      var tp = a.timeProfile;
+      if (tp) {
+        var ph = '';
+        var sk = Object.keys(tp.seasonal || {});
+        if (sk.length) ph += '<div><b>Seasonal:</b> ' + sk.map(function (s) { return esc(s) + ' ' + (tp.seasonal[s].monthlyAvg === null ? '—' : fmtNum(tp.seasonal[s].monthlyAvg) + ' kWh/mo'); }).join(' · ') + '</div>';
+        var wk = Object.keys(tp.windows || {});
+        if (wk.length) ph += '<div><b>Windows' + (tp.usedDefaultWindows ? ' (DEFAULT)' : '') + ':</b> ' + wk.map(function (w) { return esc(w) + ' ' + tp.windows[w].sharePct + '% (' + (tp.windows[w].monthlyAvg === null ? '—' : fmtNum(tp.windows[w].monthlyAvg) + ' kWh/mo') + ')'; }).join(' · ') + '</div>';
+        if (tp.weekday.kWhPerDay !== null || tp.weekend.kWhPerDay !== null) ph += '<div><b>Weekday/Weekend:</b> ' + tp.weekday.kWhPerDay + ' / ' + tp.weekend.kWhPerDay + ' kWh/day</div>';
+        if (ph) profileHtml = '<details><summary class="muted">⚡ time profile</summary><div style="font-size:12px;padding:4px 0">' + ph + '</div></details>';
+      }
+      return '<tr>' +
+        '<td style="font-size:20px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
+        '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+        '<td class="tL">' + cust + '</td>' +
+        '<td class="muted tL" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
+        '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
+        '<td class="mono tL">' + esc(a.windowFrom) + '<br>' + esc(a.windowTo) + '</td>' +
+        '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d' +
+          (a.estimateShare > 0 ? '<div class="muted">est ' + Math.round(a.estimateShare * 100) + '%</div>' : '') + '</td>' +
+        '<td class="tR" style="font-weight:600">' + fmtNum(a.avm) + profileHtml + '</td>' +
+        '<td class="tR" style="font-weight:600">' + fmtNum(a.annualKwh) + '</td>' +
+        '<td class="tL">' + (fl || '<span class="ok">clean</span>') + '</td>' +
+        '<td>' + r.sources.map(inspectIconForName).join(' ') + '</td>' +
+        '</tr>';
+    }
+
+    function openCopy(fileId, btn) {
+      btn.disabled = true; btn.textContent = 'copying…';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          inspectCopies[fileId] = res;
+          window.open(res.url, '_blank');
+          refreshInspectUi();
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📄 open copy in Sheets'; showError(e); })
+        .apiOpenFileCopy(fileId);
+    }
+
+    function deleteCopy(fileId, btn) {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function () { delete inspectCopies[fileId]; refreshInspectUi(); })
+        .withFailureHandler(function (e) { btn.disabled = false; showError(e); })
+        .apiDeleteInspectCopy(inspectCopies[fileId].copyId);
+    }
+
+    // ---------------- Per-file verify (unchanged behaviour) ----------------
 
     function parseFile(fileId, btn) {
       btn.disabled = true; btn.textContent = 'Parsing…';
@@ -106,80 +463,188 @@
     }
 
     function renderVerify(res) {
-      const area = document.getElementById('verifyArea');
+      var area = document.getElementById('verifyArea');
       if (!res.ok) {
-        area.innerHTML = '<div class="card"><h2>' + esc(res.fileName) + '</h2><p class="error">' + esc(res.error) + '</p></div>';
+        area.innerHTML = '<div class="card"><details open><summary>' + esc(res.fileName) + '</summary><p class="error">' + esc(res.error) + '</p></details></div>';
         return;
       }
-      const v = res.verify;
-      let html = '<div class="card"><h2>' + esc(res.fileName) + ' <span class="pill">' + esc(res.format) + '</span></h2>';
+      var v = res.verify;
+      var html = '<div class="card"><details open><summary>' + esc(res.fileName) + ' <span class="pill">' + esc(res.format) + '</span></summary>';
       if (v.header) {
         html += '<p class="muted mono">HDR: ' + esc(v.header.raw || (v.header.format + ' v' + v.header.version)) + '</p>';
       }
-      for (const f of (v.fileFlags || [])) html += '<p class="flag">⚠ ' + esc(f) + '</p>';
+      var vFileFlags = (v.fileFlags || []).map(function (f) { return '<p class="flag">⚠ ' + esc(f) + '</p>'; });
+      if (vFileFlags.length > 2) {
+        html += '<details><summary class="flag">File notices (' + vFileFlags.length + ')</summary>' + vFileFlags.join('') + '</details>';
+      } else {
+        html += vFileFlags.join('');
+      }
       if (v.parseErrorCount) {
         html += '<p class="error">' + v.parseErrorCount + ' row(s) failed to parse.</p><ul class="mono">';
-        for (const e of v.parseErrorSamples) html += '<li>line ' + e.line + ': ' + esc(e.reason) + '</li>';
+        for (var i = 0; i < v.parseErrorSamples.length; i++) html += '<li>line ' + v.parseErrorSamples[i].line + ': ' + esc(v.parseErrorSamples[i].reason) + '</li>';
         html += '</ul>';
       }
       html += '<table><thead><tr>' +
-        '<th>ICP · Register</th><th>Customer</th><th>Records</th><th>Range</th>' +
-        '<th>Days covered</th><th>kWh</th><th>Read quality</th><th>Flags</th>' +
+        '<th class="tL">ICP · Register</th><th class="tL">Customer</th><th>Records</th><th class="tL">Range</th>' +
+        '<th class="tR">Days covered</th><th class="tR">kWh</th><th>Read quality</th><th class="tL">Flags</th>' +
         '</tr></thead><tbody>';
-      for (const r of v.icpRegisters) {
-        const lk = r.lookup;
-        const cust = lk.customerId
+      for (var i = 0; i < v.icpRegisters.length; i++) {
+        var r = v.icpRegisters[i];
+        var lk = r.lookup;
+        var cust = lk.customerId
           ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(lk.registeredName) + '</a>' : esc(lk.registeredName))
             + '<div class="muted">' + esc(lk.customerId) + (lk.fuel === 'GAS' ? ' · GAS' : '') + '</div>'
           : '<span class="error">unresolved</span>';
         html += '<tr>' +
-          '<td class="mono">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
-          '<td>' + cust + '</td>' +
+          '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+          '<td class="tL">' + cust + '</td>' +
           '<td>' + pills(r.recordCounts) + '</td>' +
-          '<td class="mono">' + esc(r.dateFrom) + '<br>' + esc(r.dateTo) + '</td>' +
-          '<td>' + pills(r.daysCovered) + '</td>' +
-          '<td>' + pills(r.kWh) + '</td>' +
+          '<td class="mono tL">' + esc(r.dateFrom) + '<br>' + esc(r.dateTo) + '</td>' +
+          '<td class="tR">' + pills(r.daysCovered) + '</td>' +
+          '<td class="tR">' + pills(r.kWh, true) + '</td>' +
           '<td>' + pills(r.qualityMix) + '</td>' +
-          '<td>' + flagsHtml(r) + '</td>' +
+          '<td class="tL">' + flagsHtml(r) + '</td>' +
           '</tr>';
       }
-      html += '</tbody></table></div>';
+      html += '</tbody></table></details></div>';
       area.innerHTML = html;
       area.scrollIntoView({ behavior: 'smooth' });
     }
 
-    function pills(obj) {
-      let s = '';
-      for (const k of Object.keys(obj)) {
+    function pills(obj, numeric) {
+      var s = '';
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
         if (!obj[k]) continue;
-        s += '<span class="pill">' + esc(k) + ' ' + esc(String(obj[k])) + '</span>';
+        s += '<span class="pill">' + esc(k) + ' ' + (numeric ? fmtNum(obj[k]) : esc(String(obj[k]))) + '</span>';
       }
       return s || '<span class="muted">—</span>';
     }
 
     function flagsHtml(r) {
-      let s = '';
-      for (const f of (r.lookup.flags || [])) s += '<div class="flag">⚠ ' + esc(f) + '</div>';
-      for (const f of (r.flags || []))        s += '<div class="flag">⚠ ' + esc(f) + '</div>';
+      var items = [];
+      var arrs = [r.lookup.flags || [], r.flags || []];
+      for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) items.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
+      var s = collapseFlags(items);
       if (r.gaps && r.gaps.length) {
         s += '<details><summary class="flag">gaps (' + (r.gaps.length + (r.gapsTruncated || 0)) + ')</summary><div class="mono">';
-        for (const g of r.gaps) s += g.layer + ': ' + esc(g.from) + ' → ' + esc(g.to) + '<br>';
+        for (var i = 0; i < r.gaps.length; i++) s += r.gaps[i].layer + ': ' + esc(r.gaps[i].from) + ' → ' + esc(r.gaps[i].to) + '<br>';
         if (r.gapsTruncated) s += '… +' + r.gapsTruncated + ' more<br>';
         s += '</div></details>';
       }
       return s || '<span class="ok">clean</span>';
     }
 
+    function collapseFlags(items, visible) {
+      if (!items.length) return '';
+      visible = visible === undefined ? 1 : visible;
+      if (items.length <= visible + 1) return items.join('');
+      return items.slice(0, visible).join('') +
+        '<details><summary class="flag">+' + (items.length - visible) + ' more flag(s)</summary>' +
+        items.slice(visible).join('') + '</details>';
+    }
+
+    // ---------------- Betty ----------------
+
+    function bettyIds() {
+      var area = document.getElementById('bettyIdsArea');
+      area.innerHTML = '<span class="muted">Building Customer ID list…</span>';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          var h = '<p>' + res.customerIds.length + ' customer(s) across ' + res.icpCount + ' ICP-register(s):</p>' +
+            '<textarea readonly style="width:100%;height:90px;font-family:monospace" onclick="this.select()">' +
+            res.customerIds.join('\n') + '</textarea>';
+          if (res.unresolvedIcps.length) {
+            h += '<p class="flag">⚠ ' + res.unresolvedIcps.length + ' ICP(s) with no Customer ID (not in list): ' +
+              res.unresolvedIcps.map(esc).join(', ') + '</p>';
+          }
+          area.innerHTML = h;
+        })
+        .withFailureHandler(function (e) { area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+        .apiBettyCustomerIds(batchFileIds);
+    }
+
+    function bettyFileChosen(input) {
+      document.getElementById('bettyFileName').textContent =
+        (input.files && input.files.length) ? input.files[0].name : 'no file chosen';
+    }
+
+    function bettyFill() {
+      var input = document.getElementById('bettyFile');
+      var area = document.getElementById('bettyFillArea');
+      var btn = document.getElementById('bettyFillBtn');
+      if (!input.files || !input.files.length) { area.innerHTML = '<span class="error">Choose the Betty template file first.</span>'; return; }
+      var file = input.files[0];
+      btn.disabled = true; btn.textContent = 'Filling…';
+      var reader = new FileReader();
+      reader.onload = function () {
+        var b64 = reader.result.split(',')[1];
+        google.script.run
+          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Fill template'; renderBettyResult(res); })
+          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+          .apiBettyFill(b64, file.name, batchFileIds);
+      };
+      reader.onerror = function () { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
+      reader.readAsDataURL(file);
+    }
+
+    function renderBettyResult(res) {
+      var area = document.getElementById('bettyFillArea');
+      var h = '<p class="ok" style="font-weight:600">Filled template ready: <a href="' + esc(res.outputUrl) + '" target="_blank">' + esc(res.outputName) + '</a></p>' +
+        '<p class="muted">Download it from Drive and import into Betty. Run ref ' + esc(res.runRef) + ' logged.</p>';
+      if (res.updated.length) {
+        h += '<p>Updated ' + res.updated.length + ' Current analysis row(s):</p><ul>';
+        for (var i = 0; i < res.updated.length; i++) {
+          var u = res.updated[i];
+          h += '<li><span class="mono">' + esc(u.icp) + '</span> ' + esc(u.customer || '') + ': ' + u.detail.map(esc).join('; ');
+          if (u.flags.length) h += ' <span class="flag">(' + u.flags.map(esc).join('; ') + ')</span>';
+          h += '</li>';
+        }
+        h += '</ul>';
+      }
+      if (res.flagged.length) {
+        h += '<p class="error">Blocked (not written):</p><ul>';
+        for (var i = 0; i < res.flagged.length; i++) h += '<li class="error"><span class="mono">' + esc(res.flagged[i].icp) + '</span>: ' + esc(res.flagged[i].reason) + '</li>';
+        h += '</ul>';
+      }
+      if (res.notUpdated.length) {
+        h += '<details><summary class="muted">Not updated (' + res.notUpdated.length + ')</summary><ul>';
+        for (var i = 0; i < res.notUpdated.length; i++) h += '<li class="muted"><span class="mono">' + esc(res.notUpdated[i].icp) + '</span>: ' + esc(res.notUpdated[i].reason) + '</li>';
+        h += '</ul></details>';
+      }
+      if (res.vocabularyGaps.length) {
+        h += '<p class="flag">⚠ Vocabulary gaps (need Cortex request): ' + res.vocabularyGaps.map(esc).join(', ') + '</p>';
+      }
+      h += '<p style="margin-top:10px"><button onclick="archiveFiles(this)">🐱 Archive processed files</button> <span class="muted">moves recognised files to CDP Processed</span></p>';
+      area.innerHTML = h;
+    }
+
+    function archiveFiles(btn) {
+      btn.disabled = true; btn.textContent = 'Archiving…';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.textContent = 'Archived ' + res.moved.length + ' file(s)';
+          selection = {};
+          loadFiles();
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Archive processed files'; showError(e); })
+        .apiArchiveProcessedFiles();
+    }
+
+    // ---------------- Debug ----------------
+
     function debugFile(fileId) {
       google.script.run
         .withSuccessHandler(function (d) {
-          const area = document.getElementById('verifyArea');
-          area.innerHTML = '<div class="card"><h2>🔍 ' + esc(d.name) + '</h2>' +
+          var area = document.getElementById('verifyArea');
+          area.innerHTML = '<div class="card"><details open><summary>🔍 ' + esc(d.name) + '</summary>' +
             '<p class="mono">mime: ' + esc(d.mime) + '</p>' +
             '<p class="mono">first bytes (hex): ' + esc(d.firstBytesHex) + '</p>' +
             '<p class="mono">first chars (utf-8): ' + esc(d.firstCharsUtf8) + '</p>' +
-            (d.extractedHead ? '<p class="mono">extracted sheet text (head): ' + esc(d.extractedHead) + '</p>' : '') +
-            '</div>';
+            (d.extractedHead ? '<p class="mono">content (head, via ' + esc(d.contentSource || '') + '): ' + esc(d.extractedHead) + '</p>' : '') +
+            (d.sniffVerdicts ? '<p class="mono">sniff verdicts: ' + esc(d.sniffVerdicts.join(' · ')) + '</p>' : '') +
+            '</details></div>';
           area.scrollIntoView({ behavior: 'smooth' });
         })
         .withFailureHandler(showError)

@@ -463,3 +463,4 @@ Tabs (indicative):
 | 15 | B1 spike passed: Sheets-exported template accepted by Betty after trimming surplus rows on Bulk Analysis only; B2 writer trims that tab before export. |
 | 16 | Granularity is span-based: ≤3 h = interval layer (incl. DST odd spans), ~24 h = DAILY, else PERIOD. |
 | 17 | Parser supports EIEP v1.1 (fixed columns), v1.4 (labelled column row, observed live from Trustpower Aug 2026), and Meridian's versionless ICPSUMM HDR variant. |
+| 18 | AVM divides by measured data coverage (incl. real DST elapsed time), not an assumed 365.25-day year. Accuracy over comparability with historical manual figures (legacy convention understates AVM on sub-year files). |

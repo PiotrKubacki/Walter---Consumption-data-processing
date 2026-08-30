@@ -31,7 +31,7 @@ function eiepSniff_(content) {
     if (f[0] === 'HDR' && (f[1] === 'ICPCONS' || f[1] === 'ICPSUMM')) return true;
     // v1.4 files may lead with a labelled column-header row before the HDR;
     // keep scanning a few lines before giving up.
-    if (++seen >= 5) return false;
+    if (++seen >= 10) return false;
   }
   return false;
 }
@@ -245,7 +245,7 @@ function icpconsColsFromLabels_(labels, fileFlags) {
 function normaliseReadQuality_(v) {
   const s = String(v || '').trim().toUpperCase();
   if (!s) return 'UNKNOWN';
-  if (s === 'RD' || s === 'A' || s === 'ACTUAL') return 'ACTUAL';
+  if (s === 'RD' || s === 'R' || s === 'A' || s === 'ACTUAL') return 'ACTUAL';
   if (s === 'ES' || s === 'E' || s === 'ESTIMATE') return 'ESTIMATE';
   return s; // preserved verbatim; verify screen shows the mix
 }

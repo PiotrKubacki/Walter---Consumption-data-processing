@@ -44,6 +44,7 @@ function getConfig_() {
   // Defaults
   cfg.min_window_days    = Number(cfg.min_window_days)    || 90;
   cfg.max_estimate_share = Number(cfg.max_estimate_share) || 0.5;
+  cfg.max_gap_share      = Number(cfg.max_gap_share)      || 0.1;
   cfg.near_zero_avm_kwh  = Number(cfg.near_zero_avm_kwh)  || 10;
   _configCache_ = cfg;
   return cfg;
