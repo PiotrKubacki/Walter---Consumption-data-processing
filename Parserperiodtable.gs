@@ -7,7 +7,9 @@
 // One row per register per billing period; multi-register
 // ICPs report each register separately (never merged).
 // Header matching is tolerant (keyword-based) since these
-// exports vary in exact wording. Read quality defaults to
+// exports vary in exact wording. Covers the Octopus (OCTO)
+// interval export too: read_start/read_end/read_quality/kwh
+// headers, ISO datetimes, 30-min rows (classified HH by span). Read quality defaults to
 // ACTUAL unless a status-like column is present.
 //
 // MULTIPLIER NOTE: the Usage column in these exports is
@@ -35,7 +37,10 @@ function headerRowPT_(content) {
     if (!lines[i] || lines[i].trim() === '') continue;
     const f = splitCsvLine_(lines[i]).map(normHdr_);
     const has = (kw) => f.some(c => c.indexOf(kw) !== -1);
-    if (has('icp') && has('start date') && has('end date') && (has('usage') || has('units') || has('consumption'))) {
+    if (has('icp') &&
+        (has('start date') || has('read start')) &&
+        (has('end date') || has('read end')) &&
+        (has('usage') || has('units') || has('consumption') || has('kwh'))) {
       return { index: i, fields: f };
     }
     if (++seen >= 12) return null;
@@ -55,28 +60,29 @@ function periodTableParse_(content, fileName) {
     return null;
   };
   const cIcp   = col(['icp'], true);
-  const cStart = col(['start date'], true);
-  const cEnd   = col(['end date'], true);
-  const cUsage = col(['usage', 'units', 'consumption'], true);
+  const cStart = col(['start date', 'read start'], true);
+  const cEnd   = col(['end date', 'read end'], true);
+  const cUsage = col(['usage', 'units', 'consumption', 'kwh'], true);
   const cReg   = col(['meter register', 'register']);
-  const cMeter = col(['meter code', 'meter number', 'meter serial']);
+  const cMeter = col(['meter code', 'meter number', 'meter serial', 'serial']);
   const cMult  = col(['multiplier']);
   const cDays  = col(['days']);
-  const cStat  = col(['read status', 'read type', 'status', 'reading type']);
+  const cStat  = col(['read status', 'read type', 'read quality', 'status', 'reading type', 'quality']);
 
   const lines = String(content).split(/\r?\n/);
   const records = [];
   const errors = [];
   const fileFlags = [];
   let multFlagged = false;
+  const dateMode = decideDateModeFromSamples_(collectDateSamples_(lines, head.index, [cStart, cEnd]), fileFlags);
 
   for (let i = head.index + 1; i < lines.length; i++) {
     if (!lines[i] || lines[i].trim() === '') continue;
     const row = splitCsvLine_(lines[i]);
     const icp = String(row[cIcp] || '').trim();
     if (!icp) continue; // trailing/summary rows
-    const start = parseAnyDate_(row[cStart]);
-    const end   = parseAnyDate_(row[cEnd]);
+    const start = parseAnyDateMode_(row[cStart], dateMode);
+    const end   = parseAnyDateMode_(row[cEnd], dateMode);
     if (!start || !end) {
       errors.push({ line: i + 1, reason: 'Bad date(s): ' + row[cStart] + ' / ' + row[cEnd] });
       continue;
@@ -125,11 +131,41 @@ function parseNumber_(v) {
 
 /** ISO (yyyy-mm-dd[ hh:mm[:ss]]) first, then strict dd/mm/yyyy, then flexible day-first. */
 function parseAnyDate_(v) {
+  return parseAnyDateMode_(v, 'strict');
+}
+
+/**
+ * Mode-aware variant used by all parsers after a decideDateModeFromSamples_
+ * call: ISO is always taken as-is (unambiguous); slash dates are read
+ * day-first unless the file-level decision was 'monthfirst'.
+ */
+function parseAnyDateMode_(v, mode) {
   const s = String(v === undefined || v === null ? '' : v).trim();
   if (!s) return null;
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3], +(iso[4] || 0), +(iso[5] || 0), +(iso[6] || 0));
-  const strict = parseStrictDdmmyyyy_(s);
-  if (strict) return strict;
-  return parseFlexibleDate_(s, true);
+  if (mode !== 'monthfirst') {
+    const strict = parseStrictDdmmyyyy_(s);
+    if (strict) return strict;
+  }
+  return parseFlexibleDate_(s, mode !== 'monthfirst');
+}
+
+/**
+ * Collect date-column strings from CSV lines for the file-level
+ * date-mode decision. cols = array of column indices; scanning
+ * starts after startIdx (the header row).
+ */
+function collectDateSamples_(lines, startIdx, cols) {
+  const samples = [];
+  for (let i = startIdx + 1; i < lines.length && samples.length < 4000; i++) {
+    if (!lines[i] || lines[i].trim() === '') continue;
+    const row = splitCsvLine_(lines[i]);
+    for (const c of cols) {
+      if (c === null || c === undefined) continue;
+      const v = row[c];
+      if (v !== undefined && String(v).trim() !== '') samples.push(v);
+    }
+  }
+  return samples;
 }

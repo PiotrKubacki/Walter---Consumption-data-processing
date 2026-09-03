@@ -54,15 +54,18 @@ function registerReadsParse_(content, fileName) {
   const lines = String(content).split(/\r?\n/);
   const reads = [];
   const errors = [];
+  const dateModeFlags = [];
+  const dateMode = decideDateModeFromSamples_(collectDateSamples_(lines, head.index, [cDate]), dateModeFlags);
   const fileFlags = ['Register reads: consumption derived from read differences. Units taken AS-IS \u2014 ' +
     'verify whether this register reports kWh or m\u00b3 (gas conversion factor) before trusting totals.'];
+  for (const f of dateModeFlags) fileFlags.push(f);
 
   for (let i = head.index + 1; i < lines.length; i++) {
     if (!lines[i] || lines[i].trim() === '') continue;
     const row = splitCsvLine_(lines[i]);
     const icp = String(row[cIcp] || '').trim();
     if (!icp) continue;
-    const date = parseAnyDate_(row[cDate]);
+    const date = parseAnyDateMode_(row[cDate], dateMode);
     if (!date) { errors.push({ line: i + 1, reason: 'Bad reading date: ' + row[cDate] }); continue; }
     const result = parseNumber_(row[cResult]);
     if (result === null) { errors.push({ line: i + 1, reason: 'Bad reading result: ' + row[cResult] }); continue; }

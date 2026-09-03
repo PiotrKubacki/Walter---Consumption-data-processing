@@ -79,13 +79,14 @@ function hhrWideParse_(content, fileName) {
   const errors = [];
   const fileFlags = [];
   let totalMismatches = 0;
+  const dateMode = decideDateModeFromSamples_(collectDateSamples_(lines, head.index, [cDate]), fileFlags);
 
   for (let i = head.index + 1; i < lines.length; i++) {
     if (!lines[i] || lines[i].trim() === '') continue;
     const row = splitCsvLine_(lines[i]);
     const icp = String(row[cIcp] || '').trim();
     if (!icp) continue;
-    const day = parseAnyDate_(row[cDate]);
+    const day = parseAnyDateMode_(row[cDate], dateMode);
     if (!day) {
       errors.push({ line: i + 1, reason: 'Bad reading date: ' + row[cDate] });
       continue;

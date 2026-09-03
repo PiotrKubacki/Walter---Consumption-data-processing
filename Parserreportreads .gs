@@ -45,6 +45,22 @@ function reportReadsParse_(content, fileName) {
   const fileFlags = [];
   const readsByGroup = {};
 
+  // Pre-pass: collect reading-date strings (header can move between
+  // sections, so track the date column as we go) for the date-mode call.
+  const dateSamples = [];
+  {
+    let dCol = -1;
+    for (let i = 0; i < lines.length && dateSamples.length < 4000; i++) {
+      if (!lines[i] || lines[i].trim() === '') continue;
+      const cells = splitCsvLine_(lines[i]);
+      const norm = cells.map(normHdr_);
+      const h = norm.findIndex(function (c) { return c.indexOf('reading date') !== -1; });
+      if (h >= 0) { dCol = h; continue; }
+      if (dCol >= 0 && cells[dCol] !== undefined && String(cells[dCol]).trim() !== '') dateSamples.push(cells[dCol]);
+    }
+  }
+  const dateMode = decideDateModeFromSamples_(dateSamples, fileFlags);
+
   let currentIcp = '';
   let currentMeter = '';
   let cols = null; // { date, type, reading, cons }
@@ -88,7 +104,7 @@ function reportReadsParse_(content, fileName) {
 
     // Data rows under an active header
     if (cols) {
-      const date = parseAnyDate_(rawCells[cols.date]);
+      const date = parseAnyDateMode_(rawCells[cols.date], dateMode);
       if (!date) continue; // non-data row (spacer, next section label, etc.)
       if (!currentIcp) { errors.push({ line: i + 1, reason: 'Read row before any ICP label' }); continue; }
       const cons = parseNumber_(rawCells[cols.cons]);

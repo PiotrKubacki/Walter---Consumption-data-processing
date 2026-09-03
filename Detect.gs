@@ -14,8 +14,9 @@ function parserRegistry_() {
     { format: 'hhr_wide',       sniff: hhrWideSniff_,       parse: { parse: hhrWideParse_ } },
     { format: 'interval_long',  sniff: intervalLongSniff_,  parse: { parse: intervalLongParse_ } },
     { format: 'register_reads', sniff: registerReadsSniff_, parse: { parse: registerReadsParse_ } },
-    { format: 'report_reads',   sniff: reportReadsSniff_,   parse: { parse: reportReadsParse_ } },
-    { format: 'period_table',   sniff: periodTableSniff_,   parse: { parse: periodTableParse_ } },
+    { format: 'report_reads',     sniff: reportReadsSniff_,     parse: { parse: reportReadsParse_ } },
+    { format: 'consumption_rows', sniff: consumptionRowsSniff_, parse: { parse: consumptionRowsParse_ } },
+    { format: 'period_table',     sniff: periodTableSniff_,     parse: { parse: periodTableParse_ } },
   ];
 }
 
@@ -90,7 +91,11 @@ function getCacheFolder_() {
 // JSON in .cdp-cache. Re-analysis skips re-parsing entirely.
 
 function recordsCacheKey_(file) {
-  return file.getId() + '_' + file.getLastUpdated().getTime() + '_recs1.json';
+  // Keyed on CDP_BUILD too: parser improvements land with the push,
+  // no stale parses survive a delivery. Re-parsing after each push
+  // costs seconds; serving records from outdated parser code cost us
+  // an afternoon (\u00a72 principles: version derived data by its code).
+  return file.getId() + '_' + file.getLastUpdated().getTime() + '_' + CDP_BUILD + '_recs1.json';
 }
 
 function saveRecordsCache_(file, parsed) {

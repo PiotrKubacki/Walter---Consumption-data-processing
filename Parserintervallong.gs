@@ -57,13 +57,14 @@ function intervalLongParse_(content, fileName) {
   const raws = [];
   const errors = [];
   const fileFlags = [];
+  const dateMode = decideDateModeFromSamples_(collectDateSamples_(lines, head.index, [cDate]), fileFlags);
 
   for (let i = head.index + 1; i < lines.length; i++) {
     if (!lines[i] || lines[i].trim() === '') continue;
     const row = splitCsvLine_(lines[i]);
     const icp = String(row[cIcp] || '').trim();
     if (!icp) continue;
-    const day = parseAnyDate_(row[cDate]);
+    const day = parseAnyDateMode_(row[cDate], dateMode);
     if (!day) { errors.push({ line: i + 1, reason: 'Bad date: ' + row[cDate] }); continue; }
     const kWh = parseNumber_(row[cCons]);
     if (kWh === null) { errors.push({ line: i + 1, reason: 'Bad consumption: ' + row[cCons] }); continue; }

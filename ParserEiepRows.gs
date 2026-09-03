@@ -136,18 +136,35 @@ function eiepParse_(content, fileName) {
 
   const dateMode = decideDateMode_(rawDets, dateCols, fileFlags);
 
+  // MIXED-ORIENTATION FILES (\u00a76.1 extension): when neither global
+  // reading survives (partially Excel-mangled files contain rows in
+  // BOTH orientations), resolve dates PER ROW: rows with exactly one
+  // valid reading resolve themselves and become anchors; both-valid
+  // rows take the reading that fits between their nearest anchors in
+  // file order. Rows fitting neither become row errors.
+  let rowDates = null;
+  if (dateMode === 'dayfirst' && fileFlags.some(f => f.indexOf('AMBIGUOUS DATES') === 0)) {
+    rowDates = resolveRowDatesAnchored_(rawDets, dateCols, fileFlags);
+  }
+
   // ---- Pass 2: build records ----
   const records = [];
-  for (const det of rawDets) {
+  for (let di = 0; di < rawDets.length; di++) {
+    const det = rawDets[di];
     const f = det.fields;
+    const rd = rowDates ? rowDates[di] : null;
+    if (rd && rd.error) {
+      errors.push({ line: det.line, reason: rd.error });
+      continue;
+    }
     if (format === 'ICPCONS') {
       const c = cols;
       if (f.length <= c.kWh) {
         errors.push({ line: det.line, reason: 'Field count = ' + f.length });
         continue;
       }
-      const start = parseEiepDate_(f[c.intervalStart], dateMode);
-      const end   = parseEiepDate_(f[c.intervalEnd],   dateMode);
+      const start = rd ? rd.start : parseEiepDate_(f[c.intervalStart], dateMode);
+      const end   = rd ? rd.end   : parseEiepDate_(f[c.intervalEnd],   dateMode);
       if (!start || !end) {
         errors.push({ line: det.line, reason: 'Bad date(s): ' + f[c.intervalStart] + ' / ' + f[c.intervalEnd] });
         continue;
@@ -172,8 +189,8 @@ function eiepParse_(content, fileName) {
           '. Missing: ' + map.missing.join(', ') +
           '. The DES-driven mapping needs checking against this retailer\u2019s file (B1 known-limitation).');
       }
-      const start = parseEiepDate_(f[map.periodStart], dateMode);
-      const end   = parseEiepDate_(f[map.periodEnd],   dateMode);
+      const start = rd ? rd.start : parseEiepDate_(f[map.periodStart], dateMode);
+      const end   = rd ? rd.end   : parseEiepDate_(f[map.periodEnd],   dateMode);
       if (!start || !end) {
         errors.push({ line: det.line, reason: 'Bad date(s): ' + f[map.periodStart] + ' / ' + f[map.periodEnd] });
         continue;
@@ -304,19 +321,39 @@ function icpsummDateCols_(desFields, rawDets) {
 
 function decideDateMode_(rawDets, dateCols, fileFlags) {
   if (!dateCols.length) return 'strict';
-  let sawAny = false, allStrict = true, textish = false;
   const samples = [];
   for (const det of rawDets) {
     for (const col of dateCols) {
       const v = det.fields[col];
       if (v === undefined || v === '') continue;
-      sawAny = true;
-      if (!/^\d{2}\/\d{2}\/\d{4}(\s+\d{2}:\d{2}(:\d{2})?)?$/.test(v)) {
-        allStrict = false;
-        if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(v)) textish = true;
-      }
       if (samples.length < 4000) samples.push(v);
     }
+  }
+  return decideDateModeFromSamples_(samples, fileFlags);
+}
+
+/**
+ * Shared \u00a76.1 date-mode decision, usable by EVERY parser: collect the
+ * file's date strings, call this once, then parse with the returned
+ * mode. 'strict' = all spec-shaped (zero-padded dd/mm/yyyy, day-first,
+ * no ambiguity). Otherwise dual-interpretation sequence consistency
+ * with the large-step tie-break decides day-first vs month-first;
+ * non-strict outcomes always attach a file flag. ISO dates are
+ * unambiguous and never counted against strictness.
+ */
+function decideDateModeFromSamples_(samples, fileFlags) {
+  let sawAny = false, allStrict = true, textish = false;
+  const relevant = [];
+  for (const v of samples) {
+    if (v === undefined || v === null || v === '') continue;
+    const s = String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) continue; // ISO: unambiguous
+    sawAny = true;
+    if (!/^\d{2}\/\d{2}\/\d{4}(\s+\d{2}:\d{2}(:\d{2})?)?$/.test(s)) {
+      allStrict = false;
+      if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(s)) textish = true;
+    }
+    if (relevant.length < 4000) relevant.push(s);
   }
   if (!sawAny || allStrict) return 'strict';
   if (!textish) {
@@ -324,13 +361,9 @@ function decideDateMode_(rawDets, dateCols, fileFlags) {
     return 'strict';
   }
 
-  // Ambiguous short dates present: test both interpretations for consistency.
-  const day = datesConsistent_(samples, true);
-  const month = datesConsistent_(samples, false);
+  const day = datesConsistent_(relevant, true);
+  const month = datesConsistent_(relevant, false);
   const okDay = day.valid, okMonth = month.valid;
-  // Tie-break: the correct reading advances smoothly; the wrong one jumps
-  // ~a month at every day boundary. Prefer the reading with materially
-  // fewer large steps (>2 days) when both are otherwise consistent.
   let winner = null;
   if (okDay && !okMonth) winner = 'dayfirst';
   else if (okMonth && !okDay) winner = 'monthfirst';
@@ -339,13 +372,12 @@ function decideDateMode_(rawDets, dateCols, fileFlags) {
     else if (month.largeStepRatio * 5 < day.largeStepRatio) winner = 'monthfirst';
   }
   if (winner === 'dayfirst') {
-    fileFlags.push('Excel-mangled dates detected; resolved as day-first (d/m/yy) by sequence consistency. ' +
-      'File was opened in Excel somewhere upstream \u2014 chase the source (design record \u00a74 operating rule).');
+    fileFlags.push('Short/unpadded date format resolved as day-first (d/m) by sequence consistency.');
     return 'dayfirst';
   }
   if (winner === 'monthfirst') {
-    fileFlags.push('Excel-mangled dates detected; resolved as month-first (m/d/yy) by sequence consistency. ' +
-      'File was opened in Excel somewhere upstream \u2014 chase the source.');
+    fileFlags.push('EXCEL-MANGLED DATES: resolved as month-first (m/d) by sequence consistency \u2014 ' +
+      'file was US-locale resaved somewhere upstream; dates have been corrected. Verify one date against the source.');
     return 'monthfirst';
   }
   fileFlags.push('AMBIGUOUS DATES: day-first and month-first readings cannot be separated by sequence ' +
@@ -374,6 +406,163 @@ function datesConsistent_(samples, dayFirst) {
     valid: (orderedHits / orderedTotal) >= 0.95,
     largeStepRatio: largeSteps / orderedTotal,
   };
+}
+
+/**
+ * Per-row anchored date resolution for MIXED-ORIENTATION files
+ * (\u00a76.1 extension). Some Excel-mangled files carry BOTH date
+ * orientations: rows whose day is 13+ are self-evident in whichever
+ * orientation they use; days 1-12 are ambiguous. Self-evident rows
+ * (plus strict/ISO rows) become anchors in file order; ambiguous
+ * rows take the orientation whose dates fit between their nearest
+ * anchors (\u00b12-day tolerance). Rows fitting neither orientation
+ * become row errors rather than guesses.
+ * Returns array parallel to rawDets: null (row not ambiguous \u2014
+ * caller parses normally... actually resolved for every row with
+ * date content) or {start, end} or {error}.
+ */
+function resolveRowDatesAnchored_(rawDets, dateCols, fileFlags) {
+  // This resolver supersedes the file-level AMBIGUOUS verdict.
+  for (let i = fileFlags.length - 1; i >= 0; i--) {
+    if (fileFlags[i].indexOf('AMBIGUOUS DATES') === 0) fileFlags.splice(i, 1);
+  }
+  const startCol = dateCols[0], endCol = dateCols.length > 1 ? dateCols[1] : dateCols[0];
+  const TOL = 2 * 86400000;
+
+  // Classify one string: {kind:'definite', d} | {kind:'pair', d1, d2} | {kind:'bad'}
+  function classify(str) {
+    const s0 = String(str === undefined || str === null ? '' : str).trim();
+    if (!s0) return { kind: 'bad' };
+    const iso = s0.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return { kind: 'definite', d: parseAnyDateMode_(s0, 'strict') };
+    const strict = parseStrictDdmmyyyy_(s0);
+    if (strict) return { kind: 'definite', d: strict };
+    const d1 = parseFlexibleDate_(s0, true);
+    const d2 = parseFlexibleDate_(s0, false);
+    if (d1 && d2) {
+      if (d1.getTime() === d2.getTime()) return { kind: 'definite', d: d1 };
+      return { kind: 'pair', d1: d1, d2: d2 };
+    }
+    if (d1) return { kind: 'definite', d: d1, orient: 'dayfirst' };
+    if (d2) return { kind: 'definite', d: d2, orient: 'monthfirst' };
+    return { kind: 'bad' };
+  }
+
+  // Pass 1: classify all rows; collect anchors from fully-definite rows
+  const cls = [];
+  const anchors = []; // {idx, t}
+  let nDefinite = 0, nDayOnly = 0, nMonthOnly = 0;
+  for (let i = 0; i < rawDets.length; i++) {
+    const f = rawDets[i].fields;
+    const cs = classify(f[startCol]);
+    const ce = classify(f[endCol]);
+    cls.push([cs, ce]);
+    if (cs.kind === 'definite' && ce.kind === 'definite' && cs.d && ce.d) {
+      anchors.push({ idx: i, t: cs.d.getTime() });
+      nDefinite++;
+      if (cs.orient === 'dayfirst' || ce.orient === 'dayfirst') nDayOnly++;
+      if (cs.orient === 'monthfirst' || ce.orient === 'monthfirst') nMonthOnly++;
+    }
+  }
+
+  // Pass 2: resolve every row
+  const out = new Array(rawDets.length).fill(null);
+  let aPtr = 0, nAnchoredDay = 0, nAnchoredMonth = 0, nErr = 0;
+  for (let i = 0; i < rawDets.length; i++) {
+    const [cs, ce] = cls[i];
+    while (aPtr < anchors.length - 1 && anchors[aPtr + 1].idx < i) aPtr++;
+    // nearest anchors around i
+    let prev = null, next = null;
+    for (let a = aPtr; a >= 0; a--) if (anchors[a] && anchors[a].idx < i) { prev = anchors[a]; break; }
+    for (let a = aPtr; a < anchors.length; a++) if (anchors[a].idx > i) { next = anchors[a]; break; }
+    const lo = prev ? prev.t - TOL : -Infinity;
+    const hi = next ? next.t + TOL : Infinity;
+
+    if (cs.kind === 'bad' || ce.kind === 'bad') { out[i] = null; continue; } // caller errors on parse as before
+
+    if (cs.kind === 'definite' && ce.kind === 'definite') { out[i] = { start: cs.d, end: ce.d }; continue; }
+
+    // At least one pair: evaluate both orientations as a coherent row
+    function rowUnder(dayFirst) {
+      const sd = cs.kind === 'pair' ? (dayFirst ? cs.d1 : cs.d2) : cs.d;
+      const ed = ce.kind === 'pair' ? (dayFirst ? ce.d1 : ce.d2) : ce.d;
+      if (!sd || !ed) return null;
+      if (ed.getTime() < sd.getTime()) return null;
+      if (sd.getTime() < lo || sd.getTime() > hi) return null;
+      return { start: sd, end: ed };
+    }
+    const rDay = rowUnder(true);
+    const rMonth = rowUnder(false);
+    // Block-boundary handling: register blocks restart the date
+    // sequence, so the between-anchors window can be empty/backward
+    // there. Fall back to anchor PROXIMITY: accept the reading that
+    // sits within 16 days of a neighbouring anchor and 3x closer
+    // than the alternative reading.
+    function score(r) {
+      if (!r) return Infinity;
+      let best = Infinity;
+      if (prev) best = Math.min(best, Math.abs(r.start.getTime() - prev.t));
+      if (next) best = Math.min(best, Math.abs(r.start.getTime() - next.t));
+      return best;
+    }
+    function proximityPick() {
+      const FTOL = 16 * 86400000;
+      const sdDay = cs.kind === 'pair' ? cs.d1 : cs.d;
+      const edDay = ce.kind === 'pair' ? ce.d1 : ce.d;
+      const sdMon = cs.kind === 'pair' ? cs.d2 : cs.d;
+      const edMon = ce.kind === 'pair' ? ce.d2 : ce.d;
+      const cDay = (sdDay && edDay && edDay.getTime() >= sdDay.getTime()) ? { start: sdDay, end: edDay } : null;
+      const cMon = (sdMon && edMon && edMon.getTime() >= sdMon.getTime()) ? { start: sdMon, end: edMon } : null;
+      const sD = score(cDay), sM = score(cMon);
+      if (cDay && sD <= FTOL && sD * 3 < sM) { nAnchoredDay++; return cDay; }
+      if (cMon && sM <= FTOL && sM * 3 < sD) { nAnchoredMonth++; return cMon; }
+      return null;
+    }
+    if (rDay && !rMonth) { out[i] = rDay; nAnchoredDay++; }
+    else if (rMonth && !rDay) { out[i] = rMonth; nAnchoredMonth++; }
+    else if (rDay && rMonth) {
+      if (prev && Math.abs(rDay.start.getTime() - prev.t) * 3 < Math.abs(rMonth.start.getTime() - prev.t)) { out[i] = rDay; nAnchoredDay++; }
+      else if (prev && Math.abs(rMonth.start.getTime() - prev.t) * 3 < Math.abs(rDay.start.getTime() - prev.t)) { out[i] = rMonth; nAnchoredMonth++; }
+      else { out[i] = { error: 'AMBIGUOUS ROW DATE: both readings fit the anchor window (' + rawDets[i].fields[startCol] + ')' }; nErr++; }
+    }
+    else {
+      const picked = proximityPick();
+      if (picked) out[i] = picked;
+      else { out[i] = { error: 'AMBIGUOUS ROW DATE: neither reading fits near neighbouring rows (' + rawDets[i].fields[startCol] + ')' }; nErr++; }
+    }
+  }
+
+  // Uniform-orientation second chance: if EVERY self-evident and
+  // anchored row agrees on one orientation, the file's orientation is
+  // established beyond the local anchor tests \u2014 rows that errored
+  // only because their anchors were sparse take that orientation.
+  // Genuinely unparseable dates remain errors (fail loudly).
+  let nUniform = 0;
+  const uniformMonth = (nDayOnly + nAnchoredDay) === 0 && (nMonthOnly + nAnchoredMonth) > 0;
+  const uniformDay = (nMonthOnly + nAnchoredMonth) === 0 && (nDayOnly + nAnchoredDay) > 0;
+  if (uniformMonth || uniformDay) {
+    for (let i = 0; i < out.length; i++) {
+      if (!out[i] || !out[i].error) continue;
+      const [cs, ce] = cls[i];
+      if (cs.kind === 'bad' || ce.kind === 'bad') continue;
+      const sd = cs.kind === 'pair' ? (uniformDay ? cs.d1 : cs.d2) : cs.d;
+      const ed = ce.kind === 'pair' ? (uniformDay ? ce.d1 : ce.d2) : ce.d;
+      if (sd && ed && ed.getTime() >= sd.getTime()) {
+        out[i] = { start: sd, end: ed };
+        nErr--; nUniform++;
+      }
+    }
+  }
+
+  const orientNote = (nDayOnly && nMonthOnly) ? 'BOTH orientations present among self-evident rows' :
+    nMonthOnly ? 'self-evident rows are month-first (m/d)' :
+    nDayOnly ? 'self-evident rows are day-first (d/m)' : 'self-evident rows are spec/ISO formatted';
+  fileFlags.push('MIXED/AMBIGUOUS DATES RESOLVED PER ROW: ' + nDefinite + ' self-evident row(s) anchored the rest (' +
+    nAnchoredDay + ' day-first, ' + nAnchoredMonth + ' month-first' +
+    (nUniform ? ', ' + nUniform + ' by uniform file orientation' : '') +
+    (nErr ? ', ' + nErr + ' unresolvable \u2014 errored' : '') +
+    '); ' + orientNote + '. File is partially Excel-mangled \u2014 chase the source.');
+  return out;
 }
 
 function parseEiepDate_(s, mode) {

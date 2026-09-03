@@ -8,9 +8,15 @@
 // allowed to produce outputs.
 // =====================================================
 
+// Bumped with every delivery; shown in the header so "which code
+// am I looking at" (/dev head vs /exec pinned version) is always
+// answerable at a glance.
+const CDP_BUILD = '2026-08-30.4';
+
 function doGet(e) {
   const t = HtmlService.createTemplateFromFile('Index');
   t.page = (e && e.parameter && e.parameter.page) || 'verify';
+  t.build = CDP_BUILD;
   return t.evaluate()
     .setTitle('CDP \u00b7 Consumption Data Processing')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');

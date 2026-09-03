@@ -32,7 +32,11 @@
     .card > details > summary::before { content: '▸ '; color: var(--tuc-accent); }
     .card > details[open] > summary::before { content: '▾ '; }
     h2 { font-family: 'Poppins', sans-serif; font-size: 16px; margin: 0 0 12px; }
+    .tblwrap { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    td { word-break: break-word; }
+    td.flagcell { max-width: 300px; }
+    td.filecell { max-width: 230px; word-break: break-all; }
     th, td { text-align: center; padding: 6px 10px; border-bottom: 1px solid var(--tuc-line); vertical-align: middle; }
     th.tL, td.tL { text-align: left; }
     th.tR, td.tR { text-align: right; }
@@ -68,12 +72,13 @@
 <body>
   <header>
     <h1><span style="filter:brightness(0) invert(1)">⚡</span> CDP · Consumption Data Processing</h1>
+    <span style="margin-left:auto;font-size:12px;opacity:.75">build <?= (typeof build === 'undefined' ? '?' : build) ?></span>
   </header>
   <main>
     <div class="card"><details open>
       <summary>Upload folder</summary>
       <div id="status" class="muted">Loading file list…</div>
-      <table id="fileTable" style="display:none">
+      <div class="tblwrap"><table id="fileTable" style="display:none">
         <thead><tr>
           <th><input type="checkbox" id="selAll" onclick="toggleAll(this)"></th>
           <th class="sortable tL" onclick="sortFiles('name')">File <span id="fs_name"></span></th>
@@ -83,7 +88,7 @@
           <th></th>
         </tr></thead>
         <tbody id="fileRows"></tbody>
-      </table>
+      </table></div>
       <p style="margin-top:12px">
         <button id="refreshBtn" onclick="loadFiles()">🐱 Refresh list</button>
         <button id="analyseBtn" onclick="startAnalysis()">🐱 Analyse selected</button>
@@ -328,20 +333,20 @@
       }
       // Analysed files table with inspect buttons (always visible)
       html += '<details><summary class="muted">Analysed files (' + res.files.length + ')</summary>' +
-        '<table style="margin-bottom:14px"><thead><tr><th class="tL">Analysed file</th><th class="tR">Records</th><th class="tR">Row errors</th></tr></thead><tbody>';
+        '<div class="tblwrap"><table style="margin-bottom:14px"><thead><tr><th class="tL">Analysed file</th><th class="tR">Records</th><th class="tR">Row errors</th></tr></thead><tbody>';
       for (var i = 0; i < res.files.length; i++) {
         var f = res.files[i];
         html += '<tr><td class="tL">' + esc(f.name) + '</td>' +
           '<td class="tR">' + fmtNum(f.records) + '</td>' +
           '<td class="tR">' + (f.errors ? '<span class="error">' + fmtNum(f.errors) + '</span>' : '0') + '</td></tr>';
       }
-      html += '</tbody></table></details>';
+      html += '</tbody></table></div></details>';
 
       var cols = [
         ['grade', 'Grade', ''], ['icp', 'ICP · Register', 'tL'], ['customer', 'Customer', 'tL'], ['file', 'File', 'tL'],
         ['layer', 'Layer', ''], ['window', 'Window', 'tL'], ['coverage', 'Coverage', 'tR'], ['avm', 'AVM kWh/mo', 'tR'], ['annual', 'Annual kWh', 'tR'],
       ];
-      html += '<table><thead><tr>';
+      html += '<div class="tblwrap"><table><thead><tr>';
       for (var c = 0; c < cols.length; c++) {
         var mark = batchSort.key === cols[c][0] ? (batchSort.dir === 1 ? ' ▲' : ' ▼') : '';
         html += '<th class="sortable ' + cols[c][2] + '" onclick="sortBatch(\'' + cols[c][0] + '\')">' + cols[c][1] + mark + '</th>';
@@ -356,7 +361,7 @@
         });
       }
       for (var i = 0; i < rows.length; i++) html += batchRowHtml(rows[i]);
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
 
       html += '<div style="margin-top:16px;border-top:1px solid var(--tuc-line);padding-top:12px">' +
         '<h2>🔌 Betty round-trip</h2>' +
@@ -420,14 +425,14 @@
         '<td style="font-size:20px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
         '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
         '<td class="tL">' + cust + '</td>' +
-        '<td class="muted tL" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
+        '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
         '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
         '<td class="mono tL">' + esc(a.windowFrom) + '<br>' + esc(a.windowTo) + '</td>' +
         '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d' +
           (a.estimateShare > 0 ? '<div class="muted">est ' + Math.round(a.estimateShare * 100) + '%</div>' : '') + '</td>' +
         '<td class="tR" style="font-weight:600">' + fmtNum(a.avm) + profileHtml + '</td>' +
         '<td class="tR" style="font-weight:600">' + fmtNum(a.annualKwh) + '</td>' +
-        '<td class="tL">' + (fl || '<span class="ok">clean</span>') + '</td>' +
+        '<td class="tL flagcell">' + (fl || '<span class="ok">clean</span>') + '</td>' +
         '<td>' + r.sources.map(inspectIconForName).join(' ') + '</td>' +
         '</tr>';
     }
@@ -484,7 +489,7 @@
         for (var i = 0; i < v.parseErrorSamples.length; i++) html += '<li>line ' + v.parseErrorSamples[i].line + ': ' + esc(v.parseErrorSamples[i].reason) + '</li>';
         html += '</ul>';
       }
-      html += '<table><thead><tr>' +
+      html += '<div class="tblwrap"><table><thead><tr>' +
         '<th class="tL">ICP · Register</th><th class="tL">Customer</th><th>Records</th><th class="tL">Range</th>' +
         '<th class="tR">Days covered</th><th class="tR">kWh</th><th>Read quality</th><th class="tL">Flags</th>' +
         '</tr></thead><tbody>';
@@ -503,10 +508,10 @@
           '<td class="tR">' + pills(r.daysCovered) + '</td>' +
           '<td class="tR">' + pills(r.kWh, true) + '</td>' +
           '<td>' + pills(r.qualityMix) + '</td>' +
-          '<td class="tL">' + flagsHtml(r) + '</td>' +
+          '<td class="tL flagcell">' + flagsHtml(r) + '</td>' +
           '</tr>';
       }
-      html += '</tbody></table></details></div>';
+      html += '</tbody></table></div></details></div>';
       area.innerHTML = html;
       area.scrollIntoView({ behavior: 'smooth' });
     }
@@ -634,11 +639,15 @@
 
     // ---------------- Debug ----------------
 
+    var lastDebug = null;
+
     function debugFile(fileId) {
       google.script.run
         .withSuccessHandler(function (d) {
+          lastDebug = d;
           var area = document.getElementById('verifyArea');
           area.innerHTML = '<div class="card"><details open><summary>🔍 ' + esc(d.name) + '</summary>' +
+            '<p><button onclick="copyDebug(this)">📋 Copy to clipboard</button></p>' +
             '<p class="mono">mime: ' + esc(d.mime) + '</p>' +
             '<p class="mono">first bytes (hex): ' + esc(d.firstBytesHex) + '</p>' +
             '<p class="mono">first chars (utf-8): ' + esc(d.firstCharsUtf8) + '</p>' +
@@ -649,6 +658,40 @@
         })
         .withFailureHandler(showError)
         .apiDebugFirstBytes(fileId);
+    }
+
+    function copyDebug(btn) {
+      if (!lastDebug) return;
+      var d = lastDebug;
+      var text = '\ud83d\udd0d ' + d.name + '\n' +
+        'mime: ' + d.mime + '\n' +
+        'first bytes (hex): ' + d.firstBytesHex + '\n' +
+        'first chars (utf-8): ' + d.firstCharsUtf8 + '\n' +
+        (d.extractedHead ? 'content (head, via ' + (d.contentSource || '') + '): ' + d.extractedHead + '\n' : '') +
+        (d.sniffVerdicts ? 'sniff verdicts: ' + d.sniffVerdicts.join(' \u00b7 ') : '');
+      copyText(text, btn);
+    }
+
+    function copyText(text, btn) {
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = '✓ Copied';
+        setTimeout(function () { btn.textContent = old; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { copyFallback(text, done); });
+      } else {
+        copyFallback(text, done);
+      }
+    }
+
+    function copyFallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      done();
     }
 
     function showError(err) {
