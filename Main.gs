@@ -11,7 +11,7 @@
 // Bumped with every delivery; shown in the header so "which code
 // am I looking at" (/dev head vs /exec pinned version) is always
 // answerable at a glance.
-const CDP_BUILD = '2026-08-30.4';
+const CDP_BUILD = '2026-08-30.6';
 
 function doGet(e) {
   const t = HtmlService.createTemplateFromFile('Index');
@@ -273,7 +273,7 @@ function apiDebugFirstBytes(fileId) {
     let content;
     if (mime === MimeType.GOOGLE_SHEETS || /spreadsheetml|ms-excel/.test(mime)) {
       const cacheFolder = getCacheFolder_();
-      const key = file.getId() + '_' + file.getLastUpdated().getTime() + '_v2.txt';
+      const key = file.getId() + '_' + file.getLastUpdated().getTime() + '_v3.txt';
       const hit = cacheFolder.getFilesByName(key).hasNext();
       content = cachedSpreadsheetText_(file); // same path the sniff pipeline uses
       source = hit ? 'cache file (pre-existing)' : 'fresh extraction (now cached)';

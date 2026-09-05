@@ -16,6 +16,7 @@ function parserRegistry_() {
     { format: 'register_reads', sniff: registerReadsSniff_, parse: { parse: registerReadsParse_ } },
     { format: 'report_reads',     sniff: reportReadsSniff_,     parse: { parse: reportReadsParse_ } },
     { format: 'consumption_rows', sniff: consumptionRowsSniff_, parse: { parse: consumptionRowsParse_ } },
+    { format: 'timestamp_series', sniff: timestampSeriesSniff_, parse: { parse: timestampSeriesParse_ } },
     { format: 'period_table',     sniff: periodTableSniff_,     parse: { parse: periodTableParse_ } },
   ];
 }
@@ -64,7 +65,7 @@ function sniffFormatFast_(file) {
  */
 function cachedSpreadsheetText_(file) {
   const cacheFolder = getCacheFolder_();
-  const key = file.getId() + '_' + file.getLastUpdated().getTime() + '_v2.txt';
+  const key = file.getId() + '_' + file.getLastUpdated().getTime() + '_v3.txt';
   const existing = cacheFolder.getFilesByName(key);
   if (existing.hasNext()) {
     return existing.next().getBlob().getDataAsString();
@@ -168,6 +169,10 @@ function extractSpreadsheetText_(file) {
 }
 
 function csvCell_(v) {
-  const s = String(v === undefined || v === null ? '' : v);
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  // Cell-internal newlines are collapsed to spaces so ONE SHEET ROW
+  // is always ONE TEXT LINE — wrapped header cells and multi-line
+  // title blobs otherwise fragment across lines and defeat every
+  // line-scanning sniffer (found via the Family H portal exports).
+  const s = String(v === undefined || v === null ? '' : v).replace(/\r?\n/g, ' ');
+  return /[",]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
