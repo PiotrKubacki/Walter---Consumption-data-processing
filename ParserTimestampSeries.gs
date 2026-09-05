@@ -32,7 +32,7 @@ function timestampSeriesHeader_(content) {
     const f = splitCsvLine_(lines[i]).map(normHdr_);
     const has = (kw) => f.some(c => c.indexOf(kw) !== -1);
     if (has('timestamp') && has('value')) return { index: i, fields: f };
-    if (++seen >= 14) return null;
+    if (++seen >= 40) return null; // title blob fragments into many lines; scan deep
   }
   return null;
 }
