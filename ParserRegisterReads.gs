@@ -10,10 +10,8 @@
 // Negative differences (rollover / meter change) become
 // row errors, never records.
 //
-// UNITS CAVEAT: register units are taken AS-IS. Gas
-// registers are often m3 needing a conversion factor to
-// kWh \u2014 a file flag reminds the operator until the units
-// question is settled per retailer. (Family E note.)
+// Units: kWh \u2014 confirmed Sep 2026 that gas registers
+// report kWh, same as electricity (no m\u00b3 conversion).
 // =====================================================
 
 function registerReadsSniff_(content) {
@@ -56,8 +54,8 @@ function registerReadsParse_(content, fileName) {
   const errors = [];
   const dateModeFlags = [];
   const dateMode = decideDateModeFromSamples_(collectDateSamples_(lines, head.index, [cDate]), dateModeFlags);
-  const fileFlags = ['Register reads: consumption derived from read differences. Units taken AS-IS \u2014 ' +
-    'verify whether this register reports kWh or m\u00b3 (gas conversion factor) before trusting totals.'];
+  const fileFlags = ['Register reads: consumption derived from consecutive read differences. ' +
+    'Units are kWh (confirmed Sep 2026: gas registers report kWh, same as electricity).'];
   for (const f of dateModeFlags) fileFlags.push(f);
 
   for (let i = head.index + 1; i < lines.length; i++) {

@@ -40,16 +40,42 @@ function analyseGroup_(recs, cfg) {
   }
   const flags = [];
   const crossChecks = [];
+
+  // Overlap check on the CHOSEN layer first: overlapping rows in the
+  // data the totals are built from distort kWh and coverage together.
+  const chosenUnion = unionDays_(byLayer[layer]);
+  if (chosenUnion > 0 && coverage[layer] / chosenUnion > 1.2) {
+    flags.push('OVERLAPPING ROWS IN TOTALS: the ' + layer + ' data used for the AVM contains overlapping ' +
+      'periods (' + round2a_(coverage[layer]) + ' row-days across only ' + round2a_(chosenUnion) +
+      ' distinct days) — the AVM is NOT reliable. Inspect the file; this usually means summary/total ' +
+      'rows mixed into the detail.');
+  }
+
   for (const g of LAYER_ORDER) {
     if (g === layer || coverage[g] <= 0) continue;
     // Material alternative layer (> 1 day): cross-validate against chosen layer
     if (coverage[g] > 1) {
+      const gUnion = unionDays_(byLayer[g]);
+      const overlapFactor = gUnion > 0 ? coverage[g] / gUnion : 1;
       const chosenRate = sumKwhA_(byLayer[layer]) / Math.max(coverage[layer], 0.001);
       const otherRate  = sumKwhA_(byLayer[g]) / coverage[g];
       const diffPct = chosenRate > 0 ? Math.abs(otherRate - chosenRate) / chosenRate * 100 : 0;
       crossChecks.push({ layer: g, days: round2a_(coverage[g]), kWh: round2a_(sumKwhA_(byLayer[g])), diffPct: Math.round(diffPct) });
-      if (diffPct > 10) {
-        flags.push('Cross-layer mismatch: ' + g + ' daily rate differs from ' + layer + ' by ' + Math.round(diffPct) + '%');
+      if (overlapFactor > 1.2) {
+        // Overlapping rows = summary/total rows restating the same span.
+        // Structurally not comparable, and not used for totals anyway:
+        // an informational note, not an action demand.
+        flags.push(g + ' rows in ' + sourceFilesA_(byLayer[g]) + ' are overlapping summaries (' +
+          round2a_(coverage[g]) + ' row-days across ' + round2a_(gUnion) + ' distinct days — ' +
+          'summary/total rows restating the same span). Ignored; the AVM uses the ' + layer + ' data.');
+      } else if (diffPct > 10) {
+        // Wording: "kWh/day", never "daily rate" (a daily rate is a
+        // per-day CHARGE on a bill; this is average daily consumption).
+        flags.push('CHECK SOURCES: two kinds of data for this register disagree — ' +
+          g + ' data (' + sourceFilesA_(byLayer[g]) + ') averages ' + round2a_(otherRate) + ' kWh/day, ' +
+          layer + ' data (' + sourceFilesA_(byLayer[layer]) + ') averages ' + round2a_(chosenRate) + ' kWh/day (' +
+          Math.round(diffPct) + '% apart). The AVM uses the ' + layer + ' data only — ' +
+          'work out which source is wrong before using this figure.');
       }
     } else {
       flags.push('Minor ' + g + ' layer ignored for totals (' + round2a_(coverage[g]) + ' days)');
@@ -127,3 +153,25 @@ function sumKwhA_(recs) { let s = 0; for (const r of recs) s += r.kWh; return s;
 function minStart_(recs) { return recs.reduce((a, b) => a.periodStart < b.periodStart ? a : b).periodStart; }
 function maxEnd_(recs) { return recs.reduce((a, b) => a.periodEnd > b.periodEnd ? a : b).periodEnd; }
 function round2a_(n) { return Math.round(n * 100) / 100; }
+
+/** Unique source-file names of a record set (for cross-check flags). */
+function sourceFilesA_(records) {
+  const seen = {};
+  for (const r of records) if (r.sourceFile) seen[r.sourceFile] = true;
+  const names = Object.keys(seen);
+  return names.length ? names.join(', ') : 'same file';
+}
+
+/** Distinct days covered by a record set (overlaps merged). */
+function unionDays_(recs) {
+  if (!recs.length) return 0;
+  const iv = recs.map(r => [r.periodStart.getTime(), r.periodEnd.getTime()]).sort((a, b) => a[0] - b[0]);
+  let total = 0, curS = iv[0][0], curE = iv[0][1];
+  for (let i = 1; i < iv.length; i++) {
+    const s = iv[i][0], e = iv[i][1];
+    if (s <= curE) { if (e > curE) curE = e; }
+    else { total += curE - curS; curS = s; curE = e; }
+  }
+  total += curE - curS;
+  return total / 86400000;
+}

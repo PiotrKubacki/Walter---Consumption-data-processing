@@ -8,15 +8,13 @@
 // allowed to produce outputs.
 // =====================================================
 
-// Bumped with every delivery; shown in the header so "which code
-// am I looking at" (/dev head vs /exec pinned version) is always
-// answerable at a glance.
-const CDP_BUILD = '2026-08-30.6';
+// Version/build stamp lives in Version.gs (single source; bump on
+// every release — it keys the derived-data caches too).
 
 function doGet(e) {
   const t = HtmlService.createTemplateFromFile('Index');
   t.page = (e && e.parameter && e.parameter.page) || 'verify';
-  t.build = CDP_BUILD;
+  t.build = (typeof CDP_BUILD === 'undefined') ? 'missing Version.gs' : CDP_BUILD;
   return t.evaluate()
     .setTitle('CDP \u00b7 Consumption Data Processing')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');

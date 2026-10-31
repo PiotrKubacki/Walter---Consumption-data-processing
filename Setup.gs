@@ -22,6 +22,8 @@ const CDP_CONFIG_KEYS = [
   ['max_estimate_share',       '0.5', 'Reliability threshold: max estimate share of days (0-1)'],
   ['max_gap_share',            '0.1', 'Reliability threshold: max gap share of analysis window (0-1)'],
   ['near_zero_avm_kwh',        '10',  'Informational flag: AVM below this kWh/month => near-zero flag'],
+  ['format_report_email',      'peter@theutilitycompany.net', 'Unknown-format files reported from the Workbench are emailed here'],
+  ['bulk_quote_email',         'peter@theutilitycompany.net', 'Bulk pricing export files are emailed here (interim, until sent to retailers directly)'],
 ];
 
 const CDP_TABS = [
@@ -31,6 +33,20 @@ const CDP_TABS = [
   { name: 'Seasons',         headers: ['month (1-12)', 'season'] },
   { name: 'Run Log',         headers: ['timestamp', 'operator', 'files', 'icp_count', 'reliability_summary', 'output_link'] },
   { name: 'Flags Log',       headers: ['timestamp', 'run_ref', 'icp', 'register', 'flag_type', 'detail'] },
+  { name: 'Notes Log',       headers: ['timestamp', 'operator', 'customer_id', 'customer', 'files', 'notes_text'] },
+  // v2.0: the Bulk Quote Queue tab is superseded by the RFP tabs
+  // (RFP Queue / Retailers / Schemas / Send Log), created and seeded
+  // by rfpEnsureSetup_() in Rfp.gs — which also migrates any old
+  // Bulk Quote Queue rows once and renames that tab to an archive.
+  { name: 'Retailer Codes',  headers: ['trader id', 'display name'] },
+];
+
+// Trader participant id -> the name operators use. Operator-editable;
+// PSNZ is Meridian-owned Powershop (confirmed). Extend/correct freely.
+const CDP_RETAILER_CODE_SEED = [
+  ['MERX', 'Meridian'], ['MRDN', 'Meridian'], ['PSNZ', 'Powershop'],
+  ['CTCT', 'Contact'], ['GENE', 'Genesis'], ['TODD', 'Nova'],
+  ['MEEN', 'Mercury'], ['TRUS', 'Trustpower'], ['OCTO', 'Octopus'],
 ];
 
 // Time-boundary seeds (design record \u00a78.2, examples from Yuka).
@@ -122,12 +138,24 @@ function bootstrapBackingSheet() {
     Logger.log('Seeded Time Boundaries with ' + CDP_TIME_BOUNDARY_SEED.length + ' rows.');
   }
 
+  // Retailer Codes seed
+  const rcSheet = ss.getSheetByName('Retailer Codes');
+  if (rcSheet && rcSheet.getLastRow() <= 1) {
+    rcSheet.getRange(2, 1, CDP_RETAILER_CODE_SEED.length, 2).setValues(CDP_RETAILER_CODE_SEED);
+    Logger.log('Seeded Retailer Codes with ' + CDP_RETAILER_CODE_SEED.length + ' mappings.');
+  }
+
   // Seasons seed
   const seSheet = ss.getSheetByName('Seasons');
   if (seSheet && seSheet.getLastRow() <= 1) {
     seSheet.getRange(2, 1, CDP_SEASON_SEED.length, 2).setValues(CDP_SEASON_SEED);
     Logger.log('Seeded Seasons (NZ default \u2014 CONFIRM with the team).');
   }
+
+  // RFP tabs + seeds + one-time Bulk Quote Queue migration (Rfp.gs).
+  // Also self-heals on first use of the RFP tab, so running this is
+  // optional — but harmless and idempotent.
+  rfpEnsureSetup_();
 
   Logger.log('Bootstrap complete. Fill the REQUIRED Config values, then reload the web app.');
 }

@@ -67,6 +67,36 @@
     .mono  { font-family: monospace; font-size: 12px; }
     #status, #runStatus { margin: 10px 0; font-size: 13px; }
     progress { width: 240px; vertical-align: middle; }
+    nav.tabs { display: flex; gap: 4px; background: var(--tuc-accent); padding: 0 18px; }
+    nav.tabs button {
+      min-width: 150px; height: 36px; border-radius: 8px 8px 0 0;
+      background: rgba(255,255,255,.14); color: #fff; opacity: .85;
+    }
+    nav.tabs button.active { background: var(--tuc-warm-bg); color: var(--tuc-ink); opacity: 1; }
+    .wb-grid { display: grid; grid-template-columns: 44% 1fr; gap: 18px; align-items: start; }
+    .dropzone {
+      border: 2px dashed var(--tuc-accent); border-radius: 10px; padding: 18px;
+      text-align: center; color: #7497AA; background: var(--tuc-warm-bg);
+    }
+    .dropzone.drag { background: #E2EDF4; color: var(--tuc-ink); }
+    #wbPreview { width: 100%; height: 520px; border: 1px solid var(--tuc-line); border-radius: 8px; background: #fff; }
+    .wb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+    .wb-form label { font-size: 12px; color: #7497AA; display: block; margin-bottom: 2px; }
+    .wb-form input, .wb-form textarea, .wb-field input {
+      width: 100%; border: 1px solid var(--tuc-line); border-radius: 6px;
+      padding: 6px 8px; font-family: 'Open Sans', sans-serif; font-size: 13px; box-sizing: border-box;
+    }
+    .wb-form .full { grid-column: 1 / -1; }
+    .wb-filerow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--tuc-line); cursor: pointer; }
+    .wb-filerow.sel { background: var(--tuc-warm-bg); }
+    #wbNotesOut { width: 100%; height: 300px; font-family: monospace; font-size: 12px; white-space: pre; }
+    .copynum { cursor: pointer; border-bottom: 1px dotted var(--tuc-accent); }
+    .copynum:hover { color: var(--tuc-accent); }
+    .rfp-subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 14px; border-bottom: 2px solid var(--tuc-line); padding-bottom: 8px; }
+    button.rfp-subtab { min-width: 0; height: 34px; padding: 0 14px; background: transparent; color: var(--tuc-ink); border: 1px solid var(--tuc-line); }
+    button.rfp-subtab.active { background: var(--tuc-accent); color: #fff; border-color: var(--tuc-accent); }
+    button.btn-sm { min-width: 0; height: 30px; padding: 0 10px; font-size: 12px; background: transparent; color: var(--tuc-accent); border: 1px solid var(--tuc-line); }
+    button.btn-sm:hover { background: var(--tuc-warm-bg); }
   </style>
 </head>
 <body>
@@ -74,7 +104,132 @@
     <h1><span style="filter:brightness(0) invert(1)">⚡</span> CDP · Consumption Data Processing</h1>
     <span style="margin-left:auto;font-size:12px;opacity:.75">build <?= (typeof build === 'undefined' ? '?' : build) ?></span>
   </header>
+  <nav class="tabs">
+    <button id="tabBtnWb" class="active" onclick="showTab('wb')">🛠 Workbench</button>
+    <button id="tabBtnBq" onclick="showTab('bq')">💰 RFP</button>
+    <button id="tabBtnBatch" onclick="showTab('batch')" style="margin-left:auto">⚡ Batch</button>
+  </nav>
   <main>
+  <div id="tab-workbench">
+    <div class="card" style="padding:18px 20px">
+      <div class="wb-grid">
+        <div>
+          <h2>📂 Consumption files — one customer per session</h2>
+          <div class="dropzone" id="wbDrop"
+               ondragover="event.preventDefault();this.classList.add('drag')"
+               ondragleave="this.classList.remove('drag')"
+               ondrop="wbDrop(event)">
+            Drag files here, or
+            <p style="margin:10px 0 0">
+              <input type="file" id="wbPick" multiple style="display:none" onchange="wbPicked(this)">
+              <button onclick="document.getElementById('wbPick').click()">📁 Choose files</button>
+            </p>
+          </div>
+          <p style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="wbDriveLink" placeholder="…or paste a Google Drive link / file ID" style="flex:1;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+            <button onclick="wbAddDrive(this)" style="min-width:130px">🐱 Add from Drive</button>
+          </p>
+          <div id="wbFiles"></div>
+          <p>
+            <button id="wbAnalyseBtn" onclick="wbAnalyse(this)" style="display:none">🐱 Analyse session</button>
+            <button id="wbFinishBtn" onclick="wbFinish(this)" style="display:none">✅ <span>Finish customer</span></button>
+            <span id="wbMergeState" class="muted"></span>
+          </p>
+          <p>
+            <span class="muted">Pricing pathway:</span>
+            <label style="font-weight:600;margin-left:6px"><input type="radio" name="wbDefPath" value="STANDARD" checked onchange="wbDefPathChange(this.value)"> Standard</label>
+            <label style="color:var(--bad);font-weight:600;margin-left:12px"><input type="radio" name="wbDefPath" value="URGENT" onchange="wbDefPathChange(this.value)"> Urgent</label>
+            <label style="color:var(--warn);font-weight:600;margin-left:12px"><input type="radio" name="wbDefPath" value="EXTENSION" onchange="wbDefPathChange(this.value)"> Extension</label>
+            <span class="muted">(sets every ICP — adjust per ICP below)</span>
+          </p>
+          <div id="wbQueuePrev"></div>
+          <p><button id="wbQueueBtn" style="display:none" onclick="wbQueueNow(this)">💰 Send to RFP queue now</button>
+             <button disabled style="opacity:.45" title="Contact quotes per customer only and needs an LOA attached to the request — this pathway arrives in a later version, once LOA attachment is solved.">📨 Per-customer RFP — coming</button>
+             <span class="muted">(queueing also happens automatically at Finish customer)</span></p>
+          <details id="wbManualBox"><summary class="muted">Manual entry (unparseable files, or no analysis needed at all)</summary>
+            <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="wbManCustId" placeholder="Customer ID" style="width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+              <input type="text" id="wbManCustName" placeholder="Registered name" style="flex:1;min-width:180px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+            </p>
+            <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="wbManIcp" placeholder="ICP" style="width:170px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+              <select id="wbManFuel" style="height:38px;border:1px solid var(--tuc-line);border-radius:6px">
+                <option value="ELEC">Electricity</option><option value="GAS">Gas</option>
+              </select>
+              <input type="number" id="wbManAnnual" placeholder="Annual kWh" style="width:130px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+              <button onclick="wbManAdd()" style="min-width:110px">➕ Add</button>
+            </p>
+            <p class="muted" style="font-size:12px">Added ICPs appear in the "ICP to queue" table above.</p>
+          </details>
+          <iframe id="wbPreview" style="display:none" allow="autoplay"></iframe>
+        </div>
+        <div>
+          <div id="wbWarn"></div>
+          <div id="wbCalcs" class="muted">Add files and analyse to see calculations.</div>
+          <div id="wbNotes" style="display:none;margin-top:14px;border-top:1px solid var(--tuc-line);padding-top:12px">
+            <h2>📝 Proposal notes</h2>
+            <details open style="margin-bottom:10px"><summary style="font-weight:600;cursor:pointer">CURRENT</summary>
+              <div class="wb-form" style="margin-top:8px">
+                <div><label>retailer</label><input id="wb_curRetailer"></div>
+                <div><label>contract expiry</label><input id="wb_curContractExpiry"></div>
+                <div><label>break fees</label><input id="wb_curBreakFees"></div>
+                <div><label>discount</label><input id="wb_curDiscount"></div>
+                <div><label>source of current rates</label><input id="wb_curRatesSource"></div>
+                <div><label>inflation</label><input id="wb_curInflation"></div>
+                <div><label>TUC Fee</label><input id="wb_curTucFee"></div>
+                <div><label>TUC DD</label><input id="wb_curTucDd"></div>
+                <div class="full"><label>data ticket(s)</label><input id="wb_curDataTickets"></div>
+              </div>
+              <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'CURRENT')">📋 Generate &amp; copy CURRENT</button></p>
+              <textarea id="wbNotesOutCURRENT" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
+            </details>
+            <details style="margin-bottom:10px"><summary style="font-weight:600;cursor:pointer">HEADER</summary>
+              <div class="wb-form" style="margin-top:8px">
+                <div><label>customer id</label><input id="wb_customerId"></div>
+                <div><label>customer</label><input id="wb_customer"></div>
+                <div><label>date</label><input id="wb_date"></div>
+                <div><label>expiry date(s)</label><input id="wb_expiryDates"></div>
+                <div><label>analysis type</label><input id="wb_analysisType"></div>
+                <div><label>master ticket</label><input id="wb_masterTicket"></div>
+                <div><label>retailer(s)</label><input id="wb_retailers"></div>
+                <div><label>billing rate</label><input id="wb_billingRate"></div>
+                <div><label>switching (contract start) date</label><input id="wb_switchingDate"></div>
+                <div><label>contract duration</label><input id="wb_contractDuration"></div>
+                <div><label>deal type</label><input id="wb_dealType"></div>
+                <div class="full"><label>other notes</label><input id="wb_otherNotes"></div>
+              </div>
+              <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'HEADER')">📋 Generate &amp; copy HEADER</button></p>
+              <textarea id="wbNotesOutHEADER" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
+            </details>
+          </div>
+          <details id="wbBettySec" style="display:none;margin-top:14px"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
+            <p style="margin-top:8px"><button onclick="wbBettyIds(this)">🐱 Show Customer ID list</button></p>
+            <div id="wbBettyIdsArea"></div>
+            <p style="margin-top:10px">Betty template:
+              <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
+              <button onclick="document.getElementById('wbBettyFile').click()">📁 Choose template</button>
+              <span id="wbBettyFileName" class="muted">no file chosen</span>
+              <button id="wbBettyFillBtn" onclick="wbBettyFill(this)">🐱 Fill template</button></p>
+            <div id="wbBettyFillArea"></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="tab-bulkquote" style="display:none">
+    <div class="card" style="padding:18px 20px">
+      <h2>💰 RFP — bulk pricing requests</h2>
+      <p>
+        <button onclick="rfpLoad(this)">🐱 Refresh</button>
+        <button onclick="rfpClearAll(this)" style="margin-left:16px">🧹 <span>Clear all (testing)</span></button>
+      </p>
+      <div id="rfpRedirect"></div>
+      <div id="rfpMsg"></div>
+      <div id="rfpDraft"></div>
+      <div id="rfpArea" class="muted">Loading…</div>
+    </div>
+  </div>
+  <div id="tab-batch" style="display:none">
     <div class="card"><details open>
       <summary>Upload folder</summary>
       <div id="status" class="muted">Loading file list…</div>
@@ -99,6 +254,7 @@
       <div id="runStatus"></div>
     </details></div>
     <div id="verifyArea"></div>
+  </div>
   </main>
 
   <script>
@@ -430,8 +586,8 @@
         '<td class="mono tL">' + esc(a.windowFrom) + '<br>' + esc(a.windowTo) + '</td>' +
         '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d' +
           (a.estimateShare > 0 ? '<div class="muted">est ' + Math.round(a.estimateShare * 100) + '%</div>' : '') + '</td>' +
-        '<td class="tR" style="font-weight:600">' + fmtNum(a.avm) + profileHtml + '</td>' +
-        '<td class="tR" style="font-weight:600">' + fmtNum(a.annualKwh) + '</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
         '<td class="tL flagcell">' + (fl || '<span class="ok">clean</span>') + '</td>' +
         '<td>' + r.sources.map(inspectIconForName).join(' ') + '</td>' +
         '</tr>';
@@ -594,8 +750,9 @@
       reader.readAsDataURL(file);
     }
 
-    function renderBettyResult(res) {
-      var area = document.getElementById('bettyFillArea');
+    function renderBettyResult(res, areaId, showArchive) {
+      var area = document.getElementById(areaId || 'bettyFillArea');
+      if (showArchive === undefined) showArchive = true;
       var h = '<p class="ok" style="font-weight:600">Filled template ready: <a href="' + esc(res.outputUrl) + '" target="_blank">' + esc(res.outputName) + '</a></p>' +
         '<p class="muted">Download it from Drive and import into Betty. Run ref ' + esc(res.runRef) + ' logged.</p>';
       if (res.updated.length) {
@@ -621,7 +778,7 @@
       if (res.vocabularyGaps.length) {
         h += '<p class="flag">⚠ Vocabulary gaps (need Cortex request): ' + res.vocabularyGaps.map(esc).join(', ') + '</p>';
       }
-      h += '<p style="margin-top:10px"><button onclick="archiveFiles(this)">🐱 Archive processed files</button> <span class="muted">moves recognised files to CDP Processed</span></p>';
+      if (showArchive) h += '<p style="margin-top:10px"><button onclick="archiveFiles(this)">🐱 Archive processed files</button> <span class="muted">moves recognised files to CDP Processed</span></p>';
       area.innerHTML = h;
     }
 
@@ -704,7 +861,1117 @@
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    loadFiles();
+    // ---------------- Tabs ----------------
+
+    var batchLoaded = false;
+    var rfpLoaded = false;
+    function showTab(which) {
+      document.getElementById('tab-workbench').style.display = which === 'wb' ? '' : 'none';
+      document.getElementById('tab-batch').style.display = which === 'batch' ? '' : 'none';
+      document.getElementById('tab-bulkquote').style.display = which === 'bq' ? '' : 'none';
+      document.getElementById('tabBtnWb').className = which === 'wb' ? 'active' : '';
+      document.getElementById('tabBtnBatch').className = which === 'batch' ? 'active' : '';
+      document.getElementById('tabBtnBq').className = which === 'bq' ? 'active' : '';
+      if (which === 'batch' && !batchLoaded) { batchLoaded = true; loadFiles(); }
+      if (which === 'bq' && !rfpLoaded) { rfpLoaded = true; rfpLoad(null); }
+    }
+
+    // ---------------- Workbench ----------------
+
+    var wbSession = [];   // [{id, name, sizeBytes, format, previewUrl}]
+    var wbSelected = null;
+    var wbBusy = 0;
+
+    function wbDrop(ev) {
+      ev.preventDefault();
+      document.getElementById('wbDrop').classList.remove('drag');
+      if (ev.dataTransfer && ev.dataTransfer.files) wbSendFiles(ev.dataTransfer.files);
+    }
+
+    function wbPicked(input) {
+      if (input.files && input.files.length) wbSendFiles(input.files);
+      input.value = '';
+    }
+
+    function wbSendFiles(fileList) {
+      for (var i = 0; i < fileList.length; i++) (function (f) {
+        wbBusy++;
+        wbRenderFiles();
+        var reader = new FileReader();
+        reader.onload = function () {
+          google.script.run
+            .withSuccessHandler(function (info) { wbBusy--; wbAddInfo(info); })
+            .withFailureHandler(function (e) { wbBusy--; wbError(f.name + ': ' + (e.message || e)); })
+            .apiWbUpload(reader.result.split(',')[1], f.name, f.type);
+        };
+        reader.onerror = function () { wbBusy--; wbError('Could not read ' + f.name); };
+        reader.readAsDataURL(f);
+      })(fileList[i]);
+    }
+
+    function wbAddDrive(btn) {
+      var input = document.getElementById('wbDriveLink');
+      if (!input.value.trim()) return;
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (info) { btn.disabled = false; input.value = ''; wbAddInfo(info); })
+        .withFailureHandler(function (e) { btn.disabled = false; wbError(e.message || e); })
+        .apiWbAddDriveFile(input.value.trim());
+    }
+
+    function wbAddInfo(info) {
+      wbInvalidateMerge();
+      wbSession.push(info);
+      wbSelected = info.id;
+      wbRenderFiles();
+      wbPreview(info);
+    }
+
+    function wbError(msg) {
+      wbRenderFiles();
+      document.getElementById('wbWarn').innerHTML = '<p class="error">' + esc(msg) + '</p>';
+    }
+
+    function wbRenderFiles() {
+      var box = document.getElementById('wbFiles');
+      var h = '';
+      for (var i = 0; i < wbSession.length; i++) {
+        var f = wbSession[i];
+        var known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
+        h += '<div class="wb-filerow' + (wbSelected === f.id ? ' sel' : '') + '" onclick="wbSelect(\'' + f.id + '\')">' +
+          '<span style="flex:1" class="tL">' + esc(f.name) + '</span>' +
+          '<span class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</span>' +
+          '<span class="muted">' + Math.round(f.sizeBytes / 1024) + ' KB</span>' +
+          (known ? '' : '<button class="icon" title="Email this file to Peter so the format can be added" onclick="event.stopPropagation();wbReport(\'' + f.id + '\', this)">✉</button>') +
+          '<button class="icon" style="color:var(--bad)" title="Remove this file from the session" onclick="event.stopPropagation();wbRemoveFile(\'' + f.id + '\')">✕</button>' +
+          '</div>';
+      }
+      if (wbBusy) h += '<div class="muted" style="padding:4px 6px">uploading ' + wbBusy + ' file(s)…</div>';
+      box.innerHTML = h;
+      document.getElementById('wbAnalyseBtn').style.display = wbSession.length ? '' : 'none';
+      document.getElementById('wbFinishBtn').style.display = wbSession.length ? '' : 'none';
+    }
+
+    function wbSelect(id) {
+      wbSelected = id;
+      wbRenderFiles();
+      for (var i = 0; i < wbSession.length; i++) if (wbSession[i].id === id) wbPreview(wbSession[i]);
+    }
+
+    function wbPreview(info) {
+      var fr = document.getElementById('wbPreview');
+      fr.src = info.previewUrl;
+      fr.style.display = '';
+    }
+
+    function wbAnalyse(btn) {
+      btn.disabled = true; btn.textContent = 'Analysing…';
+      document.getElementById('wbWarn').innerHTML = '';
+      var ids = wbSession.map(function (f) { return f.id; });
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false; btn.textContent = '🐱 Analyse session';
+          wbAnalysedIds = ids;
+          wbRenderCalcs(res);
+          wbStartBgMerge();
+        })
+        .withFailureHandler(function (e) {
+          btn.disabled = false; btn.textContent = '🐱 Analyse session';
+          wbError(e.message || e);
+        })
+        .apiWbAnalyse(ids);
+    }
+
+    var wbLastRows = null;
+    var wbAnalysedIds = null;
+
+    function wbRenderCalcs(res) {
+      wbLastRows = res.rows;
+      var area = document.getElementById('wbCalcs');
+      if (!res.rows.length) {
+        area.innerHTML = '<p class="error">No records found' +
+          (res.skipped.length ? ' — skipped: ' + res.skipped.map(function (s) { return esc(s.name) + ' (' + esc(s.reason) + ')'; }).join('; ') : '') + '</p>';
+        return;
+      }
+      // Customer resolution + multi-customer warning
+      var rmap = res.retailerMap || {};
+      var custIds = {}, custNames = {}, traders = {};
+      for (var i = 0; i < res.rows.length; i++) {
+        var lk = res.rows[i].lookup;
+        if (lk.customerId) { custIds[lk.customerId] = true; custNames[lk.registeredName] = true; }
+        if (lk.traderId && lk.traderId !== 'Not found') traders[rmap[lk.traderId] || lk.traderId] = true;
+      }
+      var ids = Object.keys(custIds);
+      var warn = '';
+      if (ids.length > 1) warn = '<p class="error">⚠ Files resolve to ' + ids.length + ' DIFFERENT customers (' + ids.join(', ') + ') — the workbench session is one customer. Check the files.</p>';
+      if (!ids.length) warn = '<p class="flag">⚠ No ICP resolved to a Betty customer — check the lookup sheets.</p>';
+      var skips = res.skipped.length ? '<p class="flag">⚠ Skipped: ' + res.skipped.map(function (s) { return esc(s.name) + ' (' + esc(s.reason) + ')'; }).join('; ') + '</p>' : '';
+      document.getElementById('wbWarn').innerHTML = warn + skips;
+
+      var fileFlagItems = [];
+      for (var i = 0; i < res.files.length; i++) {
+        var f = res.files[i];
+        for (var j = 0; j < (f.fileFlags || []).length; j++) fileFlagItems.push('<div class="flag">⚠ ' + esc(f.name) + ': ' + esc(f.fileFlags[j]) + '</div>');
+        if (f.errors) fileFlagItems.push('<div class="error">' + esc(f.name) + ': ' + fmtNum(f.errors) + ' row error(s)</div>');
+      }
+
+      var h = '<h2>⚡ Calculations</h2>';
+      if (fileFlagItems.length) h += '<details><summary class="flag">File notices (' + fileFlagItems.length + ')</summary>' + fileFlagItems.join('') + '</details>';
+      h += '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th class="tL">File</th><th>Layer</th><th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>';
+      for (var i = 0; i < res.rows.length; i++) h += wbCalcRow(res.rows[i]);
+      h += '</tbody></table></div>';
+      area.innerHTML = h;
+
+      // Notes form: show + auto-fill (never overwrite operator-entered values)
+      document.getElementById('wbNotes').style.display = '';
+      document.getElementById('wbBettySec').style.display = '';
+      document.getElementById('wbQueueBtn').style.display = '';
+      var fill = function (id, val) {
+        var el = document.getElementById(id);
+        if (el && !el.value && val) el.value = val;
+      };
+      fill('wb_customerId', ids.length === 1 ? ids[0] : '');
+      fill('wb_customer', ids.length === 1 ? Object.keys(custNames)[0] : '');
+      var now = new Date();
+      fill('wb_date', ('0' + now.getDate()).slice(-2) + '/' + ('0' + (now.getMonth() + 1)).slice(-2) + '/' + now.getFullYear());
+      fill('wb_retailers', Object.keys(traders).join(', '));
+      fill('wb_curRetailer', Object.keys(traders).join(', '));
+      wbRenderQueuePrev();
+    }
+
+    function wbCalcRow(r) {
+      var a = r.analysis;
+      var profileHtml = '';
+      var tp = a.timeProfile;
+      if (tp) {
+        var ph = '';
+        var sk = Object.keys(tp.seasonal || {});
+        if (sk.length) ph += '<div><b>Seasonal:</b> ' + sk.map(function (s) { return esc(s) + ' ' + (tp.seasonal[s].monthlyAvg === null ? '—' : fmtNum(tp.seasonal[s].monthlyAvg) + ' kWh/mo'); }).join(' · ') + '</div>';
+        var wk = Object.keys(tp.windows || {});
+        if (wk.length) ph += '<div><b>Windows' + (tp.usedDefaultWindows ? ' (DEFAULT)' : '') + ':</b> ' + wk.map(function (w) { return esc(w) + ' ' + tp.windows[w].sharePct + '%'; }).join(' · ') + '</div>';
+        if (ph) profileHtml = '<details><summary class="muted">⚡ profile</summary><div style="font-size:12px">' + ph + '</div></details>';
+      }
+      var flagItems = [];
+      var arrs = [r.lookup.flags || [], a.breaches || [], a.flags || []];
+      for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) flagItems.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
+      return '<tr>' +
+        '<td style="font-size:18px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
+        '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+        '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
+        '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
+        '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
+        '<td class="tL flagcell">' + (collapseFlags(flagItems) || '<span class="ok">clean</span>') + '</td>' +
+        '</tr>';
+    }
+
+    function copyableNum(n) {
+      if (n === null || n === undefined || n === '') return '—';
+      return '<span class="copynum" title="Click to copy without commas" onclick="copyPlain(\'' + n + '\', this)">' + fmtNum(n) + '</span>';
+    }
+
+    function copyPlain(val, el) {
+      var done = function () {
+        var old = el.innerHTML;
+        el.innerHTML = 'copied ✓';
+        setTimeout(function () { el.innerHTML = old; }, 900);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(String(val)).then(done, function () { done(); });
+      } else { done(); }
+    }
+
+    function wbRemoveFile(fileId) {
+      wbSession = wbSession.filter(function (f) { return f.id !== fileId; });
+      if (wbSelected === fileId) {
+        wbSelected = null;
+        document.getElementById('wbPreview').style.display = 'none';
+      }
+      wbInvalidateMerge();
+      wbRenderFiles();
+      if (wbLastRows) document.getElementById('wbWarn').innerHTML =
+        '<p class="flag">⚠ Session files changed — run 🐱 Analyse session again before finishing.</p>';
+      google.script.run.apiWbRemoveFile(fileId); // trash working copy + caches
+    }
+
+    function wbReport(fileId, btn) {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) { btn.textContent = '✓'; btn.title = 'Sent to ' + r.to; })
+        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
+        .apiWbReportFile(fileId);
+    }
+
+    // ---------------- Manual ICP entries ----------------
+    var wbManual = [];
+
+    function wbManAdd() {
+      var icp = document.getElementById('wbManIcp').value.trim();
+      var fuel = document.getElementById('wbManFuel').value;
+      var annual = parseFloat(document.getElementById('wbManAnnual').value);
+      if (!/^\d{10}[A-Z0-9]{5}$/.test(icp)) { alert('That does not look like an ICP (15 characters, 10 digits then 5).'); return; }
+      if (!(annual > 0)) { alert('Enter the annual kWh.'); return; }
+      wbManual.push({ icp: icp, fuel: fuel, annualKwh: annual });
+      document.getElementById('wbManIcp').value = '';
+      document.getElementById('wbManAnnual').value = '';
+      wbManRender();
+    }
+
+    function wbManRender() {
+      // Manual rows live in the ONE "ICP to queue" table (no separate
+      // list). Manual rows alone are enough to queue or finish.
+      if (wbManual.length) {
+        document.getElementById('wbQueueBtn').style.display = '';
+        document.getElementById('wbFinishBtn').style.display = '';
+      }
+      wbRenderQueuePrev();
+    }
+
+    function wbManRemove(icp) {
+      for (var i = 0; i < wbManual.length; i++) {
+        if (wbManual[i].icp === icp) { wbManual.splice(i, 1); break; }
+      }
+      wbManRender();
+    }
+
+    function wbGenerateCopy(btn, section) {
+      btn.disabled = true;
+      var payload = { files: wbSession.map(function (f) { return f.name; }).join('; '), section: section || 'FULL' };
+      var ids = ['customerId','customer','date','expiryDates','analysisType','masterTicket','retailers',
+                 'billingRate','switchingDate','contractDuration','dealType','otherNotes',
+                 'curRetailer','curContractExpiry','curBreakFees','curDiscount','curRatesSource',
+                 'curInflation','curTucFee','curTucDd','curDataTickets'];
+      for (var i = 0; i < ids.length; i++) {
+        var el = document.getElementById('wb_' + ids[i]);
+        payload[ids[i]] = el ? el.value : '';
+      }
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          var out = document.getElementById('wbNotesOut' + (section || ''));
+          if (out) { out.value = res.text; out.style.display = ''; }
+          copyText(res.text, btn);
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; wbError(e.message || e); })
+        .apiWbNotes(payload);
+    }
+
+    function wbQueueNow(btn) {
+      var meta = wbBuildFinishMeta();
+      if (!meta) { alert('Analyse the session (or add manual ICPs) first.'); return; }
+      if (!confirm('Send ' + meta.icps.length + ' ICP(s) to the RFP queue now?')) return;
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          wbSentToQueue = true;
+          var h = '';
+          if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (💰 RFP tab).</p>';
+          if (res.duplicates && res.duplicates.length) h += '<p class="flag">⚠ Already queued (now duplicated — resolve on the RFP tab): ' + res.duplicates.map(esc).join(', ') + '</p>';
+          if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">⚠ Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
+          document.getElementById('wbWarn').innerHTML = h;
+          rfpLoaded = false;
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; wbError(e.message || e); })
+        .apiWbQueueOnly(meta);
+    }
+
+    function wbBettyIds(btn) {
+      if (!wbAnalysedIds || !wbAnalysedIds.length) { alert('Analyse the session first.'); return; }
+      var area = document.getElementById('wbBettyIdsArea');
+      area.innerHTML = '<span class="muted">Building Customer ID list…</span>';
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          var h = '<p>' + res.customerIds.length + ' customer(s) across ' + res.icpCount + ' ICP-register(s):</p>' +
+            '<textarea readonly style="width:100%;height:90px;font-family:monospace" onclick="this.select()">' +
+            res.customerIds.join('\n') + '</textarea>';
+          if (res.unresolvedIcps.length) h += '<p class="flag">⚠ ' + res.unresolvedIcps.length + ' ICP(s) with no Customer ID: ' + res.unresolvedIcps.map(esc).join(', ') + '</p>';
+          area.innerHTML = h;
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+        .apiBettyCustomerIds(wbAnalysedIds);
+    }
+
+    function wbBettyFill(btn) {
+      if (!wbAnalysedIds || !wbAnalysedIds.length) { alert('Analyse the session first.'); return; }
+      var input = document.getElementById('wbBettyFile');
+      var area = document.getElementById('wbBettyFillArea');
+      if (!input.files || !input.files.length) { area.innerHTML = '<span class="error">Choose the Betty template file first.</span>'; return; }
+      var file = input.files[0];
+      btn.disabled = true; btn.textContent = 'Filling…';
+      var reader = new FileReader();
+      reader.onload = function () {
+        var b64 = reader.result.split(',')[1];
+        google.script.run
+          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Fill template'; renderBettyResult(res, 'wbBettyFillArea', false); })
+          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+          .apiBettyFill(b64, file.name, wbAnalysedIds);
+      };
+      reader.onerror = function () { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
+      reader.readAsDataURL(file);
+    }
+
+    // ---------------- Per-ICP pathway (queue preview) ----------------
+    // Pathway is ONE mutually exclusive choice per ICP: STANDARD |
+    // URGENT | EXTENSION (decided 31 Oct — never stackable flags).
+    // The radio sets a default for every ICP; the preview table under
+    // it is where individual ICPs are adjusted before queueing.
+
+    var wbPathways = {}; // icp -> 'STANDARD' | 'URGENT' | 'EXTENSION'
+
+    function wbDefPath() {
+      var els = document.getElementsByName('wbDefPath');
+      for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i].value;
+      return 'STANDARD';
+    }
+
+    function wbDefPathChange(val) {
+      for (var k in wbPathways) wbPathways[k] = val;
+      wbRenderQueuePrev();
+    }
+
+    function wbSetPath(icp, val) { wbPathways[icp] = val; }
+
+    /** Combined ICP list to queue: analysed rows (annuals summed per ICP) + manual entries. */
+    function wbQueueIcps() {
+      var byIcp = {};
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: 0, srcs: {} });
+        if (r.analysis.annualKwh) e.annualKwh += r.analysis.annualKwh;
+        for (var j = 0; j < (r.sources || []).length; j++) e.srcs[r.sources[j]] = true;
+      }
+      for (var i = 0; i < wbManual.length; i++) {
+        var m = wbManual[i];
+        byIcp[m.icp] = { icp: m.icp, fuel: m.fuel, annualKwh: m.annualKwh, manual: true };
+      }
+      var out = [];
+      for (var k in byIcp) {
+        var e = byIcp[k];
+        e.source = e.manual ? 'manual' : Object.keys(e.srcs || {}).join(', ');
+        out.push(e);
+      }
+      return out;
+    }
+
+    function wbRenderQueuePrev() {
+      var box = document.getElementById('wbQueuePrev');
+      var icps = wbQueueIcps();
+      if (!icps.length) { box.innerHTML = ''; wbPathways = {}; return; }
+      var def = wbDefPath();
+      var present = {};
+      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">ICP to queue</th><th>Type</th>' +
+        '<th class="tL">Source</th><th class="tR">Annual kWh</th><th>Pathway</th><th></th></tr></thead><tbody>';
+      for (var i = 0; i < icps.length; i++) {
+        var c = icps[i];
+        present[c.icp] = true;
+        if (!(c.icp in wbPathways)) wbPathways[c.icp] = def;
+        var p = wbPathways[c.icp];
+        var sel = '<select onchange="wbSetPath(\'' + c.icp + '\', this.value)"' +
+          ' style="height:30px;border:1px solid var(--tuc-line);border-radius:6px">' +
+          '<option value="STANDARD"' + (p === 'STANDARD' ? ' selected' : '') + '>Standard</option>' +
+          '<option value="URGENT"' + (p === 'URGENT' ? ' selected' : '') + '>Urgent</option>' +
+          '<option value="EXTENSION"' + (p === 'EXTENSION' ? ' selected' : '') + '>Extension</option>' +
+          '</select>';
+        var ok = c.annualKwh > 0;
+        h += '<tr' + (ok ? '' : ' class="muted"') + '>' +
+          '<td class="tL mono">' + esc(c.icp) + '</td>' +
+          '<td>' + (c.fuel === 'GAS' ? 'Gas' : 'Electricity') + '</td>' +
+          '<td class="tL muted filecell" style="font-size:12px">' +
+            (c.manual ? '<span class="pill">manual</span>' : esc(c.source)) + '</td>' +
+          '<td class="tR" style="font-weight:600">' + (ok ? fmtNum(Math.round(c.annualKwh)) : '— <span style="font-weight:400">(not queued)</span>') + '</td>' +
+          '<td>' + (ok ? sel : '') + '</td>' +
+          '<td>' + (c.manual
+            ? '<button class="icon" style="color:var(--bad)" title="Remove this manual ICP" onclick="wbManRemove(\'' + esc(c.icp) + '\')">✕</button>'
+            : '') + '</td></tr>';
+      }
+      h += '</tbody></table></div>';
+      for (var k in wbPathways) if (!present[k]) delete wbPathways[k];
+      box.innerHTML = h;
+    }
+
+    function wbBuildFinishMeta() {
+      if ((!wbLastRows || !wbLastRows.length) && !wbManual.length) return null;
+      var customerId = document.getElementById('wb_customerId').value.trim();
+      var customer = document.getElementById('wb_customer').value.trim();
+      var tradingName = '';
+      if (!customerId) customerId = (document.getElementById('wbManCustId').value || '').trim();
+      if (!customer) customer = (document.getElementById('wbManCustName').value || '').trim();
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (!customerId && r.lookup.customerId) customerId = r.lookup.customerId;
+        if (!customer && r.lookup.registeredName && r.lookup.registeredName !== 'Not found') customer = r.lookup.registeredName;
+        if (!tradingName && r.lookup.tradingName && r.lookup.tradingName !== 'Not found') tradingName = r.lookup.tradingName;
+      }
+      var icps = wbQueueIcps();
+      var def = wbDefPath();
+      for (var i = 0; i < icps.length; i++) icps[i].pathway = wbPathways[icps[i].icp] || def;
+      return { customerId: customerId, customer: customer, tradingName: tradingName, icps: icps };
+    }
+
+    // ---------------- Background archive merge ----------------
+    // The slow part of finishing (file conversion + tab copying)
+    // starts the moment an analysis completes, while the operator
+    // writes the proposal notes. Finish then only exports + queues.
+
+    var wbMerge = { gen: 0, id: null, status: 'none', done: 0, total: 0 };
+    var wbFinishPending = false;
+    var wbSentToQueue = false;
+    var wbFinishBtn = null, wbFinishMeta = null, wbFinishIds = null;
+
+    function wbMergeStatus() {
+      var el = document.getElementById('wbMergeState');
+      if (!el) return;
+      if (wbMerge.status === 'running') el.textContent = 'archive: merging ' + wbMerge.done + '/' + wbMerge.total + '…';
+      else if (wbMerge.status === 'ready') el.textContent = 'archive ready ✓';
+      else if (wbMerge.status === 'failed') el.textContent = 'archive build failed — will rebuild at finish';
+      else el.textContent = '';
+    }
+
+    function wbInvalidateMerge() {
+      wbMerge.gen++;
+      if (wbMerge.id) google.script.run.apiWbDiscardMerge(wbMerge.id);
+      wbMerge = { gen: wbMerge.gen, id: null, status: 'none', done: 0, total: 0 };
+      wbMergeStatus();
+    }
+
+    function wbStartBgMerge() {
+      var meta = wbBuildFinishMeta();
+      if (!meta) return;
+      wbInvalidateMerge();
+      var gen = wbMerge.gen;
+      var ids = wbAnalysedIds.slice();
+      wbMerge.status = 'running'; wbMerge.total = ids.length; wbMerge.done = 0;
+      wbMergeStatus();
+      var label = ((meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer'));
+      var failed = function (e) {
+        if (gen !== wbMerge.gen) return;
+        wbMerge.status = 'failed'; wbMergeStatus();
+        if (wbFinishPending) wbFinishContinue();
+      };
+      google.script.run.withSuccessHandler(function (startRes) {
+        if (gen !== wbMerge.gen) { google.script.run.apiWbDiscardMerge(startRes.mergedId); return; }
+        wbMerge.id = startRes.mergedId;
+        var i = 0;
+        var next = function () {
+          if (gen !== wbMerge.gen) return;
+          if (i >= ids.length) {
+            wbMerge.status = 'ready'; wbMergeStatus();
+            if (wbFinishPending) wbFinishContinue();
+            return;
+          }
+          google.script.run
+            .withSuccessHandler(function () { if (gen !== wbMerge.gen) return; i++; wbMerge.done = i; wbMergeStatus(); next(); })
+            .withFailureHandler(failed)
+            .apiWbMergeAdd(startRes.mergedId, ids[i]);
+        };
+        next();
+      }).withFailureHandler(failed).apiWbMergeStart(label);
+    }
+
+    function wbFinish(btn) {
+      var meta = wbBuildFinishMeta();
+      var ids = wbSession.map(function (f) { return f.id; });
+      if (meta && wbAnalysedIds && ids.join(',') !== wbAnalysedIds.join(',')) {
+        alert('The session\'s files changed since the last analysis — the calculations and the Bulk Quote ' +
+          'queue would not match them.\n\nRun \ud83d\udc31 Analyse session again, then Finish.');
+        return;
+      }
+      var msg = meta
+        ? 'Finish this customer?\n\n\u2022 session files are merged into one Excel archive in CDP Output\n\u2022 ' +
+          meta.icps.length + ' ICP(s) considered for the RFP queue\n\u2022 working copies go to Trash'
+        : 'Finish without analysing? Nothing is merged or queued \u2014 working copies just go to Trash.';
+      if (!confirm(msg)) return;
+      btn.disabled = true;
+      var label = btn.querySelector('span');
+      var setLbl = function (t) { if (label) label.textContent = t; };
+
+      if (!meta) {
+        google.script.run
+          .withSuccessHandler(function () { setLbl('Finish customer'); wbResetSession(btn); })
+          .withFailureHandler(function (e) { btn.disabled = false; setLbl('Finish customer'); wbError(e.message || e); })
+          .apiWbFinishV2(ids, null);
+        return;
+      }
+
+      wbFinishBtn = btn; wbFinishMeta = meta; wbFinishIds = ids;
+      if (wbMerge.status === 'running') {
+        wbFinishPending = true;
+        setLbl('Waiting for archive\u2026');
+        return;
+      }
+      wbFinishContinue();
+    }
+
+    function wbFinishContinue() {
+      wbFinishPending = false;
+      var btn = wbFinishBtn, meta = wbFinishMeta, ids = wbFinishIds;
+      var label = btn.querySelector('span');
+      var setLbl = function (t) { if (label) label.textContent = t; };
+      var fail = function (e) {
+        btn.disabled = false; setLbl('Finish customer');
+        wbError('Finish-off stopped: ' + (e.message || e) + ' \u2014 nothing was deleted; you can retry.');
+      };
+      var exportStep = function (mergedId) {
+        setLbl('Exporting xlsx\u2026');
+        google.script.run.withSuccessHandler(function (merged) {
+          setLbl('Finishing\u2026');
+          google.script.run.withSuccessHandler(function (res) {
+            setLbl('Finish customer');
+            var h = '<p class="ok">Consumption archive: <a href="' + esc(merged.url) + '" target="_blank">' + esc(merged.name) + '</a></p>';
+            if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
+            if (res.duplicates && res.duplicates.length) h += '<p class="flag">\u26a0 Already queued (now duplicated \u2014 resolve on the RFP tab): ' + res.duplicates.map(esc).join(', ') + '</p>';
+            if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
+            if (res.queueError) h += '<p class="error">' + esc(res.queueError) + '</p>';
+            wbResetSession(btn);
+            document.getElementById('wbWarn').innerHTML = h;
+            rfpLoaded = false;
+          }).withFailureHandler(fail).apiWbFinalise(ids, meta, merged.url, wbSentToQueue);
+        }).withFailureHandler(fail).apiWbMergeExport(mergedId);
+      };
+
+      if (!ids.length) {
+        // Manual-only session: nothing to merge or trash beyond queueing.
+        setLbl('Finishing\u2026');
+        google.script.run.withSuccessHandler(function (res) {
+          setLbl('Finish customer');
+          var h = '';
+          if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
+          if (res.duplicates && res.duplicates.length) h += '<p class="flag">\u26a0 Already queued: ' + res.duplicates.map(esc).join(', ') + '</p>';
+          if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
+          wbResetSession(btn);
+          document.getElementById('wbWarn').innerHTML = h;
+          rfpLoaded = false;
+        }).withFailureHandler(fail).apiWbFinalise([], meta, '', wbSentToQueue);
+        return;
+      }
+      if (wbMerge.status === 'ready' && wbMerge.id) {
+        var takenId = wbMerge.id;
+        wbMerge.id = null; wbMerge.status = 'none'; wbMergeStatus();
+        exportStep(takenId);
+        return;
+      }
+
+      // No usable background merge (failed or never ran): rebuild inline.
+      var labelText = ((meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer'));
+      setLbl('Creating archive\u2026');
+      google.script.run.withSuccessHandler(function (startRes) {
+        var i = 0;
+        var addNext = function () {
+          if (i >= ids.length) { exportStep(startRes.mergedId); return; }
+          setLbl('Merging ' + (i + 1) + '/' + ids.length + '\u2026');
+          google.script.run
+            .withSuccessHandler(function () { i++; addNext(); })
+            .withFailureHandler(fail)
+            .apiWbMergeAdd(startRes.mergedId, ids[i]);
+        };
+        addNext();
+      }).withFailureHandler(fail).apiWbMergeStart(labelText);
+      wbLastRows = null;
+    }
+
+    function wbResetSession(btn) {
+      btn.disabled = false;
+      wbSession = []; wbSelected = null;
+      wbAnalysedIds = null;
+      wbLastRows = null;
+      wbFinishPending = false;
+      wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
+      wbMergeStatus();
+      wbRenderFiles();
+      document.getElementById('wbPreview').style.display = 'none';
+      document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse to see calculations.</span>';
+      document.getElementById('wbWarn').innerHTML = '';
+      document.getElementById('wbNotes').style.display = 'none';
+      document.getElementById('wbBettySec').style.display = 'none';
+      document.getElementById('wbQueueBtn').style.display = 'none';
+      wbSentToQueue = false;
+      var outs = ['wbNotesOutCURRENT', 'wbNotesOutHEADER'];
+      for (var oi = 0; oi < outs.length; oi++) {
+        var o = document.getElementById(outs[oi]);
+        if (o) { o.style.display = 'none'; o.value = ''; }
+      }
+      document.getElementById('wbBettyIdsArea').innerHTML = '';
+      document.getElementById('wbBettyFillArea').innerHTML = '';
+      document.getElementById('wbBettyFileName').textContent = 'no file chosen';
+      var ids = ['customerId','customer','date','expiryDates','analysisType','masterTicket','retailers',
+                 'billingRate','switchingDate','contractDuration','dealType','otherNotes',
+                 'curRetailer','curContractExpiry','curBreakFees','curDiscount','curRatesSource',
+                 'curInflation','curTucFee','curTucDd','curDataTickets'];
+      for (var i = 0; i < ids.length; i++) {
+        var el = document.getElementById('wb_' + ids[i]);
+        if (el) el.value = '';
+      }
+      wbPathways = {};
+      var defEls = document.getElementsByName('wbDefPath');
+      for (var di = 0; di < defEls.length; di++) defEls[di].checked = defEls[di].value === 'STANDARD';
+      document.getElementById('wbQueuePrev').innerHTML = '';
+      document.getElementById('wbManCustId').value = '';
+      document.getElementById('wbManCustName').value = '';
+      wbManual = [];
+      wbManRender();
+    }
+
+    // ---------------- RFP tab ----------------
+    // Three pathway sections over ONE queue: Standard bulk / Urgent /
+    // Extensions (grouped by incumbent), plus Closed and Send history.
+    // "Sent" is never a status — the chips derive from the send log.
+    // Build = file + draft only; Send = email + immutable log batch;
+    // Close = operator-confirmed tick boxes (pre-assisted, never auto).
+
+    var rfpData = null;
+    var rfpSel = {};
+    var rfpTab = 'std';
+    var rfpDraft = null;
+    var rfpExtGroupList = [];
+    // Retailer logos for the Sent to chips (small data URIs; any
+    // retailer without an entry falls back to its text code).
+    var RFP_LOGOS = {
+      NOVA: 'data:image/png;base64,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',
+      MERIDIAN: 'data:image/png;base64,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',
+      LODESTONE: 'data:image/png;base64,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',
+    };
+
+    function rfpLoad(btn) {
+      if (btn) btn.disabled = true;
+      document.getElementById('rfpArea').innerHTML = '<span class="muted">Loading…</span>';
+      document.getElementById('rfpDraft').innerHTML = '';
+      rfpDraft = null;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (btn) btn.disabled = false;
+          rfpData = res;
+          rfpSel = {};
+          for (var i = 0; i < res.rows.length; i++) if (res.rows[i].status === 'OPEN') rfpSel[res.rows[i].id] = true;
+          document.getElementById('rfpRedirect').innerHTML = res.redirect
+            ? '<p class="flag">✉ Test mode: every RFP email goes to <b>' + esc(res.redirect) + '</b> (Config key rfp_test_redirect — blank it to send to the registry addresses).</p>'
+            : '<p class="muted">✉ Live mode: emails go to the RFP Retailers registry addresses.</p>';
+          rfpRender();
+        })
+        .withFailureHandler(function (e) {
+          if (btn) btn.disabled = false;
+          document.getElementById('rfpArea').innerHTML = '<span class="error">' + esc(e.message || e) + '</span>';
+        })
+        .apiRfpList();
+    }
+
+    function rfpSections() {
+      var s = { std: [], urg: [], ext: [], closed: [] };
+      if (!rfpData) return s;
+      for (var i = 0; i < rfpData.rows.length; i++) {
+        var r = rfpData.rows[i];
+        if (r.status === 'CLOSED') { s.closed.push(r); continue; }
+        if (r.status !== 'OPEN') continue;
+        if (r.extension) s.ext.push(r);
+        else if (r.urgent) s.urg.push(r);
+        else s.std.push(r);
+      }
+      return s;
+    }
+
+    function rfpBulkRetailers() {
+      var out = [];
+      var rts = (rfpData && rfpData.retailers) || [];
+      for (var i = 0; i < rts.length; i++) {
+        if (rts[i].mode === 'BULK' && rts[i].active && rts[i].hasSchema) out.push(rts[i]);
+      }
+      return out;
+    }
+
+    function rfpFuelOk(rt, row) {
+      var gas = String(row.icpType).toLowerCase() === 'gas';
+      return rt.fuels === 'BOTH' || (gas ? rt.fuels === 'GAS' : rt.fuels === 'ELEC');
+    }
+
+    function rfpChip(code, date) {
+      var logo = RFP_LOGOS[code];
+      var label = logo
+        ? '<img src="' + logo + '" alt="' + esc(code) + '" title="' + esc(code) + '" style="height:18px;vertical-align:middle;border-radius:3px">'
+        : esc(code.slice(0, 4));
+      return '<span class="pill" style="white-space:nowrap;' +
+        (date ? 'color:var(--good);border-color:var(--good)' : 'color:#7497AA') + '">' +
+        label + ' ' + (date ? '✓ ' + esc(date.slice(5)) : '—') + '</span>';
+    }
+
+    function rfpChips(row) {
+      var cov = (rfpData.coverage || {})[row.icp] || {};
+      var parts = [];
+      if (row.extension) {
+        var code = row.incumbent && row.incumbent.code;
+        if (code) parts.push(rfpChip(code, cov[code]));
+        else parts.push('<span class="pill muted">' + esc((row.incumbent && row.incumbent.name) || 'retailer unknown') + '</span>');
+      } else {
+        var rts = rfpBulkRetailers();
+        for (var i = 0; i < rts.length; i++) {
+          if (!rfpFuelOk(rts[i], row)) continue;
+          parts.push(rfpChip(rts[i].code, cov[rts[i].code]));
+        }
+      }
+      return parts.join(' ') || '<span class="muted">—</span>';
+    }
+
+    function rfpCovered(row) {
+      var cov = (rfpData.coverage || {})[row.icp] || {};
+      if (row.extension) {
+        var code = row.incumbent && row.incumbent.code;
+        return !!(code && cov[code]);
+      }
+      var rts = rfpBulkRetailers();
+      var any = false;
+      for (var i = 0; i < rts.length; i++) {
+        if (!rfpFuelOk(rts[i], row)) continue;
+        any = true;
+        if (!cov[rts[i].code]) return false;
+      }
+      return any;
+    }
+
+    function rfpShowSub(key) {
+      rfpTab = key;
+      rfpRender();
+    }
+
+    function rfpRender() {
+      var s = rfpSections();
+      var area = document.getElementById('rfpArea');
+      area.className = '';
+      var tabs = [
+        ['std', '📦 Standard (' + s.std.length + ')'],
+        ['urg', '🚨 Urgent (' + s.urg.length + ')'],
+        ['ext', '🔁 Extensions (' + s.ext.length + ')'],
+        ['closed', '✅ Closed (' + s.closed.length + ')'],
+        ['hist', '📨 History (' + (rfpData.batches || []).length + ')'],
+      ];
+      var nav = '<div class="rfp-subtabs">';
+      for (var i = 0; i < tabs.length; i++) {
+        nav += '<button class="rfp-subtab' + (rfpTab === tabs[i][0] ? ' active' : '') +
+          '" onclick="rfpShowSub(\'' + tabs[i][0] + '\')">' + tabs[i][1] + '</button>';
+      }
+      nav += '</div>';
+      var body = rfpTab === 'std' ? rfpSectionHtml('std', s.std, 'STANDARD')
+        : rfpTab === 'urg' ? rfpSectionHtml('urg', s.urg, 'URGENT')
+        : rfpTab === 'ext' ? rfpExtSectionHtml(s.ext)
+        : rfpTab === 'closed' ? rfpClosedHtml(s.closed)
+        : rfpHistoryHtml(rfpData.batches || []);
+      area.innerHTML = nav + body;
+    }
+
+    function rfpSmallBtn(onclick, label) {
+      return '<button class="btn-sm" onclick="' + onclick + '">' + label + '</button>';
+    }
+
+    function rfpSectionHtml(key, rows, pathway) {
+      if (!rows.length) return '<p class="muted">Nothing here.</p>';
+      var rts = rfpBulkRetailers();
+      var opts = '';
+      for (var i = 0; i < rts.length; i++) {
+        opts += '<option value="' + esc(rts[i].code) + '">' + esc(rts[i].name) +
+          (rts[i].fuels === 'BOTH' ? '' : rts[i].fuels === 'ELEC' ? ' (elec only)' : ' (gas only)') + '</option>';
+      }
+      return '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        rfpSmallBtn("rfpTickSection('" + key + "', true)", 'tick all') +
+        rfpSmallBtn("rfpTickSection('" + key + "', false)", 'untick all') +
+        rfpSmallBtn("rfpInvertSection('" + key + "')", 'invert ticks') +
+        rfpSmallBtn("rfpSelectCovered('" + key + "')", 'tick fully sent') +
+        '<span style="flex:1"></span>' +
+        (opts
+          ? '<select id="rfpRet_' + key + '" style="height:38px;border:1px solid var(--tuc-line);border-radius:6px;padding:0 8px">' + opts + '</select>' +
+            '<button onclick="rfpBuild(\'' + key + '\', \'' + pathway + '\', this)">🐱 Build file &amp; draft</button>'
+          : '<span class="flag">⚠ no active retailer with a file schema (RFP Retailers / RFP Schemas tabs)</span>') +
+        '<button onclick="rfpCloseTicked(\'' + key + '\', this)">✅ Close ticked</button>' +
+        '</p>' +
+        rfpTableHtml(rows, false);
+    }
+
+    function rfpExtSectionHtml(rows) {
+      rfpExtGroupList = [];
+      if (!rows.length) return '<p class="muted">Nothing here.</p>';
+      var h = '<p class="muted">An extension goes to the ICP’s CURRENT retailer — one file and one email per retailer below.</p>';
+      var byName = {};
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var nm = (r.incumbent && r.incumbent.name) || 'Unknown retailer';
+        if (!byName[nm]) {
+          byName[nm] = { name: nm, code: (r.incumbent && r.incumbent.code) || null, rows: [] };
+          rfpExtGroupList.push(byName[nm]);
+        }
+        byName[nm].rows.push(r);
+      }
+      for (var gi = 0; gi < rfpExtGroupList.length; gi++) {
+        var g = rfpExtGroupList[gi];
+        h += '<div style="margin:10px 0;border:1px solid var(--tuc-line);border-radius:8px;padding:6px 12px 10px">' +
+          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><b>' + esc(g.name) + '</b> <span class="muted">(' + g.rows.length + ')</span>' +
+          '<span style="flex:1"></span>' +
+          (g.code
+            ? '<button onclick="rfpBuildExt(' + gi + ', this)">🐱 Build extension file &amp; draft</button>'
+            : '<span class="flag">⚠ not in the RFP Retailers registry — add it (and its schema rows) to build a file</span>') +
+          rfpSmallBtn('rfpCloseGroup(' + gi + ', this)', '✅ close ticked') +
+          '</p>' + rfpTableHtml(g.rows, false) + '</div>';
+      }
+      return h;
+    }
+
+    function rfpClosedHtml(rows) {
+      if (!rows.length) return '<p class="muted">None yet.</p>';
+      return '<p class="muted">Most recent ' + rows.length + ' closed row(s); the RFP Queue tab of CDP App Data keeps the full history.</p>' +
+        rfpTableHtml(rows, true);
+    }
+
+    function rfpHistoryHtml(batches) {
+      if (!batches.length) return '<p class="muted">Nothing sent yet.</p>';
+      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">When</th><th>Retailer</th><th>Pathway</th>' +
+        '<th class="tR">ICPs</th><th class="tL">To</th><th class="tL">File</th></tr></thead><tbody>';
+      for (var i = 0; i < batches.length; i++) {
+        var b = batches[i];
+        h += '<tr><td class="tL mono">' + esc(b.when) + '</td>' +
+          '<td>' + esc(b.retailer) + '</td>' +
+          '<td><span class="pill">' + esc(b.pathway) + '</span></td>' +
+          '<td class="tR">' + b.count + '</td>' +
+          '<td class="tL">' + esc(b.to) + '</td>' +
+          '<td class="tL filecell">' + (b.fileUrl ? '<a href="' + esc(b.fileUrl) + '" target="_blank">' + esc(b.fileName) + '</a>' : esc(b.fileName)) + '</td></tr>';
+      }
+      return h + '</tbody></table></div>';
+    }
+
+    function rfpTableHtml(rows, closed) {
+      var h = '<div class="tblwrap"><table><thead><tr>' +
+        (closed ? '' : '<th></th>') +
+        '<th class="tL">Added</th><th class="tL">Customer</th><th class="tL">ICP</th><th>Type</th>' +
+        '<th class="tR">Annual kWh</th><th class="tL">Sent to</th>' +
+        (closed ? '<th>Closed</th><th></th>' : '<th></th>') +
+        '</tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i++) h += rfpRowHtml(rows[i], closed);
+      return h + '</tbody></table></div>';
+    }
+
+    function rfpRowHtml(r, closed) {
+      var h = '<tr>';
+      if (!closed) h += '<td><input type="checkbox" ' + (rfpSel[r.id] ? 'checked' : '') +
+        ' onclick="rfpTick(\'' + esc(r.id) + '\', this)"></td>';
+      h += '<td class="tL mono">' + esc(r.added) +
+          (r.urgent ? '<div class="error" style="font-weight:600;font-size:11px">URGENT</div>' : '') +
+          (r.extension ? '<div class="flag" style="font-weight:600;font-size:11px">EXT</div>' : '') + '</td>' +
+        '<td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+        '<td class="tL mono">' + esc(r.icp) +
+          (r.fileUrl ? '<div style="font-size:11px"><a href="' + esc(r.fileUrl) + '" target="_blank">consumption file</a></div>' : '') + '</td>' +
+        '<td>' + esc(r.icpType) + '</td>';
+      if (closed) {
+        h += '<td class="tR" style="font-weight:600">' + fmtNum(r.annualKwh) + '</td>';
+      } else {
+        h += '<td class="tR"><input type="number" value="' + esc(r.annualKwh) + '" title="Edit annual kWh — saves on change"' +
+          ' style="width:100px;text-align:right;font-weight:600;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px"' +
+          ' onchange="rfpSetAnnual(\'' + esc(r.id) + '\', this)"></td>';
+      }
+      h += '<td class="tL">' + rfpChips(r) + '</td>';
+      if (closed) {
+        h += '<td class="mono">' + esc(r.closedDate) + '</td>' +
+          '<td>' + rfpSmallBtn("rfpReopen('" + esc(r.id) + "', this)", 'reopen') + '</td>';
+      } else {
+        h += '<td><button class="icon" style="color:var(--bad)" title="Remove from queue" onclick="rfpRemove(\'' + esc(r.id) + '\', this)">✕</button></td>';
+      }
+      return h + '</tr>';
+    }
+
+    function rfpTick(id, cb) { if (cb.checked) rfpSel[id] = true; else delete rfpSel[id]; }
+
+    function rfpTickedIds(rows) {
+      var out = [];
+      for (var i = 0; i < rows.length; i++) if (rfpSel[rows[i].id]) out.push(rows[i].id);
+      return out;
+    }
+
+    function rfpTickSection(key, on) {
+      var rows = rfpSections()[key];
+      for (var i = 0; i < rows.length; i++) {
+        if (on) rfpSel[rows[i].id] = true; else delete rfpSel[rows[i].id];
+      }
+      rfpRender();
+    }
+
+    function rfpInvertSection(key) {
+      var rows = rfpSections()[key];
+      for (var i = 0; i < rows.length; i++) {
+        if (rfpSel[rows[i].id]) delete rfpSel[rows[i].id]; else rfpSel[rows[i].id] = true;
+      }
+      rfpRender();
+    }
+
+    function rfpSelectCovered(key) {
+      var rows = rfpSections()[key];
+      for (var i = 0; i < rows.length; i++) {
+        if (rfpCovered(rows[i])) rfpSel[rows[i].id] = true; else delete rfpSel[rows[i].id];
+      }
+      rfpRender();
+    }
+
+    function rfpBuild(key, pathway, btn) {
+      var ids = rfpTickedIds(rfpSections()[key]);
+      if (!ids.length) { alert('Tick at least one row first.'); return; }
+      var sel = document.getElementById('rfpRet_' + key);
+      if (!sel || !sel.value) { alert('No active retailer with a file schema — check the RFP Retailers / RFP Schemas tabs.'); return; }
+      rfpRunBuild(sel.value, pathway, ids, btn);
+    }
+
+    function rfpBuildExt(gi, btn) {
+      var g = rfpExtGroupList[gi];
+      if (!g || !g.code) return;
+      var ids = rfpTickedIds(g.rows);
+      if (!ids.length) { alert('Tick at least one row in this group first.'); return; }
+      rfpRunBuild(g.code, 'EXTENSION', ids, btn);
+    }
+
+    function rfpRunBuild(code, pathway, ids, btn) {
+      if (btn) btn.disabled = true;
+      document.getElementById('rfpMsg').innerHTML = '';
+      document.getElementById('rfpDraft').innerHTML = '<span class="muted">Building…</span>';
+      google.script.run
+        .withSuccessHandler(function (r) {
+          if (btn) btn.disabled = false;
+          if (!r.ok) {
+            document.getElementById('rfpDraft').innerHTML = '';
+            document.getElementById('rfpMsg').innerHTML = '<p class="flag">' + esc(r.note) + '</p>';
+            return;
+          }
+          rfpShowDraft(r);
+        })
+        .withFailureHandler(function (e) {
+          if (btn) btn.disabled = false;
+          document.getElementById('rfpDraft').innerHTML = '';
+          document.getElementById('rfpMsg').innerHTML = '<p class="error">' + esc(e.message || e) + '</p>';
+        })
+        .apiRfpBuild(code, pathway, ids);
+    }
+
+    function rfpShowDraft(r) {
+      rfpDraft = r;
+      var h = '<div style="border:2px solid var(--tuc-accent);border-radius:10px;padding:10px 14px;margin:10px 0">';
+      h += '<p class="ok" style="font-weight:600">' + esc(r.retailerName) + ' ' + esc(r.pathway.toLowerCase()) +
+        ' file built: <a href="' + esc(r.url) + '" target="_blank">' + esc(r.name) + '</a> (' + r.count + ' ICP(s)) — nothing sent yet.</p>';
+      if (r.skippedFuel) h += '<p class="muted">' + r.skippedFuel + ' ICP(s) excluded (' + esc(r.retailerName) + ' takes ' +
+        (r.fuels === 'ELEC' ? 'electricity' : 'gas') + ' only).</p>';
+      if (r.gasBlanks) h += '<p class="flag">⚠ ' + r.gasBlanks + ' gas ICP(s) have blank retailer/address — fix and Build again before sending.</p>';
+      if (r.dups && r.dups.length) {
+        var dl = [];
+        for (var i = 0; i < r.dups.length; i++) dl.push(esc(r.dups[i].icp) + ' (last ' + esc(r.dups[i].last) + ')');
+        h += '<p class="error" style="font-weight:700">⚠ ALREADY SENT to ' + esc(r.retailerName) + ' — in this file again: ' +
+          dl.join(', ') + '. Fine for a deliberate re-quote; otherwise untick those rows and Build again.</p>';
+      }
+      if (r.draft.redirected) {
+        h += '<p class="flag">✉ Test mode: this email goes to <b>' + esc(r.draft.to) + '</b> (registry address' +
+          (r.draft.registryTo ? ': ' + esc(r.draft.registryTo) : ' not set yet') + ').</p>';
+      } else if (!r.draft.to) {
+        h += '<p class="error">No email address for ' + esc(r.retailerName) + ' on the RFP Retailers tab — fill it there (or set rfp_test_redirect), or type one below.</p>';
+      }
+      h += '<p class="muted">Check the file via the link. Wrong rows or numbers? Edit the queue and Build again — a fresh file replaces this draft.</p>' +
+        '<div style="max-width:640px">' +
+        '<label class="muted">To</label><input id="rfpTo" style="width:100%;border:1px solid var(--tuc-line);border-radius:6px;padding:8px" value="' + esc(r.draft.to) + '">' +
+        '<label class="muted" style="margin-top:6px;display:block">Subject</label><input id="rfpSubject" style="width:100%;border:1px solid var(--tuc-line);border-radius:6px;padding:8px" value="' + esc(r.draft.subject) + '">' +
+        '<label class="muted" style="margin-top:6px;display:block">Body</label>' +
+        '<textarea id="rfpBody" style="width:100%;height:140px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px;font-family:inherit">' + esc(r.draft.body) + '</textarea>' +
+        '</div>' +
+        '<p style="margin-top:10px"><button onclick="rfpSend(this)">✉ <span>Send &amp; log batch</span></button></p></div>';
+      var area = document.getElementById('rfpDraft');
+      area.innerHTML = h;
+      area.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function rfpSend(btn) {
+      if (!rfpDraft) return;
+      btn.disabled = true;
+      var lbl = btn.querySelector('span');
+      lbl.textContent = 'Sending…';
+      google.script.run
+        .withSuccessHandler(function (r) {
+          document.getElementById('rfpDraft').innerHTML = '';
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="ok" style="font-weight:600">Sent to ' + esc(r.to) + ' — batch ' + esc(r.batchId) +
+            ' logged (' + r.count + ' ICP(s)). Rows stay OPEN; close them when they are done.</p>';
+          rfpDraft = null;
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) {
+          btn.disabled = false; lbl.textContent = 'Send & log batch';
+          alert('Email failed: ' + (e.message || e) + '\n\nNothing was logged — fix and send again. (A permissions message means the mail scope needs re-authorising: run any function from the script editor and accept the consent screen.)');
+        })
+        .apiRfpSend({ fileId: rfpDraft.fileId, to: document.getElementById('rfpTo').value, cc: rfpDraft.draft.cc,
+          subject: document.getElementById('rfpSubject').value, body: document.getElementById('rfpBody').value,
+          rowIds: rfpDraft.rowIds, icps: rfpDraft.icps, retailer: rfpDraft.retailer, pathway: rfpDraft.pathway });
+    }
+
+    function rfpCloseTicked(key, btn) { rfpCloseIds(rfpTickedIds(rfpSections()[key]), btn); }
+    function rfpCloseGroup(gi, btn) {
+      var g = rfpExtGroupList[gi];
+      if (g) rfpCloseIds(rfpTickedIds(g.rows), btn);
+    }
+
+    function rfpCloseIds(ids, btn) {
+      if (!ids.length) { alert('Tick the row(s) to close first.'); return; }
+      if (!confirm('Close ' + ids.length + ' row(s)?\n\nClosed rows leave the working queue (reopenable from the Closed section).\nClosing sends nothing — it just says these are done.')) return;
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          document.getElementById('rfpMsg').innerHTML = '<p class="ok">' + r.changed + ' row(s) closed.</p>';
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) { if (btn) btn.disabled = false; alert(e.message || e); })
+        .apiRfpClose(ids);
+    }
+
+    function rfpReopen(id, btn) {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function () { rfpLoad(null); })
+        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
+        .apiRfpReopen([id]);
+    }
+
+    function rfpRemove(id, btn) {
+      if (!confirm('Remove this ICP from the RFP queue?')) return;
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function () { rfpLoad(null); })
+        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
+        .apiRfpRemove([id]);
+    }
+
+    function rfpSetAnnual(id, input) {
+      var val = input.value;
+      input.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          input.disabled = false;
+          if (r.ok) {
+            input.value = r.value;
+            input.style.borderColor = 'var(--good)';
+            setTimeout(function () { input.style.borderColor = ''; }, 1200);
+            if (rfpData) for (var i = 0; i < rfpData.rows.length; i++) {
+              if (rfpData.rows[i].id === id) rfpData.rows[i].annualKwh = r.value;
+            }
+          } else { alert('Row not found — refreshing.'); rfpLoad(null); }
+        })
+        .withFailureHandler(function (e) { input.disabled = false; alert(e.message || e); rfpLoad(null); })
+        .apiRfpSetAnnual(id, val);
+    }
+
+    function rfpClearAll(btn) {
+      if (!confirm('TESTING RESET\n\nThis deletes EVERY RFP Queue row, EVERY Send Log batch,\nand moves every generated "Bulk Pricing Requests" file to Drive Trash.\n\nContinue?')) return;
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          btn.disabled = false;
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="ok">Cleared: ' + r.rowsCleared + ' row(s) deleted, ' + r.filesTrashed + ' file(s) moved to Trash.</p>';
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
+        .apiRfpClearAll();
+    }
+
   </script>
 </body>
 </html>
