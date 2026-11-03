@@ -16,7 +16,12 @@ function doGet(e) {
   t.page = (e && e.parameter && e.parameter.page) || 'verify';
   t.build = (typeof CDP_BUILD === 'undefined') ? 'missing Version.gs' : CDP_BUILD;
   return t.evaluate()
-    .setTitle('CDP \u00b7 Consumption Data Processing')
+    .setTitle('Walter')
+    // Public icon (anyone-with-link PNG in the repo Drive folder):
+    // the browser tab shows Walter's bolt-over-graph mark. The dummy
+    // trailing "&ext=.png" exists because setFaviconUrl validates that
+    // the URL STRING ends in an image extension; Drive ignores it.
+    .setFaviconUrl('https://drive.google.com/uc?export=view&id=1BXU8edx4wIfrfYCzAFuMuTnXzTgH2jkK&ext=.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

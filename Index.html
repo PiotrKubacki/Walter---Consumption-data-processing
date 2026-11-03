@@ -19,7 +19,7 @@
       display: flex; align-items: center; gap: 12px;
     }
     /* TODO: paste the TUC owl logo <img src="data:image/png;base64,..."> here */
-    header h1 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; margin: 0; }
+    header h1 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; margin: 0; display: inline-flex; align-items: center; gap: 8px; }
     main { margin: 24px 18px; }
     .card {
       background: #fff; border: 1px solid var(--tuc-line); border-radius: 10px;
@@ -97,11 +97,34 @@
     button.rfp-subtab.active { background: var(--tuc-accent); color: #fff; border-color: var(--tuc-accent); }
     button.btn-sm { min-width: 0; height: 30px; padding: 0 10px; font-size: 12px; background: transparent; color: var(--tuc-accent); border: 1px solid var(--tuc-line); }
     button.btn-sm:hover { background: var(--tuc-warm-bg); }
+    .card2 { background: #fff; border: 1px solid var(--tuc-line); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; }
+    .cardhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .cardhead h2 { margin: 0; font-size: 12px; letter-spacing: .03em; color: #64859A; text-transform: uppercase; }
+    .seg { display: flex; border: 1px solid var(--tuc-line); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
+    .seg button { min-width: 0; height: 30px; padding: 0 12px; border-radius: 0; background: #fff; color: var(--tuc-ink); font-size: 12px; }
+    .seg button.segU { color: var(--bad); }
+    .seg button.segE { color: var(--warn); }
+    .seg button.active { background: var(--tuc-accent); color: #fff; }
+    .dropzone2 { border: 2px dashed #9DBDCE; border-radius: 10px; padding: 16px 14px; text-align: center; color: #64859A; font-size: 13px; background: #F7FAFC; }
+    .dropzone2.drag { background: #E2EDF4; color: var(--tuc-ink); }
+    .bigdrop { background: #fff; border: 2px dashed #9DBDCE; border-radius: 14px; padding: 36px 24px; text-align: center; margin-bottom: 14px; }
+    .bigdrop.drag { background: #E2EDF4; }
+    .dropstrip { border: 1.5px dashed #9DBDCE; border-radius: 8px; padding: 5px 12px; font-size: 12px; color: #64859A; display: flex; gap: 10px; align-items: center; }
+    .dropstrip.drag { background: #E2EDF4; }
+    .nextstrip { border: 1.5px dashed #C7D9E3; border-radius: 12px; padding: 10px 16px; color: #64859A; font-size: 13px; background: #F4F8FB; margin-bottom: 14px; }
+    .nextstrip.drag { background: #E2EDF4; }
+    button.linkbtn { background: none; border: 0; color: var(--tuc-accent); font-weight: 600; font-size: 12px; cursor: pointer; min-width: 0; height: auto; padding: 0; }
+    button.linkbtn:hover { text-decoration: underline; }
+    #wToast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--tuc-ink); color: #fff; border-radius: 12px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-family: 'Poppins', sans-serif; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 99; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+    #wToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #wToast img { height: 26px; border-radius: 6px; }
+    a.ghostbtn { display: none; height: 38px; padding: 0 16px; border: 1px solid var(--tuc-line); border-radius: 8px; background: #fff; color: var(--tuc-accent); font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 600; align-items: center; gap: 6px; text-decoration: none; }
+    a.ghostbtn:hover { background: var(--tuc-warm-bg); color: var(--tuc-accent); }
   </style>
 </head>
 <body>
   <header>
-    <h1><span style="filter:brightness(0) invert(1)">⚡</span> CDP · Consumption Data Processing</h1>
+    <h1><img src="data:image/png;base64,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" alt="Walter" style="height:26px;border-radius:5px"> <span>I'm Walter · I know what you <s style="opacity:.6">did</s> consumed last summer</span></h1>
     <span style="margin-left:auto;font-size:12px;opacity:.75">build <?= (typeof build === 'undefined' ? '?' : build) ?></span>
   </header>
   <nav class="tabs">
@@ -111,44 +134,58 @@
   </nav>
   <main>
   <div id="tab-workbench">
-    <div class="card" style="padding:18px 20px">
-      <div class="wb-grid">
-        <div>
-          <h2>📂 Consumption files — one customer per session</h2>
-          <div class="dropzone" id="wbDrop"
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+      <div style="flex:1 1 420px;min-width:0">
+
+        <div class="card2" id="wbSessionCard" style="display:none">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:160px">
+              <div id="wbSessName" style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px">New session</div>
+              <div id="wbSessStatus" class="muted" style="font-size:12px"></div>
+            </div>
+            <a id="wbBettyLink" class="ghostbtn" href="#" target="_blank" title="Open this customer in Betty">🔗 Betty</a>
+            <button id="wbAnalyseBtn" onclick="wbAnalyse(this)" style="min-width:0;padding:0 16px">⚡ Analyse session</button>
+            <button id="wbFinishBtn" onclick="wbFinish(this)" style="min-width:0;padding:0 16px;background:var(--good)">✅ <span>Finish customer</span></button>
+          </div>
+          <div style="margin-top:4px"><span id="wbMergeState" class="muted" style="font-size:12px"></span></div>
+        </div>
+
+        <div class="card2" id="wbCurCard">
+          <div class="cardhead"><h2>📂 Current customer</h2></div>
+          <div class="dropzone2" id="wbDrop"
                ondragover="event.preventDefault();this.classList.add('drag')"
                ondragleave="this.classList.remove('drag')"
                ondrop="wbDrop(event)">
-            Drag files here, or
-            <p style="margin:10px 0 0">
-              <input type="file" id="wbPick" multiple style="display:none" onchange="wbPicked(this)">
-              <button onclick="document.getElementById('wbPick').click()">📁 Choose files</button>
-            </p>
+            Drag this customer's consumption files here
+            <span style="display:inline-flex;gap:10px;margin-left:8px">
+              <button class="linkbtn" onclick="document.getElementById('wbPick').click()">📁 Choose files</button>
+              <button class="linkbtn" onclick="wbToggleLink()">🔗 Drive link</button>
+            </span>
           </div>
-          <p style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="wbDriveLink" placeholder="…or paste a Google Drive link / file ID" style="flex:1;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
-            <button onclick="wbAddDrive(this)" style="min-width:130px">🐱 Add from Drive</button>
+          <p id="wbLinkRow" style="display:none;gap:8px;align-items:center">
+            <input type="text" id="wbDriveLink" placeholder="…paste a Google Drive link / file ID" style="flex:1;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+            <button onclick="wbAddDrive(this)" style="min-width:130px">🔗 Add from Drive</button>
           </p>
+          <input type="file" id="wbPick" multiple style="display:none" onchange="wbPicked(this)">
           <div id="wbFiles"></div>
-          <p>
-            <button id="wbAnalyseBtn" onclick="wbAnalyse(this)" style="display:none">🐱 Analyse session</button>
-            <button id="wbFinishBtn" onclick="wbFinish(this)" style="display:none">✅ <span>Finish customer</span></button>
-            <span id="wbMergeState" class="muted"></span>
-          </p>
-          <p>
-            <span class="muted">Pricing pathway:</span>
-            <label style="font-weight:600;margin-left:6px"><input type="radio" name="wbDefPath" value="STANDARD" checked onchange="wbDefPathChange(this.value)"> Standard</label>
-            <label style="color:var(--bad);font-weight:600;margin-left:12px"><input type="radio" name="wbDefPath" value="URGENT" onchange="wbDefPathChange(this.value)"> Urgent</label>
-            <label style="color:var(--warn);font-weight:600;margin-left:12px"><input type="radio" name="wbDefPath" value="EXTENSION" onchange="wbDefPathChange(this.value)"> Extension</label>
-            <span class="muted">(sets every ICP — adjust per ICP below)</span>
-          </p>
+          <p style="margin:8px 0 0"><button class="linkbtn" onclick="wbShowManual(true)">or add ICPs manually — no files needed</button></p>
+          <iframe id="wbPreview" style="display:none;width:100%;height:420px;border:1px solid var(--tuc-line);border-radius:8px;background:#fff;margin-top:8px" allow="autoplay"></iframe>
+        </div>
+
+        <div class="card2" id="wbQueueCard" style="display:none">
+          <div class="cardhead">
+            <h2>ICPs to queue</h2>
+            <div class="seg" style="margin-left:auto" id="wbSeg" title="Default pathway — sets every ICP; adjust per ICP in the table">
+              <button class="active" onclick="wbDefPathChange('STANDARD', this)">Standard</button>
+              <button class="segU" onclick="wbDefPathChange('URGENT', this)">Urgent</button>
+              <button class="segE" onclick="wbDefPathChange('EXTENSION', this)">Extension</button>
+            </div>
+          </div>
           <div id="wbQueuePrev"></div>
-          <p><button id="wbQueueBtn" style="display:none" onclick="wbQueueNow(this)">💰 Send to RFP queue now</button>
-             <button disabled style="opacity:.45" title="Contact quotes per customer only and needs an LOA attached to the request — this pathway arrives in a later version, once LOA attachment is solved.">📨 Per-customer RFP — coming</button>
-             <span class="muted">(queueing also happens automatically at Finish customer)</span></p>
-          <details id="wbManualBox"><summary class="muted">Manual entry (unparseable files, or no analysis needed at all)</summary>
+          <p style="margin:8px 0 2px"><button class="linkbtn" onclick="wbShowManual()">＋ Add ICP manually</button></p>
+          <div id="wbManualBox" style="display:none;border-top:1px solid var(--tuc-line);padding-top:8px;margin-top:6px">
             <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input type="text" id="wbManCustId" placeholder="Customer ID" style="width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+              <input type="text" id="wbManCustId" placeholder="Customer ID" onchange="wbRenderQueuePrev()" style="width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
               <input type="text" id="wbManCustName" placeholder="Registered name" style="flex:1;min-width:180px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
             </p>
             <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -159,60 +196,89 @@
               <input type="number" id="wbManAnnual" placeholder="Annual kWh" style="width:130px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
               <button onclick="wbManAdd()" style="min-width:110px">➕ Add</button>
             </p>
-            <p class="muted" style="font-size:12px">Added ICPs appear in the "ICP to queue" table above.</p>
-          </details>
-          <iframe id="wbPreview" style="display:none" allow="autoplay"></iframe>
-        </div>
-        <div>
-          <div id="wbWarn"></div>
-          <div id="wbCalcs" class="muted">Add files and analyse to see calculations.</div>
-          <div id="wbNotes" style="display:none;margin-top:14px;border-top:1px solid var(--tuc-line);padding-top:12px">
-            <h2>📝 Proposal notes</h2>
-            <details open style="margin-bottom:10px"><summary style="font-weight:600;cursor:pointer">CURRENT</summary>
-              <div class="wb-form" style="margin-top:8px">
-                <div><label>retailer</label><input id="wb_curRetailer"></div>
-                <div><label>contract expiry</label><input id="wb_curContractExpiry"></div>
-                <div><label>break fees</label><input id="wb_curBreakFees"></div>
-                <div><label>discount</label><input id="wb_curDiscount"></div>
-                <div><label>source of current rates</label><input id="wb_curRatesSource"></div>
-                <div><label>inflation</label><input id="wb_curInflation"></div>
-                <div><label>TUC Fee</label><input id="wb_curTucFee"></div>
-                <div><label>TUC DD</label><input id="wb_curTucDd"></div>
-                <div class="full"><label>data ticket(s)</label><input id="wb_curDataTickets"></div>
-              </div>
-              <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'CURRENT')">📋 Generate &amp; copy CURRENT</button></p>
-              <textarea id="wbNotesOutCURRENT" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
-            </details>
-            <details style="margin-bottom:10px"><summary style="font-weight:600;cursor:pointer">HEADER</summary>
-              <div class="wb-form" style="margin-top:8px">
-                <div><label>customer id</label><input id="wb_customerId"></div>
-                <div><label>customer</label><input id="wb_customer"></div>
-                <div><label>date</label><input id="wb_date"></div>
-                <div><label>expiry date(s)</label><input id="wb_expiryDates"></div>
-                <div><label>analysis type</label><input id="wb_analysisType"></div>
-                <div><label>master ticket</label><input id="wb_masterTicket"></div>
-                <div><label>retailer(s)</label><input id="wb_retailers"></div>
-                <div><label>billing rate</label><input id="wb_billingRate"></div>
-                <div><label>switching (contract start) date</label><input id="wb_switchingDate"></div>
-                <div><label>contract duration</label><input id="wb_contractDuration"></div>
-                <div><label>deal type</label><input id="wb_dealType"></div>
-                <div class="full"><label>other notes</label><input id="wb_otherNotes"></div>
-              </div>
-              <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'HEADER')">📋 Generate &amp; copy HEADER</button></p>
-              <textarea id="wbNotesOutHEADER" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
-            </details>
+            <p class="muted" style="font-size:12px;margin:2px 0 0">Added ICPs appear in the table above.</p>
           </div>
-          <details id="wbBettySec" style="display:none;margin-top:14px"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
-            <p style="margin-top:8px"><button onclick="wbBettyIds(this)">🐱 Show Customer ID list</button></p>
-            <div id="wbBettyIdsArea"></div>
-            <p style="margin-top:10px">Betty template:
-              <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
-              <button onclick="document.getElementById('wbBettyFile').click()">📁 Choose template</button>
-              <span id="wbBettyFileName" class="muted">no file chosen</span>
-              <button id="wbBettyFillBtn" onclick="wbBettyFill(this)">🐱 Fill template</button></p>
-            <div id="wbBettyFillArea"></div>
-          </details>
+          <p style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button id="wbQueueBtn" style="display:none;min-width:0;padding:0 16px" onclick="wbQueueNow(this)">💰 Send to RFP queue now</button>
+            <button disabled style="opacity:.45;min-width:0;padding:0 16px" title="Contact quotes per customer only and needs an LOA attached to the request — this pathway arrives in a later version, once LOA attachment is solved.">📨 Per-customer RFP — coming</button>
+            <span class="muted" style="font-size:12px">(queueing also happens automatically at Finish customer)</span>
+          </p>
         </div>
+
+        <div class="card2" id="wbNextCard">
+          <div class="cardhead"><h2>⏭ Next customer</h2><span class="muted" style="font-size:11px">preloads &amp; analyses while you work on the current one</span></div>
+          <div class="dropzone2" id="wbNextDropZone"
+               ondragover="event.preventDefault();this.classList.add('drag')"
+               ondragleave="this.classList.remove('drag')"
+               ondrop="wbNextDrop(event)">
+            Drag the NEXT customer's files here
+            <span style="display:inline-flex;gap:10px;margin-left:8px">
+              <button class="linkbtn" onclick="document.getElementById('wbNextPick').click()">📁 Choose files</button>
+            </span>
+          </div>
+          <input type="file" id="wbNextPick" multiple style="display:none" onchange="wbNextPicked(this)">
+          <div id="wbNextArea"></div>
+        </div>
+
+      </div>
+      <div style="flex:2 1 560px;min-width:0">
+        <div id="wbWarn"></div>
+        <div class="card2">
+          <div class="cardhead"><h2>⚡ Calculations</h2></div>
+          <div id="wbCalcs" class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</div>
+        </div>
+        <div class="card2" id="wbNotes" style="display:none">
+          <div class="cardhead">
+            <h2>📝 Proposal notes</h2>
+            <div class="seg">
+              <button id="wbTabCurBtn" class="active" onclick="wbNotesTab('CUR')">CURRENT</button>
+              <button id="wbTabHdrBtn" onclick="wbNotesTab('HDR')">HEADER</button>
+            </div>
+          </div>
+          <div id="wbNotesCurBox">
+            <div class="wb-form">
+              <div><label>retailer</label><input id="wb_curRetailer"></div>
+              <div><label>contract expiry</label><input id="wb_curContractExpiry"></div>
+              <div><label>break fees</label><input id="wb_curBreakFees"></div>
+              <div><label>discount</label><input id="wb_curDiscount"></div>
+              <div><label>source of current rates</label><input id="wb_curRatesSource"></div>
+              <div><label>inflation</label><input id="wb_curInflation"></div>
+              <div><label>TUC Fee</label><input id="wb_curTucFee"></div>
+              <div><label>TUC DD</label><input id="wb_curTucDd"></div>
+              <div class="full"><label>data ticket(s)</label><input id="wb_curDataTickets"></div>
+            </div>
+            <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'CURRENT')" style="min-width:0;padding:0 16px">📋 Generate &amp; copy CURRENT</button></p>
+            <textarea id="wbNotesOutCURRENT" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
+          </div>
+          <div id="wbNotesHdrBox" style="display:none">
+            <div class="wb-form">
+              <div><label>customer id</label><input id="wb_customerId"></div>
+              <div><label>customer</label><input id="wb_customer"></div>
+              <div><label>date</label><input id="wb_date"></div>
+              <div><label>expiry date(s)</label><input id="wb_expiryDates"></div>
+              <div><label>analysis type</label><input id="wb_analysisType"></div>
+              <div><label>master ticket</label><input id="wb_masterTicket"></div>
+              <div><label>retailer(s)</label><input id="wb_retailers"></div>
+              <div><label>billing rate</label><input id="wb_billingRate"></div>
+              <div><label>switching (contract start) date</label><input id="wb_switchingDate"></div>
+              <div><label>contract duration</label><input id="wb_contractDuration"></div>
+              <div><label>deal type</label><input id="wb_dealType"></div>
+              <div class="full"><label>other notes</label><input id="wb_otherNotes"></div>
+            </div>
+            <p style="margin-top:10px"><button onclick="wbGenerateCopy(this, 'HEADER')" style="min-width:0;padding:0 16px">📋 Generate &amp; copy HEADER</button></p>
+            <textarea id="wbNotesOutHEADER" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
+          </div>
+        </div>
+        <details id="wbBettySec" class="card2" style="display:none"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
+          <p style="margin-top:8px"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
+          <div id="wbBettyIdsArea"></div>
+          <p style="margin-top:10px">Betty template:
+            <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
+            <button onclick="document.getElementById('wbBettyFile').click()" style="min-width:0;padding:0 16px">📁 Choose template</button>
+            <span id="wbBettyFileName" class="muted">no file chosen</span>
+            <button id="wbBettyFillBtn" onclick="wbBettyFill(this)" style="min-width:0;padding:0 16px">📥 Fill template</button></p>
+          <div id="wbBettyFillArea"></div>
+        </details>
       </div>
     </div>
   </div>
@@ -220,7 +286,7 @@
     <div class="card" style="padding:18px 20px">
       <h2>💰 RFP — bulk pricing requests</h2>
       <p>
-        <button onclick="rfpLoad(this)">🐱 Refresh</button>
+        <button onclick="rfpLoad(this)">🔄 Refresh</button>
         <button onclick="rfpClearAll(this)" style="margin-left:16px">🧹 <span>Clear all (testing)</span></button>
       </p>
       <div id="rfpRedirect"></div>
@@ -245,8 +311,8 @@
         <tbody id="fileRows"></tbody>
       </table></div>
       <p style="margin-top:12px">
-        <button id="refreshBtn" onclick="loadFiles()">🐱 Refresh list</button>
-        <button id="analyseBtn" onclick="startAnalysis()">🐱 Analyse selected</button>
+        <button id="refreshBtn" onclick="loadFiles()">🔄 Refresh list</button>
+        <button id="analyseBtn" onclick="startAnalysis()">⚡ Analyse selected</button>
         <button id="pauseBtn" style="display:none" onclick="togglePause(this)">⏸ Pause</button>
         <button id="stopBtn" style="display:none" onclick="stopAnalysis()">⏹ Stop</button>
         <button id="trashBtn" onclick="trashSelected()">❌ <span id="trashLabel">Delete selected</span></button>
@@ -256,6 +322,7 @@
     <div id="verifyArea"></div>
   </div>
   </main>
+  <div id="wToast"><img id="wToastIcon" alt=""><span id="wToastMsg"></span></div>
 
   <script>
     var uploadFiles = [];
@@ -325,7 +392,7 @@
           '<td>' + esc(f.updated) + '</td>' +
           '<td class="tR">' + Math.round(f.sizeBytes / 1024) + ' KB</td>' +
           '<td class="tL">' + (known
-            ? '<button onclick="parseFile(\'' + f.id + '\', this)">🐱 Parse &amp; verify</button>'
+            ? '<button onclick="parseFile(\'' + f.id + '\', this)">🔍 Parse &amp; verify</button>'
             : '<span class="error">no parser</span> <button onclick="debugFile(\'' + f.id + '\')">🔍</button>') + '</td>';
         tbody.appendChild(tr);
       }
@@ -343,7 +410,7 @@
       var all = document.getElementById('selAll');
       all.checked = n > 0 && n === uploadFiles.length;
       all.indeterminate = n > 0 && n < uploadFiles.length;
-      document.getElementById('analyseBtn').textContent = '🐱 Analyse selected' + (n ? ' (' + n + ')' : '');
+      document.getElementById('analyseBtn').textContent = '⚡ Analyse selected' + (n ? ' (' + n + ')' : '');
       document.getElementById('trashLabel').textContent = 'Delete selected' + (n ? ' (' + n + ')' : '');
     }
     function selectedIds() { return Object.keys(selection); }
@@ -521,13 +588,13 @@
 
       html += '<div style="margin-top:16px;border-top:1px solid var(--tuc-line);padding-top:12px">' +
         '<h2>🔌 Betty round-trip</h2>' +
-        '<p><button onclick="bettyIds()">🐱 Show Customer ID list for Betty</button></p>' +
+        '<p><button onclick="bettyIds()">📋 Show Customer ID list for Betty</button></p>' +
         '<div id="bettyIdsArea"></div>' +
         '<p style="margin-top:10px">Then upload the template Betty exported: ' +
         '<input type="file" id="bettyFile" accept=".xlsx" style="display:none" onchange="bettyFileChosen(this)"> ' +
         '<button onclick="document.getElementById(\'bettyFile\').click()">📁 Choose template</button> ' +
         '<span id="bettyFileName" class="muted">no file chosen</span> ' +
-        '<button id="bettyFillBtn" onclick="bettyFill()">🐱 Fill template</button></p>' +
+        '<button id="bettyFillBtn" onclick="bettyFill()">📥 Fill template</button></p>' +
         '<div id="bettyFillArea"></div>' +
         '</div>';
       html += '</details></div>';
@@ -579,12 +646,12 @@
       }
       return '<tr>' +
         '<td style="font-size:20px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
-        '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+        '<td class="mono tL">' + copyableIcp(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
         '<td class="tL">' + cust + '</td>' +
         '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
         '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
         '<td class="mono tL">' + esc(a.windowFrom) + '<br>' + esc(a.windowTo) + '</td>' +
-        '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d' +
+        '<td class="tR">' + fmtNum(Math.round(a.daysCovered)) + ' / ' + fmtNum(Math.round(a.windowDays)) + ' d' +
           (a.estimateShare > 0 ? '<div class="muted">est ' + Math.round(a.estimateShare * 100) + '%</div>' : '') + '</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
@@ -618,8 +685,8 @@
     function parseFile(fileId, btn) {
       btn.disabled = true; btn.textContent = 'Parsing…';
       google.script.run
-        .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Parse & verify'; renderVerify(res); })
-        .withFailureHandler(function (err) { btn.disabled = false; btn.textContent = '🐱 Parse & verify'; showError(err); })
+        .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🔍 Parse & verify'; renderVerify(res); })
+        .withFailureHandler(function (err) { btn.disabled = false; btn.textContent = '🔍 Parse & verify'; showError(err); })
         .apiParseAndVerify(fileId);
     }
 
@@ -742,11 +809,11 @@
       reader.onload = function () {
         var b64 = reader.result.split(',')[1];
         google.script.run
-          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Fill template'; renderBettyResult(res); })
-          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '📥 Fill template'; renderBettyResult(res); })
+          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
           .apiBettyFill(b64, file.name, batchFileIds);
       };
-      reader.onerror = function () { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
+      reader.onerror = function () { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
       reader.readAsDataURL(file);
     }
 
@@ -778,7 +845,7 @@
       if (res.vocabularyGaps.length) {
         h += '<p class="flag">⚠ Vocabulary gaps (need Cortex request): ' + res.vocabularyGaps.map(esc).join(', ') + '</p>';
       }
-      if (showArchive) h += '<p style="margin-top:10px"><button onclick="archiveFiles(this)">🐱 Archive processed files</button> <span class="muted">moves recognised files to CDP Processed</span></p>';
+      if (showArchive) h += '<p style="margin-top:10px"><button onclick="archiveFiles(this)">📦 Archive processed files</button> <span class="muted">moves recognised files to CDP Processed</span></p>';
       area.innerHTML = h;
     }
 
@@ -790,7 +857,7 @@
           selection = {};
           loadFiles();
         })
-        .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Archive processed files'; showError(e); })
+        .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📦 Archive processed files'; showError(e); })
         .apiArchiveProcessedFiles();
     }
 
@@ -884,8 +951,28 @@
 
     function wbDrop(ev) {
       ev.preventDefault();
-      document.getElementById('wbDrop').classList.remove('drag');
-      if (ev.dataTransfer && ev.dataTransfer.files) wbSendFiles(ev.dataTransfer.files);
+      if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('drag');
+      var dt = ev.dataTransfer;
+      if (dt && dt.files && dt.files.length) { wbSendFiles(dt.files); return; }
+      // Not a file drop. A Google Drive link dragged from another window
+      // works (same as pasting it); anything else gets told why not —
+      // never a silent ignore.
+      var link = '';
+      try { link = dt ? (dt.getData('text/uri-list') || dt.getData('text/plain') || '') : ''; } catch (e) {}
+      link = String(link).split('\n')[0].trim();
+      if (/drive\.google\.com|docs\.google\.com/.test(link) && /[-\w]{25,}/.test(link)) {
+        wbBusy++;
+        wbRenderFiles();
+        google.script.run
+          .withSuccessHandler(function (info) { wbBusy--; wbAddInfo(info); })
+          .withFailureHandler(function (e) { wbBusy--; wbError('Dropped Drive link failed: ' + (e.message || e)); })
+          .apiWbAddDriveFile(link);
+      } else if (link) {
+        wbError('That drop was a link, not a file (' + link.slice(0, 80) + (link.length > 80 ? '…' : '') +
+          '). Only real files or Google Drive links work here — download the file first, or save it to Drive and drag that.');
+      } else {
+        wbError('Nothing usable in that drop — drag actual files, or a Google Drive link.');
+      }
     }
 
     function wbPicked(input) {
@@ -948,8 +1035,7 @@
       }
       if (wbBusy) h += '<div class="muted" style="padding:4px 6px">uploading ' + wbBusy + ' file(s)…</div>';
       box.innerHTML = h;
-      document.getElementById('wbAnalyseBtn').style.display = wbSession.length ? '' : 'none';
-      document.getElementById('wbFinishBtn').style.display = wbSession.length ? '' : 'none';
+      wbRenderSession();
     }
 
     function wbSelect(id) {
@@ -970,13 +1056,13 @@
       var ids = wbSession.map(function (f) { return f.id; });
       google.script.run
         .withSuccessHandler(function (res) {
-          btn.disabled = false; btn.textContent = '🐱 Analyse session';
+          btn.disabled = false; btn.textContent = '⚡ Analyse session';
           wbAnalysedIds = ids;
           wbRenderCalcs(res);
           wbStartBgMerge();
         })
         .withFailureHandler(function (e) {
-          btn.disabled = false; btn.textContent = '🐱 Analyse session';
+          btn.disabled = false; btn.textContent = '⚡ Analyse session';
           wbError(e.message || e);
         })
         .apiWbAnalyse(ids);
@@ -1002,6 +1088,7 @@
         if (lk.traderId && lk.traderId !== 'Not found') traders[rmap[lk.traderId] || lk.traderId] = true;
       }
       var ids = Object.keys(custIds);
+      wbAnalysedCust = ids.length === 1 ? { id: ids[0], name: Object.keys(custNames)[0] || '' } : null;
       var warn = '';
       if (ids.length > 1) warn = '<p class="error">⚠ Files resolve to ' + ids.length + ' DIFFERENT customers (' + ids.join(', ') + ') — the workbench session is one customer. Check the files.</p>';
       if (!ids.length) warn = '<p class="flag">⚠ No ICP resolved to a Betty customer — check the lookup sheets.</p>';
@@ -1015,9 +1102,9 @@
         if (f.errors) fileFlagItems.push('<div class="error">' + esc(f.name) + ': ' + fmtNum(f.errors) + ' row error(s)</div>');
       }
 
-      var h = '<h2>⚡ Calculations</h2>';
+      var h = '';
       if (fileFlagItems.length) h += '<details><summary class="flag">File notices (' + fileFlagItems.length + ')</summary>' + fileFlagItems.join('') + '</details>';
-      h += '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th class="tL">File</th><th>Layer</th><th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>';
+      h += '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th>Fuel</th><th class="tL">File</th><th>Layer</th><th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>';
       for (var i = 0; i < res.rows.length; i++) h += wbCalcRow(res.rows[i]);
       h += '</tbody></table></div>';
       area.innerHTML = h;
@@ -1037,6 +1124,7 @@
       fill('wb_retailers', Object.keys(traders).join(', '));
       fill('wb_curRetailer', Object.keys(traders).join(', '));
       wbRenderQueuePrev();
+      wbRenderSession();
     }
 
     function wbCalcRow(r) {
@@ -1056,10 +1144,11 @@
       for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) flagItems.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
       return '<tr>' +
         '<td style="font-size:18px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
-        '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+        '<td class="mono tL">' + copyableIcp(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
+        '<td>' + fuelLabel(r.lookup) + '</td>' +
         '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
         '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
-        '<td class="tR">' + fmtNum(a.daysCovered) + ' / ' + fmtNum(a.windowDays) + ' d</td>' +
+        '<td class="tR">' + fmtNum(Math.round(a.daysCovered)) + ' / ' + fmtNum(Math.round(a.windowDays)) + ' d</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
         '<td class="tL flagcell">' + (collapseFlags(flagItems) || '<span class="ok">clean</span>') + '</td>' +
@@ -1069,6 +1158,16 @@
     function copyableNum(n) {
       if (n === null || n === undefined || n === '') return '—';
       return '<span class="copynum" title="Click to copy without commas" onclick="copyPlain(\'' + n + '\', this)">' + fmtNum(n) + '</span>';
+    }
+
+    /** ICP shown in full; a click copies ONLY its last 5 characters. */
+    function copyableIcp(icp) {
+      var last5 = String(icp).slice(-5);
+      return '<span class="copynum" title="Click to copy ' + esc(last5) + '" onclick="copyPlain(\'' + esc(last5) + '\', this)">' + esc(icp) + '</span>';
+    }
+
+    function fuelLabel(lk) {
+      return lk.fuel === 'GAS' ? 'Gas' : lk.fuel === 'ELEC' ? 'Elec' : '—';
     }
 
     function copyPlain(val, el) {
@@ -1091,7 +1190,7 @@
       wbInvalidateMerge();
       wbRenderFiles();
       if (wbLastRows) document.getElementById('wbWarn').innerHTML =
-        '<p class="flag">⚠ Session files changed — run 🐱 Analyse session again before finishing.</p>';
+        '<p class="flag">⚠ Session files changed — run ⚡ Analyse session again before finishing.</p>';
       google.script.run.apiWbRemoveFile(fileId); // trash working copy + caches
     }
 
@@ -1101,6 +1200,164 @@
         .withSuccessHandler(function (r) { btn.textContent = '✓'; btn.title = 'Sent to ' + r.to; })
         .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
         .apiWbReportFile(fileId);
+    }
+
+    // ---------------- Next-customer staging (pipeline) ----------------
+    // The slow machine work for customer N+1 (upload + parse + analyse)
+    // runs while the operator does the manual work on customer N. All
+    // server APIs are file-id based, so the staged slot is pure client
+    // state: strictly separate from the live session (one customer per
+    // session holds), promoted automatically at Finish customer.
+
+    function wbNextFresh() {
+      return { files: [], busy: 0, gen: 0, status: 'empty', res: null, analysedIds: null, custLabel: '', err: '' };
+    }
+    var wbNext = wbNextFresh();
+    var wbPromo = null; // {gen} when promoted before its analysis finished
+
+    function wbNextDrop(ev) {
+      ev.preventDefault();
+      if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('drag');
+      var dt = ev.dataTransfer;
+      if (dt && dt.files && dt.files.length) { wbNextSend(dt.files); return; }
+      var link = '';
+      try { link = dt ? (dt.getData('text/uri-list') || dt.getData('text/plain') || '') : ''; } catch (e) {}
+      link = String(link).split('\n')[0].trim();
+      if (/drive\.google\.com|docs\.google\.com/.test(link) && /[-\w]{25,}/.test(link)) {
+        wbNext.busy++;
+        wbNextRender();
+        google.script.run
+          .withSuccessHandler(function (info) { wbNext.busy--; wbNext.files.push(info); wbNextKick(); })
+          .withFailureHandler(function (e) { wbNext.busy--; wbNext.err = 'Drive link failed: ' + (e.message || e); wbNextRender(); })
+          .apiWbAddDriveFile(link);
+      } else {
+        wbNext.err = link ? 'That drop was a link, not a file — only real files or Google Drive links work here.' : 'Nothing usable in that drop.';
+        wbNextRender();
+      }
+    }
+
+    function wbNextPicked(input) {
+      if (input.files && input.files.length) wbNextSend(input.files);
+      input.value = '';
+    }
+
+    function wbNextSend(fileList) {
+      for (var i = 0; i < fileList.length; i++) (function (f) {
+        wbNext.busy++;
+        wbNextRender();
+        var reader = new FileReader();
+        reader.onload = function () {
+          google.script.run
+            .withSuccessHandler(function (info) { wbNext.busy--; wbNext.files.push(info); wbNextKick(); })
+            .withFailureHandler(function (e) { wbNext.busy--; wbNext.err = f.name + ': ' + (e.message || e); wbNextRender(); })
+            .apiWbUpload(reader.result.split(',')[1], f.name, f.type);
+        };
+        reader.onerror = function () { wbNext.busy--; wbNext.err = 'Could not read ' + f.name; wbNextRender(); };
+        reader.readAsDataURL(f);
+      })(fileList[i]);
+    }
+
+    function wbNextKick() {
+      if (!wbNext.busy && wbNext.files.length) wbNextAnalyse();
+      else wbNextRender();
+    }
+
+    function wbNextAnalyse() {
+      var gen = ++wbNext.gen;
+      wbNext.status = 'analysing';
+      wbNext.res = null; wbNext.analysedIds = null;
+      wbNextRender();
+      var ids = wbNext.files.map(function (f) { return f.id; });
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (wbPromo && wbPromo.gen === gen) { // promoted before this finished
+            wbPromo = null;
+            wbAnalysedIds = ids;
+            var prior = document.getElementById('wbWarn').innerHTML;
+            wbRenderCalcs(res);
+            document.getElementById('wbWarn').innerHTML = prior + document.getElementById('wbWarn').innerHTML;
+            wbStartBgMerge();
+            return;
+          }
+          if (gen !== wbNext.gen) return; // staged slot changed since
+          wbNext.res = res;
+          wbNext.analysedIds = ids;
+          wbNext.status = 'ready';
+          wbNext.custLabel = wbNextCustLabel(res);
+          wbNextRender();
+        })
+        .withFailureHandler(function (e) {
+          if (wbPromo && wbPromo.gen === gen) {
+            wbPromo = null;
+            wbError('Analysis of the promoted customer failed: ' + (e.message || e) + ' — run ⚡ Analyse session.');
+            return;
+          }
+          if (gen !== wbNext.gen) return;
+          wbNext.status = 'failed';
+          wbNext.err = e.message || String(e);
+          wbNextRender();
+        })
+        .apiWbAnalyse(ids);
+    }
+
+    function wbNextCustLabel(res) {
+      var ids = {}, names = {};
+      for (var i = 0; i < (res.rows || []).length; i++) {
+        var lk = res.rows[i].lookup;
+        if (lk.customerId) { ids[lk.customerId] = true; if (lk.registeredName) names[lk.registeredName] = true; }
+      }
+      var k = Object.keys(ids);
+      if (k.length === 1) return k[0] + ' · ' + (Object.keys(names)[0] || '');
+      if (k.length > 1) return '⚠ ' + k.length + ' different customers';
+      return 'customer unresolved';
+    }
+
+    function wbNextRemove(fileId) {
+      wbNext.files = wbNext.files.filter(function (f) { return f.id !== fileId; });
+      google.script.run.apiWbRemoveFile(fileId);
+      wbNext.res = null; wbNext.analysedIds = null;
+      wbNext.gen++;
+      if (wbNext.files.length) { if (!wbNext.busy) wbNextAnalyse(); else wbNextRender(); }
+      else { wbNext.status = 'empty'; wbNextRender(); }
+    }
+
+    function wbNextRender() {
+      var box = document.getElementById('wbNextArea');
+      var h = '';
+      for (var i = 0; i < wbNext.files.length; i++) {
+        var f = wbNext.files[i];
+        var known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
+        h += '<div class="wb-filerow"><span style="flex:1" class="tL">' + esc(f.name) + '</span>' +
+          '<span class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</span>' +
+          '<button class="icon" style="color:var(--bad)" title="Remove from staged customer" onclick="wbNextRemove(\'' + f.id + '\')">✕</button></div>';
+      }
+      var chip = '';
+      if (wbNext.busy) chip = '<span class="muted">⏳ uploading ' + wbNext.busy + ' file(s)…</span>';
+      else if (wbNext.status === 'analysing') chip = '<span class="muted">⏳ analysing…</span>';
+      else if (wbNext.status === 'ready') chip = '<span class="ok" style="font-weight:600">ready ✓ ' + esc(wbNext.custLabel) + ' — appears when you Finish the current customer</span>';
+      else if (wbNext.status === 'failed') chip = '<span class="error">analysis failed: ' + esc(wbNext.err) + '</span>';
+      if (wbNext.err && wbNext.status !== 'failed') chip += ' <span class="error">' + esc(wbNext.err) + '</span>';
+      box.innerHTML = h + (chip ? '<p style="margin:6px 0">' + chip + '</p>' : '');
+    }
+
+    /** Called at the end of session reset: the staged customer becomes the live one. */
+    function wbPromoteNext() {
+      if (!wbNext.files.length) { wbNextRender(); return; }
+      wbSession = wbNext.files.slice();
+      var st = wbNext.status, res = wbNext.res, ids = wbNext.analysedIds, gen = wbNext.gen, err = wbNext.err;
+      wbNext = wbNextFresh();
+      wbNextRender();
+      wbRenderFiles();
+      if (st === 'ready' && res) {
+        wbAnalysedIds = ids;
+        wbRenderCalcs(res);
+        wbStartBgMerge();
+      } else if (st === 'analysing') {
+        wbPromo = { gen: gen };
+        document.getElementById('wbCalcs').innerHTML = '<span class="muted">⏳ Analysing the promoted customer — calculations will appear in a moment.</span>';
+      } else if (st === 'failed') {
+        wbError('Staged analysis had failed (' + (err || '') + ') — run ⚡ Analyse session.');
+      }
     }
 
     // ---------------- Manual ICP entries ----------------
@@ -1121,11 +1378,9 @@
     function wbManRender() {
       // Manual rows live in the ONE "ICP to queue" table (no separate
       // list). Manual rows alone are enough to queue or finish.
-      if (wbManual.length) {
-        document.getElementById('wbQueueBtn').style.display = '';
-        document.getElementById('wbFinishBtn').style.display = '';
-      }
+      if (wbManual.length) document.getElementById('wbQueueBtn').style.display = '';
       wbRenderQueuePrev();
+      wbRenderSession();
     }
 
     function wbManRemove(icp) {
@@ -1152,12 +1407,14 @@
           var out = document.getElementById('wbNotesOut' + (section || ''));
           if (out) { out.value = res.text; out.style.display = ''; }
           copyText(res.text, btn);
+          wbToast((section || 'Notes') + ' in your clipboard');
         })
         .withFailureHandler(function (e) { btn.disabled = false; wbError(e.message || e); })
         .apiWbNotes(payload);
     }
 
     function wbQueueNow(btn) {
+      if (wbQCustConflict()) { alert('Customer ID conflict — resolve it in the "Queue under Customer ID" field first (see the red notice).'); return; }
       var meta = wbBuildFinishMeta();
       if (!meta) { alert('Analyse the session (or add manual ICPs) first.'); return; }
       if (!confirm('Send ' + meta.icps.length + ' ICP(s) to the RFP queue now?')) return;
@@ -1206,11 +1463,11 @@
       reader.onload = function () {
         var b64 = reader.result.split(',')[1];
         google.script.run
-          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '🐱 Fill template'; renderBettyResult(res, 'wbBettyFillArea', false); })
-          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '📥 Fill template'; renderBettyResult(res, 'wbBettyFillArea', false); })
+          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
           .apiBettyFill(b64, file.name, wbAnalysedIds);
       };
-      reader.onerror = function () { btn.disabled = false; btn.textContent = '🐱 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
+      reader.onerror = function () { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
       reader.readAsDataURL(file);
     }
 
@@ -1221,19 +1478,132 @@
     // it is where individual ICPs are adjusted before queueing.
 
     var wbPathways = {}; // icp -> 'STANDARD' | 'URGENT' | 'EXTENSION'
+    var wbDefPathVal = 'STANDARD'; // segmented control state (v2.6 redesign)
 
-    function wbDefPath() {
-      var els = document.getElementsByName('wbDefPath');
-      for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i].value;
-      return 'STANDARD';
+    // ---------------- v2.6 layout helpers ----------------
+
+    function wbToggleLink() {
+      var row = document.getElementById('wbLinkRow');
+      var show = row.style.display === 'none';
+      row.style.display = show ? 'flex' : 'none';
+      if (show) document.getElementById('wbDriveLink').focus();
     }
 
-    function wbDefPathChange(val) {
+    function wbShowManual(scroll) {
+      document.getElementById('wbQueueCard').style.display = '';
+      var box = document.getElementById('wbManualBox');
+      box.style.display = '';
+      if (scroll) box.scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('wbManCustId').focus();
+    }
+
+    var wToastTimer = null;
+    /** Walter's little confirmation toast (bottom of the screen). */
+    function wbToast(msg) {
+      var t = document.getElementById('wToast');
+      document.getElementById('wToastMsg').textContent = msg;
+      var icon = document.getElementById('wToastIcon');
+      var hdr = document.querySelector('header img');
+      if (hdr && icon && !icon.getAttribute('src')) icon.src = hdr.src;
+      t.className = 'show';
+      if (wToastTimer) clearTimeout(wToastTimer);
+      wToastTimer = setTimeout(function () { t.className = ''; }, 2400);
+    }
+
+    function wbNotesTab(which) {
+      document.getElementById('wbNotesCurBox').style.display = which === 'CUR' ? '' : 'none';
+      document.getElementById('wbNotesHdrBox').style.display = which === 'HDR' ? '' : 'none';
+      document.getElementById('wbTabCurBtn').className = which === 'CUR' ? 'active' : '';
+      document.getElementById('wbTabHdrBtn').className = which === 'HDR' ? 'active' : '';
+    }
+
+    /** Card visibility + the session identity line (v2.6 redesign). */
+    function wbRenderSession() {
+      var hasFiles = wbSession.length > 0;
+      var has = hasFiles || wbManual.length > 0;
+      document.getElementById('wbSessionCard').style.display = has ? '' : 'none';
+      if (has) document.getElementById('wbQueueCard').style.display = '';
+      else if (document.getElementById('wbManualBox').style.display === 'none') {
+        document.getElementById('wbQueueCard').style.display = 'none';
+      }
+      document.getElementById('wbAnalyseBtn').style.display = hasFiles ? '' : 'none';
+      var name = (wbAnalysedCust && wbAnalysedCust.name) ||
+        (document.getElementById('wbManCustName').value || '').trim() || 'New session';
+      document.getElementById('wbSessName').textContent = name;
+      var bits = [];
+      if (wbQCustVal) bits.push('Customer ID ' + wbQCustVal);
+      if (hasFiles) bits.push(wbSession.length + ' file(s)');
+      if (wbManual.length) bits.push(wbManual.length + ' manual ICP(s)');
+      bits.push(wbLastRows ? 'analysed ✓' : hasFiles ? 'not analysed yet' : '');
+      document.getElementById('wbSessStatus').textContent = bits.filter(Boolean).join(' · ');
+      // Betty link: first analysed row that resolved to a Betty customer
+      var burl = '';
+      if (wbLastRows) {
+        for (var bi = 0; bi < wbLastRows.length; bi++) {
+          if (wbLastRows[bi].bettyUrl) { burl = wbLastRows[bi].bettyUrl; break; }
+        }
+      }
+      var bl = document.getElementById('wbBettyLink');
+      if (burl) { bl.href = burl; bl.style.display = 'inline-flex'; }
+      else bl.style.display = 'none';
+    }
+
+    // ---- Customer identity for the queue (one customer per session) ----
+    // wbQCustVal is THE customer id rows are queued under, shown as an
+    // editable field above the ICP-to-queue table. It auto-fills from
+    // the analysed files (or the manual box) until the operator types
+    // in it; a manual-box id that CONTRADICTS the analysed id hard-
+    // blocks Queue/Finish until the operator resolves it (decided
+    // 31 Oct: block, with the id editable right on the list).
+    var wbQCustVal = '';
+    var wbQCustTouched = false;
+    var wbAnalysedCust = null; // {id, name} when files resolve to exactly one customer
+
+    function wbManBoxId() { return (document.getElementById('wbManCustId').value || '').trim(); }
+
+    function wbQCustConflict() {
+      if (wbQCustTouched) return null; // operator decided — block lifted
+      var manualId = wbManBoxId();
+      var aId = wbAnalysedCust && wbAnalysedCust.id;
+      if (manualId && aId && manualId !== aId) return { manualId: manualId, analysedId: aId };
+      return null;
+    }
+
+    function wbSetQCust(input) {
+      wbQCustVal = input.value.trim();
+      wbQCustTouched = true;
+      wbRenderQueuePrev(); // clears the conflict banner
+    }
+
+    function wbDefPath() { return wbDefPathVal; }
+
+    function wbDefPathChange(val, btn) {
+      wbDefPathVal = val;
+      if (btn) {
+        var sibs = btn.parentNode.children;
+        for (var i = 0; i < sibs.length; i++) {
+          sibs[i].className = sibs[i].className.replace(/\s*active/, '');
+        }
+        btn.className += ' active';
+      }
       for (var k in wbPathways) wbPathways[k] = val;
       wbRenderQueuePrev();
     }
 
     function wbSetPath(icp, val) { wbPathways[icp] = val; }
+
+    // Registers with under 30 days of coverage are EXCLUDED from the
+    // ICP's queue annual by default (an AVM extrapolated from a day or
+    // two is noise — the "UN + 7304" case, Yuka 2 Nov). Never silent:
+    // each exclusion is named on the row with a one-click include.
+    var WB_MIN_REG_DAYS = 30;
+    var wbInclReg = {}; // "icp|register" -> true (operator overrode the exclusion)
+
+    function wbToggleReg(icp, reg) {
+      var k = icp + '|' + reg;
+      if (wbInclReg[k]) delete wbInclReg[k]; else wbInclReg[k] = true;
+      wbRenderQueuePrev();
+    }
 
     /** Combined ICP list to queue: analysed rows (annuals summed per ICP) + manual entries. */
     function wbQueueIcps() {
@@ -1241,8 +1611,17 @@
       var rows = wbLastRows || [];
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
-        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: 0, srcs: {} });
-        if (r.analysis.annualKwh) e.annualKwh += r.analysis.annualKwh;
+        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: 0, srcs: {}, shortRegs: [] });
+        if (r.analysis.annualKwh) {
+          var days = r.analysis.daysCovered || 0;
+          if (days >= WB_MIN_REG_DAYS) {
+            e.annualKwh += r.analysis.annualKwh;
+          } else {
+            var included = !!wbInclReg[r.icp + '|' + r.register];
+            if (included) e.annualKwh += r.analysis.annualKwh;
+            e.shortRegs.push({ reg: r.register, days: days, included: included });
+          }
+        }
         for (var j = 0; j < (r.sources || []).length; j++) e.srcs[r.sources[j]] = true;
       }
       for (var i = 0; i < wbManual.length; i++) {
@@ -1264,7 +1643,26 @@
       if (!icps.length) { box.innerHTML = ''; wbPathways = {}; return; }
       var def = wbDefPath();
       var present = {};
-      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">ICP to queue</th><th>Type</th>' +
+
+      // Customer line: the editable id every row is queued under
+      if (!wbQCustTouched) wbQCustVal = (wbAnalysedCust && wbAnalysedCust.id) || wbManBoxId() || '';
+      var conflict = wbQCustConflict();
+      var h = '';
+      if (conflict) {
+        h += '<p class="error" style="font-weight:700">⚠ CUSTOMER ID CONFLICT — manual entry says ' +
+          esc(conflict.manualId) + ', the analysed files say ' + esc(conflict.analysedId) +
+          (wbAnalysedCust && wbAnalysedCust.name ? ' (' + esc(wbAnalysedCust.name) + ')' : '') +
+          '. One customer per session: Queue and Finish are blocked until you set the Customer ID below ' +
+          '(your entry wins), fix the manual box, or remove the odd entry. Multi-customer work belongs on the ⚡ Batch tab.</p>';
+      }
+      h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<span class="muted">Queue under Customer ID:</span>' +
+        '<input value="' + esc(wbQCustVal) + '" onchange="wbSetQCust(this)"' +
+        ' style="width:110px;border:1px solid ' + (conflict ? 'var(--bad)' : 'var(--tuc-line)') + ';border-radius:6px;padding:6px 8px;font-weight:600">' +
+        (wbAnalysedCust && wbAnalysedCust.name && wbQCustVal === wbAnalysedCust.id
+          ? '<span class="muted">' + esc(wbAnalysedCust.name) + '</span>' : '') +
+        '</p>';
+      h += '<div class="tblwrap"><table><thead><tr><th class="tL">ICP to queue</th><th>Type</th>' +
         '<th class="tL">Source</th><th class="tR">Annual kWh</th><th>Pathway</th><th></th></tr></thead><tbody>';
       for (var i = 0; i < icps.length; i++) {
         var c = icps[i];
@@ -1278,12 +1676,20 @@
           '<option value="EXTENSION"' + (p === 'EXTENSION' ? ' selected' : '') + '>Extension</option>' +
           '</select>';
         var ok = c.annualKwh > 0;
+        var regNotes = '';
+        for (var si = 0; si < (c.shortRegs || []).length; si++) {
+          var sr = c.shortRegs[si];
+          regNotes += '<div class="' + (sr.included ? 'muted' : 'flag') + '" style="font-size:11px;font-weight:400">' +
+            (sr.included ? 'incl. ' : 'excl. ') + esc(sr.reg) + ' (' + Math.round(sr.days) + ' d) ' +
+            '<button class="linkbtn" onclick="wbToggleReg(\'' + esc(c.icp) + '\', \'' + esc(sr.reg) + '\')">' +
+            (sr.included ? 'exclude' : 'include') + '</button></div>';
+        }
         h += '<tr' + (ok ? '' : ' class="muted"') + '>' +
           '<td class="tL mono">' + esc(c.icp) + '</td>' +
           '<td>' + (c.fuel === 'GAS' ? 'Gas' : 'Electricity') + '</td>' +
           '<td class="tL muted filecell" style="font-size:12px">' +
             (c.manual ? '<span class="pill">manual</span>' : esc(c.source)) + '</td>' +
-          '<td class="tR" style="font-weight:600">' + (ok ? fmtNum(Math.round(c.annualKwh)) : '— <span style="font-weight:400">(not queued)</span>') + '</td>' +
+          '<td class="tR" style="font-weight:600">' + (ok ? fmtNum(Math.round(c.annualKwh)) : '— <span style="font-weight:400">(not queued)</span>') + regNotes + '</td>' +
           '<td>' + (ok ? sel : '') + '</td>' +
           '<td>' + (c.manual
             ? '<button class="icon" style="color:var(--bad)" title="Remove this manual ICP" onclick="wbManRemove(\'' + esc(c.icp) + '\')">✕</button>'
@@ -1292,11 +1698,12 @@
       h += '</tbody></table></div>';
       for (var k in wbPathways) if (!present[k]) delete wbPathways[k];
       box.innerHTML = h;
+      wbRenderSession();
     }
 
     function wbBuildFinishMeta() {
       if ((!wbLastRows || !wbLastRows.length) && !wbManual.length) return null;
-      var customerId = document.getElementById('wb_customerId').value.trim();
+      var customerId = wbQCustVal || document.getElementById('wb_customerId').value.trim();
       var customer = document.getElementById('wb_customer').value.trim();
       var tradingName = '';
       if (!customerId) customerId = (document.getElementById('wbManCustId').value || '').trim();
@@ -1375,11 +1782,12 @@
     }
 
     function wbFinish(btn) {
+      if (wbQCustConflict()) { alert('Customer ID conflict — resolve it in the "Queue under Customer ID" field first (see the red notice).'); return; }
       var meta = wbBuildFinishMeta();
       var ids = wbSession.map(function (f) { return f.id; });
       if (meta && wbAnalysedIds && ids.join(',') !== wbAnalysedIds.join(',')) {
         alert('The session\'s files changed since the last analysis — the calculations and the Bulk Quote ' +
-          'queue would not match them.\n\nRun \ud83d\udc31 Analyse session again, then Finish.');
+          'queue would not match them.\n\nRun ⚡ Analyse session again, then Finish.');
         return;
       }
       var msg = meta
@@ -1423,7 +1831,8 @@
           setLbl('Finishing\u2026');
           google.script.run.withSuccessHandler(function (res) {
             setLbl('Finish customer');
-            var h = '<p class="ok">Consumption archive: <a href="' + esc(merged.url) + '" target="_blank">' + esc(merged.name) + '</a></p>';
+            var h = '<p class="ok">Consumption archive: <a href="' + esc(merged.url) + '" target="_blank">' + esc(merged.name) + '</a>' +
+              (merged.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(merged.fileId) + '">⬇ download to PC</a>' : '') + '</p>';
             if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
             if (res.duplicates && res.duplicates.length) h += '<p class="flag">\u26a0 Already queued (now duplicated \u2014 resolve on the RFP tab): ' + res.duplicates.map(esc).join(', ') + '</p>';
             if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
@@ -1485,7 +1894,7 @@
       wbMergeStatus();
       wbRenderFiles();
       document.getElementById('wbPreview').style.display = 'none';
-      document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse to see calculations.</span>';
+      document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</span>';
       document.getElementById('wbWarn').innerHTML = '';
       document.getElementById('wbNotes').style.display = 'none';
       document.getElementById('wbBettySec').style.display = 'none';
@@ -1508,13 +1917,26 @@
         if (el) el.value = '';
       }
       wbPathways = {};
-      var defEls = document.getElementsByName('wbDefPath');
-      for (var di = 0; di < defEls.length; di++) defEls[di].checked = defEls[di].value === 'STANDARD';
+      wbInclReg = {};
+      wbQCustVal = '';
+      wbQCustTouched = false;
+      wbAnalysedCust = null;
+      wbDefPathVal = 'STANDARD';
+      var segBtns = document.getElementById('wbSeg').children;
+      for (var si = 0; si < segBtns.length; si++) {
+        segBtns[si].className = segBtns[si].className.replace(/\s*active/, '') + (si === 0 ? ' active' : '');
+      }
       document.getElementById('wbQueuePrev').innerHTML = '';
+      document.getElementById('wbQueueCard').style.display = 'none';
+      document.getElementById('wbManualBox').style.display = 'none';
+      document.getElementById('wbLinkRow').style.display = 'none';
+      wbNotesTab('CUR');
       document.getElementById('wbManCustId').value = '';
       document.getElementById('wbManCustName').value = '';
       wbManual = [];
       wbManRender();
+      wbPromoteNext(); // pipeline: the staged next customer becomes live
+      wbToast('Time to load the next customer ⏭');
     }
 
     // ---------------- RFP tab ----------------
@@ -1542,6 +1964,7 @@
       document.getElementById('rfpArea').innerHTML = '<span class="muted">Loading…</span>';
       document.getElementById('rfpDraft').innerHTML = '';
       rfpDraft = null;
+      rfpAll = null;
       google.script.run
         .withSuccessHandler(function (res) {
           if (btn) btn.disabled = false;
@@ -1590,12 +2013,14 @@
 
     function rfpChip(code, date) {
       var logo = RFP_LOGOS[code];
+      // The logo state IS the status: greyed-out = not sent, colour +
+      // date = sent. No "—"/"✓" marks (they read as typos/noise).
       var label = logo
-        ? '<img src="' + logo + '" alt="' + esc(code) + '" title="' + esc(code) + '" style="height:18px;vertical-align:middle;border-radius:3px">'
+        ? '<img src="' + logo + '" alt="' + esc(code) + '" title="' + esc(code) + (date ? ' — sent ' + esc(date) : ' — not sent') + '" style="height:18px;vertical-align:middle;border-radius:3px' + (date ? '' : ';filter:grayscale(1);opacity:.35') + '">'
         : esc(code.slice(0, 4));
       return '<span class="pill" style="white-space:nowrap;' +
-        (date ? 'color:var(--good);border-color:var(--good)' : 'color:#7497AA') + '">' +
-        label + ' ' + (date ? '✓ ' + esc(date.slice(5)) : '—') + '</span>';
+        (date ? 'color:var(--good);border-color:var(--good)' : 'color:#7497AA;opacity:.6') + '">' +
+        label + (date ? ' ' + esc(date.slice(5)) : '') + '</span>';
     }
 
     function rfpChips(row) {
@@ -1673,6 +2098,7 @@
         opts += '<option value="' + esc(rts[i].code) + '">' + esc(rts[i].name) +
           (rts[i].fuels === 'BOTH' ? '' : rts[i].fuels === 'ELEC' ? ' (elec only)' : ' (gas only)') + '</option>';
       }
+      if (rts.length > 1) opts += '<option value="__ALL__">ALL — each in turn</option>';
       return '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
         rfpSmallBtn("rfpTickSection('" + key + "', true)", 'tick all') +
         rfpSmallBtn("rfpTickSection('" + key + "', false)", 'untick all') +
@@ -1681,9 +2107,10 @@
         '<span style="flex:1"></span>' +
         (opts
           ? '<select id="rfpRet_' + key + '" style="height:38px;border:1px solid var(--tuc-line);border-radius:6px;padding:0 8px">' + opts + '</select>' +
-            '<button onclick="rfpBuild(\'' + key + '\', \'' + pathway + '\', this)">🐱 Build file &amp; draft</button>'
+            '<button onclick="rfpBuild(\'' + key + '\', \'' + pathway + '\', this)">🧾 Build file &amp; draft</button>'
           : '<span class="flag">⚠ no active retailer with a file schema (RFP Retailers / RFP Schemas tabs)</span>') +
-        '<button onclick="rfpCloseTicked(\'' + key + '\', this)">✅ Close ticked</button>' +
+        '<button onclick="rfpCloseTicked(\'' + key + '\', this)" style="min-width:0;padding:0 16px;background:var(--good)">✅ Close ticked</button>' +
+        '<button onclick="rfpRemoveTicked(\'' + key + '\', this)" style="min-width:0;padding:0 16px;background:var(--bad)">🗑 Remove ticked</button>' +
         '</p>' +
         rfpTableHtml(rows, false);
     }
@@ -1704,16 +2131,51 @@
       }
       for (var gi = 0; gi < rfpExtGroupList.length; gi++) {
         var g = rfpExtGroupList[gi];
+        // Same control row as Standard/Urgent (decided 2 Nov), scoped
+        // to this incumbent's group.
         h += '<div style="margin:10px 0;border:1px solid var(--tuc-line);border-radius:8px;padding:6px 12px 10px">' +
-          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><b>' + esc(g.name) + '</b> <span class="muted">(' + g.rows.length + ')</span>' +
+          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><b>' + esc(g.name) + '</b> <span class="muted">(' + g.rows.length + ')</span></p>' +
+          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          rfpSmallBtn('rfpTickGroup(' + gi + ', true)', 'tick all') +
+          rfpSmallBtn('rfpTickGroup(' + gi + ', false)', 'untick all') +
+          rfpSmallBtn('rfpInvertGroup(' + gi + ')', 'invert ticks') +
+          rfpSmallBtn('rfpCoveredGroup(' + gi + ')', 'tick fully sent') +
           '<span style="flex:1"></span>' +
           (g.code
-            ? '<button onclick="rfpBuildExt(' + gi + ', this)">🐱 Build extension file &amp; draft</button>'
+            ? '<button onclick="rfpBuildExt(' + gi + ', this)" style="min-width:0;padding:0 16px">🧾 Build file &amp; draft</button>'
             : '<span class="flag">⚠ not in the RFP Retailers registry — add it (and its schema rows) to build a file</span>') +
-          rfpSmallBtn('rfpCloseGroup(' + gi + ', this)', '✅ close ticked') +
+          '<button onclick="rfpCloseGroup(' + gi + ', this)" style="min-width:0;padding:0 16px;background:var(--good)">✅ Close ticked</button>' +
+          '<button onclick="rfpRemoveGroupTicked(' + gi + ', this)" style="min-width:0;padding:0 16px;background:var(--bad)">🗑 Remove ticked</button>' +
           '</p>' + rfpTableHtml(g.rows, false) + '</div>';
       }
       return h;
+    }
+
+    function rfpTickGroup(gi, on) {
+      var g = rfpExtGroupList[gi];
+      if (!g) return;
+      for (var i = 0; i < g.rows.length; i++) {
+        if (on) rfpSel[g.rows[i].id] = true; else delete rfpSel[g.rows[i].id];
+      }
+      rfpRender();
+    }
+
+    function rfpInvertGroup(gi) {
+      var g = rfpExtGroupList[gi];
+      if (!g) return;
+      for (var i = 0; i < g.rows.length; i++) {
+        if (rfpSel[g.rows[i].id]) delete rfpSel[g.rows[i].id]; else rfpSel[g.rows[i].id] = true;
+      }
+      rfpRender();
+    }
+
+    function rfpCoveredGroup(gi) {
+      var g = rfpExtGroupList[gi];
+      if (!g) return;
+      for (var i = 0; i < g.rows.length; i++) {
+        if (rfpCovered(g.rows[i])) rfpSel[g.rows[i].id] = true; else delete rfpSel[g.rows[i].id];
+      }
+      rfpRender();
     }
 
     function rfpClosedHtml(rows) {
@@ -1809,11 +2271,39 @@
       rfpRender();
     }
 
+    // ALL sequence (decided 2 Nov, option a): one Build runs every
+    // active retailer IN TURN — build, review the draft, send, and the
+    // next retailer's draft appears automatically. Each email is still
+    // individually reviewed; nothing is sent unseen.
+    var rfpAll = null; // {codes:[], idx, ids, pathway}
+
+    function rfpAllAdvance(prefixHtml) {
+      rfpAll.idx++;
+      if (rfpAll.idx >= rfpAll.codes.length) {
+        document.getElementById('rfpMsg').innerHTML = (prefixHtml || '') +
+          '<p class="ok" style="font-weight:600">ALL retailers done.</p>';
+        rfpAll = null;
+        rfpLoad(null);
+        return;
+      }
+      if (prefixHtml) document.getElementById('rfpMsg').innerHTML = prefixHtml;
+      rfpRunBuild(rfpAll.codes[rfpAll.idx], rfpAll.pathway, rfpAll.ids, null);
+    }
+
     function rfpBuild(key, pathway, btn) {
       var ids = rfpTickedIds(rfpSections()[key]);
       if (!ids.length) { alert('Tick at least one row first.'); return; }
       var sel = document.getElementById('rfpRet_' + key);
       if (!sel || !sel.value) { alert('No active retailer with a file schema — check the RFP Retailers / RFP Schemas tabs.'); return; }
+      if (sel.value === '__ALL__') {
+        var codes = [];
+        var rts = rfpBulkRetailers();
+        for (var i = 0; i < rts.length; i++) codes.push(rts[i].code);
+        rfpAll = { codes: codes, idx: 0, ids: ids, pathway: pathway };
+        rfpRunBuild(codes[0], pathway, ids, btn);
+        return;
+      }
+      rfpAll = null;
       rfpRunBuild(sel.value, pathway, ids, btn);
     }
 
@@ -1822,6 +2312,7 @@
       if (!g || !g.code) return;
       var ids = rfpTickedIds(g.rows);
       if (!ids.length) { alert('Tick at least one row in this group first.'); return; }
+      rfpAll = null;
       rfpRunBuild(g.code, 'EXTENSION', ids, btn);
     }
 
@@ -1834,13 +2325,16 @@
           if (btn) btn.disabled = false;
           if (!r.ok) {
             document.getElementById('rfpDraft').innerHTML = '';
-            document.getElementById('rfpMsg').innerHTML = '<p class="flag">' + esc(r.note) + '</p>';
+            var note = '<p class="flag">' + esc(r.note) + '</p>';
+            if (rfpAll) { rfpAllAdvance(note); return; } // skip to the next retailer
+            document.getElementById('rfpMsg').innerHTML = note;
             return;
           }
           rfpShowDraft(r);
         })
         .withFailureHandler(function (e) {
           if (btn) btn.disabled = false;
+          rfpAll = null;
           document.getElementById('rfpDraft').innerHTML = '';
           document.getElementById('rfpMsg').innerHTML = '<p class="error">' + esc(e.message || e) + '</p>';
         })
@@ -1850,6 +2344,7 @@
     function rfpShowDraft(r) {
       rfpDraft = r;
       var h = '<div style="border:2px solid var(--tuc-accent);border-radius:10px;padding:10px 14px;margin:10px 0">';
+      if (rfpAll) h += '<p class="muted" style="font-weight:600">ALL — retailer ' + (rfpAll.idx + 1) + ' of ' + rfpAll.codes.length + '; the next draft appears after this send.</p>';
       h += '<p class="ok" style="font-weight:600">' + esc(r.retailerName) + ' ' + esc(r.pathway.toLowerCase()) +
         ' file built: <a href="' + esc(r.url) + '" target="_blank">' + esc(r.name) + '</a> (' + r.count + ' ICP(s)) — nothing sent yet.</p>';
       if (r.skippedFuel) h += '<p class="muted">' + r.skippedFuel + ' ICP(s) excluded (' + esc(r.retailerName) + ' takes ' +
@@ -1888,10 +2383,12 @@
       google.script.run
         .withSuccessHandler(function (r) {
           document.getElementById('rfpDraft').innerHTML = '';
-          document.getElementById('rfpMsg').innerHTML =
-            '<p class="ok" style="font-weight:600">Sent to ' + esc(r.to) + ' — batch ' + esc(r.batchId) +
-            ' logged (' + r.count + ' ICP(s)). Rows stay OPEN; close them when they are done.</p>';
           rfpDraft = null;
+          var pre = '<p class="ok" style="font-weight:600">Sent to ' + esc(r.to) + ' — batch ' + esc(r.batchId) +
+            ' logged (' + r.count + ' ICP(s)).</p>';
+          if (rfpAll) { rfpAllAdvance(pre); return; }
+          document.getElementById('rfpMsg').innerHTML = pre +
+            '<p class="muted">Rows stay OPEN; close them when they are done.</p>';
           rfpLoad(null);
         })
         .withFailureHandler(function (e) {
@@ -1933,10 +2430,35 @@
     function rfpRemove(id, btn) {
       if (!confirm('Remove this ICP from the RFP queue?')) return;
       btn.disabled = true;
+      // Single-row removal updates the display locally — no full queue
+      // reload per row (batch removals use 🗑 remove ticked instead).
       google.script.run
-        .withSuccessHandler(function () { rfpLoad(null); })
-        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
+        .withSuccessHandler(function () {
+          if (rfpData) rfpData.rows = rfpData.rows.filter(function (r) { return r.id !== id; });
+          delete rfpSel[id];
+          rfpRender();
+        })
+        .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); rfpLoad(null); })
         .apiRfpRemove([id]);
+    }
+
+    function rfpRemoveTicked(key, btn) { rfpRemoveIds(rfpTickedIds(rfpSections()[key]), btn); }
+    function rfpRemoveGroupTicked(gi, btn) {
+      var g = rfpExtGroupList[gi];
+      if (g) rfpRemoveIds(rfpTickedIds(g.rows), btn);
+    }
+
+    function rfpRemoveIds(ids, btn) {
+      if (!ids.length) { alert('Tick the row(s) to remove first.'); return; }
+      if (!confirm('Remove ' + ids.length + ' row(s) from the RFP queue?')) return;
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          document.getElementById('rfpMsg').innerHTML = '<p class="ok">' + r.changed + ' row(s) removed.</p>';
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) { if (btn) btn.disabled = false; alert(e.message || e); })
+        .apiRfpRemove(ids);
     }
 
     function rfpSetAnnual(id, input) {

@@ -126,6 +126,15 @@ function apiWbFinish(fileIds) {
 function apiWbNotes(payload) {
   const p = payload || {};
   const v = (k) => String(p[k] === undefined || p[k] === null ? '' : p[k]).trim();
+  // Ticket references go out WITHOUT the "#" (decided 2 Nov):
+  // "[#TUC251468]" pasted from the inbox becomes "[TUC251468]".
+  const vt = (k) => v(k).replace(/#/g, '');
+  // Blank-field defaults (2 Nov, narrowed 3 Nov): CURRENT only —
+  // TUC Fee / TUC DD -> "-", other CURRENT blanks -> "nil".
+  // HEADER blanks stay blank.
+  const vd = (k) => v(k) || 'nil';
+  const vtd = (k) => vt(k) || 'nil';
+  const vdash = (k) => v(k) || '-';
   const section = String(p.section || 'FULL').toUpperCase();
   const headerLines = [
     'PROPOSAL NOTES:',
@@ -135,7 +144,7 @@ function apiWbNotes(payload) {
     '- date: ' + v('date'),
     '- expiry date(s): ' + v('expiryDates'),
     '- analysis type: ' + v('analysisType'),
-    '- master ticket: ' + v('masterTicket'),
+    '- master ticket: ' + vt('masterTicket'),
     '- retailer(s): ' + v('retailers'),
     '',
     '- billing rate: ' + v('billingRate'),
@@ -147,21 +156,25 @@ function apiWbNotes(payload) {
   ];
   const currentLines = [
     'CURRENT:',
-    '- retailer: ' + v('curRetailer'),
-    '- contract expiry: ' + v('curContractExpiry'),
-    '- break fees: ' + v('curBreakFees'),
-    '- discount: ' + v('curDiscount'),
-    '- source of current rates: ' + v('curRatesSource'),
-    '- inflation: ' + v('curInflation'),
-    '- TUC Fee: ' + v('curTucFee'),
-    '- TUC DD: ' + v('curTucDd'),
+    '- retailer: ' + vd('curRetailer'),
+    '- contract expiry: ' + vd('curContractExpiry'),
+    '- break fees: ' + vd('curBreakFees'),
+    '- discount: ' + vd('curDiscount'),
+    '- source of current rates: ' + vd('curRatesSource'),
+    '- inflation: ' + vd('curInflation'),
+    '- TUC Fee: ' + vdash('curTucFee'),
+    '- TUC DD: ' + vdash('curTucDd'),
     '',
-    '- data ticket(s): ' + v('curDataTickets'),
+    '- data ticket(s): ' + vtd('curDataTickets'),
   ];
   const body = section === 'HEADER' ? headerLines
     : section === 'CURRENT' ? currentLines
     : headerLines.concat(['']).concat(currentLines);
-  const text = ['**----------**----------**'].concat(body).concat(['**----------**----------**']).join('\n');
+  // CURRENT alone goes out WITHOUT the Betty marker fence (decided
+  // 2 Nov); HEADER and FULL keep the markers Betty parses.
+  const text = section === 'CURRENT'
+    ? body.join('\n')
+    : ['**----------**----------**'].concat(body).concat(['**----------**----------**']).join('\n');
 
   // Notes Log: always appended, even if the clipboard side fails.
   try {
@@ -288,7 +301,7 @@ function apiWbMergeExport(mergedId) {
   const blob = exportXlsx_(mergedId).setName(name + '.xlsx');
   const outFile = DriveApp.getFolderById(requireConfig_('output_folder_id')).createFile(blob);
   try { DriveApp.getFileById(mergedId).setTrashed(true); } catch (e) {}
-  return { name: outFile.getName(), url: outFile.getUrl() };
+  return { name: outFile.getName(), url: outFile.getUrl(), fileId: outFile.getId() };
 }
 
 function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue) {

@@ -18,6 +18,7 @@ function parserRegistry_() {
     { format: 'consumption_rows', sniff: consumptionRowsSniff_, parse: { parse: consumptionRowsParse_ } },
     { format: 'timestamp_series', sniff: timestampSeriesSniff_, parse: { parse: timestampSeriesParse_ } },
     { format: 'period_table',     sniff: periodTableSniff_,     parse: { parse: periodTableParse_ } },
+    { format: 'interval_readings', sniff: intervalReadingsSniff_, parse: { parse: intervalReadingsParse_ } },
   ];
 }
 

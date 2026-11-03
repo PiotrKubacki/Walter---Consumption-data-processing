@@ -9,6 +9,7 @@
 !ParserEiepRows.gs
 !ParserHhrWide.gs
 !ParserIntervalLong.gs
+!ParserIntervalReadings.gs
 !ParserPeriodTable.gs
 !ParserRegisterReads.gs
 !ParserReportReads.gs
