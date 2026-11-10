@@ -27,11 +27,18 @@ const RFP_RETAILERS_TAB = 'RFP Retailers';
 const RFP_SCHEMAS_TAB = 'RFP Schemas';
 const RFP_LOG_TAB = 'RFP Send Log';
 const RFP_FILE_PREFIX = 'Bulk Pricing Requests - ';
+// Urgent-pathway files carry their own name pattern (9 Nov):
+// "Urgent Pricing Request - TUC->Nova - 2026-11-09".
+const RFP_URGENT_FILE_PREFIX = 'Urgent Pricing Request - ';
+// Prospect sessions (10 Nov): a customer that is not in Betty has no
+// customer id. Its queue rows carry this marker in the customer id
+// column; retailer files get a blank Customer ID for those rows.
+const RFP_PROSPECT_ID = 'PROSPECT';
 
 const RFP_TAB_DEFS = [
   { name: RFP_QUEUE_TAB, headers: ['id', 'date added', 'status', 'urgent', 'extension',
       'customer id', 'registered name', 'trading name', 'icp', 'icp type',
-      'est annual kwh', 'consumption file', 'closed date'] },
+      'est annual kwh', 'consumption file', 'closed date', 'ext retailer'] },
   { name: RFP_RETAILERS_TAB, headers: ['code', 'display name', 'fuels (ELEC/GAS/BOTH)',
       'mode (BULK/PER-CUSTOMER)', 'email to', 'email cc', 'subject template',
       'body template', 'active (Y/N)', 'notes'] },
@@ -54,8 +61,10 @@ const RFP_RETAILER_SEED = [
 //   customer_id | registered_name | trading_name | icp | fuel_type |
 //   annual_kwh | current_retailer | physical_address | poc | blank |
 //   constant:<text>
-// current_retailer / physical_address / poc resolve live from the
-// EA ICPs sheet at build time (gas ICPs have no EA row -> blank).
+// current_retailer / physical_address / poc resolve at build time
+// from the EA ICPs import sheet; electricity ICPs missing from the
+// import (prospects) are filled from the EA registry itself via the
+// EA module (10 Nov). Gas ICPs have no EA row -> blank.
 const RFP_SCHEMA_SEED = [
   ['NOVA', 1, 'Customer ID', 'customer_id'],
   ['NOVA', 2, 'ICP', 'icp'],
@@ -112,6 +121,14 @@ function rfpEnsureSetup_() {
       sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]).setFontWeight('bold');
       sheet.setFrozenRows(1);
     }
+  }
+
+  // Additive queue column (9 Nov): "ext retailer" — the retailer an
+  // extension goes to. OPERATOR INPUT (the expiring quote's retailer,
+  // which may never have held the ICP), never the EA incumbent.
+  const qHdr = ss.getSheetByName(RFP_QUEUE_TAB);
+  if (!qHdr.getRange(1, 14).getValue()) {
+    qHdr.getRange(1, 14).setValue('ext retailer').setFontWeight('bold');
   }
 
   // Seeding is ADDITIVE BY RETAILER CODE, not just on an empty tab:
@@ -262,17 +279,20 @@ function rfpCoverage_() {
   return cov;
 }
 
-/** Match an EA trader participant name to a registry retailer code. */
-function rfpMatchIncumbent_(traderName, retailers) {
-  const t = String(traderName || '').toLowerCase();
-  if (!t) return null;
-  for (const rt of retailers) {
-    if (rt.name && t.indexOf(rt.name.toLowerCase()) !== -1) return rt.code;
-  }
-  return null;
-}
-
 // ---------------- the RFP tab API ----------------
+
+/**
+ * Lightweight registry list for the Workbench extension-retailer
+ * dropdown (9 Nov): BULK retailers that have a file schema. Inactive
+ * ones included — extensions may go to an inactive retailer.
+ */
+function apiRfpRetailerOptions() {
+  rfpEnsureSetup_();
+  const schemas = loadRfpSchemas_();
+  return loadRfpRetailers_()
+    .filter(rt => rt.mode === 'BULK' && schemas[rt.code] && schemas[rt.code].length)
+    .map(rt => ({ code: rt.code, name: rt.name, active: rt.active }));
+}
 
 function apiRfpList() {
   rfpEnsureSetup_();
@@ -282,13 +302,12 @@ function apiRfpList() {
   for (const rt of retailers) rt.hasSchema = !!(schemas[rt.code] && schemas[rt.code].length);
 
   const rows = [];
-  let anyExtension = false;
   if (sheet.getLastRow() > 1) {
-    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 13).getValues();
+    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
     for (const r of vals) {
       const status = String(r[2]).trim().toUpperCase();
       if (status === 'REMOVED') continue;
-      const row = {
+      rows.push({
         id: String(r[0]),
         added: r[1] ? Utilities.formatDate(new Date(r[1]), 'Pacific/Auckland', 'yyyy-MM-dd') : '',
         status: status,
@@ -302,24 +321,11 @@ function apiRfpList() {
         annualKwh: r[10],
         fileUrl: String(r[11]),
         closedDate: r[12] ? Utilities.formatDate(new Date(r[12]), 'Pacific/Auckland', 'yyyy-MM-dd') : '',
-      };
-      if (row.status === 'OPEN' && row.extension) anyExtension = true;
-      rows.push(row);
-    }
-  }
-
-  // Incumbent resolution for the Extensions section (EA lookup is
-  // the expensive bit - only loaded when extension rows exist).
-  if (anyExtension) {
-    let ea = {};
-    try { ea = loadEaDetails_(); } catch (e) {}
-    for (const row of rows) {
-      if (row.status !== 'OPEN' || !row.extension) continue;
-      const d = ea[row.icp] || {};
-      row.incumbent = {
-        name: d.trader || '',
-        code: rfpMatchIncumbent_(d.trader, retailers),
-      };
+        // 9 Nov: operator-set extension retailer (expiring quote's
+        // retailer). The old EA-incumbent lookup was the WRONG concept
+        // for extensions and is gone.
+        extRetailer: String(r[13] || '').trim().toUpperCase(),
+      });
     }
   }
 
@@ -364,7 +370,7 @@ function rfpRenderCell_(source, row, ea) {
   if (source.indexOf('constant:') === 0) return source.slice(9);
   const d = ea[row.icp] || {};
   switch (source) {
-    case 'customer_id': return row.customerId;
+    case 'customer_id': return String(row.customerId) === RFP_PROSPECT_ID ? '' : row.customerId;
     case 'registered_name': return row.customer;
     case 'trading_name': return row.tradingName;
     case 'icp': return row.icp;
@@ -444,7 +450,13 @@ function apiRfpBuild(retailerCode, pathway, rowIds) {
   // EA lookup only when the schema needs it
   const needsEa = schema.some(c =>
     ['current_retailer', 'physical_address', 'poc'].indexOf(c.source) !== -1);
-  const ea = needsEa ? loadEaDetails_() : {};
+  let ea = {};
+  let eaInfo = null;
+  if (needsEa) {
+    const got = rfpEaDetails_(rows.filter(r => !r.isGas).map(r => r.icp));
+    ea = got.map;
+    eaInfo = got.info;
+  }
   let gasBlanks = 0;
   const header = schema.map(c => c.header);
   const data = rows.map(row => {
@@ -453,13 +465,19 @@ function apiRfpBuild(retailerCode, pathway, rowIds) {
   });
 
   const stamp = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd');
-  const name = RFP_FILE_PREFIX + code + ' - ' + stamp +
-    (pathway === 'URGENT' ? ' - URGENT' : pathway === 'EXTENSION' ? ' - EXTENSION' : '');
+  const name = pathway === 'URGENT'
+    ? RFP_URGENT_FILE_PREFIX + 'TUC->' + rt.name + ' - ' + stamp
+    : RFP_FILE_PREFIX + code + ' - ' + stamp +
+      (pathway === 'EXTENSION' ? ' - EXTENSION' : '');
   const csv = [header].concat(data)
     .map(row => row.map(csvCell_).join(','))
     .join('\r\n');
   const outFile = DriveApp.getFolderById(requireConfig_('output_folder_id'))
     .createFile(name + '.csv', csv, MimeType.CSV);
+  // Same link sharing as the CDF archives (9 Nov) so any operator can
+  // open the review link, not just whoever built the file. The email
+  // attaches the file itself, so a sharing failure is not fatal.
+  shareForLinks_(outFile);
 
   // Duplicate-send warning data (per ICP x this retailer, from the log)
   const cov = rfpCoverage_();
@@ -479,15 +497,22 @@ function apiRfpBuild(retailerCode, pathway, rowIds) {
     ok: true, fileId: outFile.getId(), name: outFile.getName(), url: outFile.getUrl(),
     retailer: code, retailerName: rt.name, pathway: pathway,
     count: rows.length, skippedFuel: skippedFuel, fuels: rt.fuels, gasBlanks: gasBlanks,
+    eaInfo: eaInfo,
     rowIds: rows.map(r => r.id), icps: rows.map(r => r.icp), dups: dups,
     draft: {
       to: redirect || rt.to,
       cc: redirect ? '' : rt.cc,
       registryTo: rt.to,
       redirected: !!redirect,
-      subject: rfpFillTemplate_(rt.subjectTemplate, '{file} ({count} ICPs)', ctx),
+      // Urgent emails (9 Nov): subject = the file name pattern, body
+      // presses for prompt processing. A retailer's own template on
+      // the registry tab still wins over either default.
+      subject: rfpFillTemplate_(rt.subjectTemplate,
+        pathway === 'URGENT' ? name : '{file} ({count} ICPs)', ctx),
       body: rfpFillTemplate_(rt.bodyTemplate,
-        'Hi,\n\nPlease find attached our {pathway} pricing request ({retailer}, {count} ICPs).\n\nKind regards,\n{operator}', ctx),
+        pathway === 'URGENT'
+          ? 'Hello,\n\nPlease find attached our URGENT pricing request ({count} ICPs).\nWe would appreciate it if the request could be processed promptly.\n\nKind regards,\n{operator}'
+          : 'Hi,\n\nPlease find attached our {pathway} pricing request ({retailer}, {count} ICPs).\n\nKind regards,\n{operator}', ctx),
     },
   };
 }
@@ -517,6 +542,24 @@ function apiRfpSend(p) {
     (p.rowIds || []).join(','), (p.icps || []).join(','),
   ]);
   return { ok: true, to: to, batchId: batchId, count: (p.icps || []).length };
+}
+
+/**
+ * Cancel a built-but-unsent request (9 Nov): trash the CSV so nothing
+ * lingers in the output folder. Build never logs, so there is nothing
+ * to unwind in the Send Log - a cancelled run leaves no History trace
+ * and no row is marked as sent. In an ALL run the client stops the
+ * remaining retailers; batches already sent stay logged as normal.
+ * Only files this app generated (RFP name prefixes) can be trashed.
+ */
+function apiRfpDiscardBuild(fileId) {
+  const file = DriveApp.getFileById(fileId);
+  const n = file.getName();
+  if (n.indexOf(RFP_FILE_PREFIX) !== 0 && n.indexOf(RFP_URGENT_FILE_PREFIX) !== 0) {
+    throw new Error('Not an RFP request file: ' + n);
+  }
+  file.setTrashed(true);
+  return { ok: true, name: n };
 }
 
 /** Assisted close: operator-ticked rows OPEN -> CLOSED (decision 2). */
@@ -552,10 +595,72 @@ function rfpSetStatus_(rowIds, fromStatus, toStatus, closedDate) {
   return { ok: true, changed: changed };
 }
 
-/** Operator override of an OPEN row's annual kWh. */
+/**
+ * Move OPEN rows between pathways (9 Nov): STANDARD | URGENT |
+ * EXTENSION — mutually exclusive, same rule as at queueing.
+ */
+function apiRfpSetPathway(rowIds, pathway) {
+  pathway = String(pathway || '').trim().toUpperCase();
+  if (['STANDARD', 'URGENT', 'EXTENSION'].indexOf(pathway) === -1) {
+    throw new Error('Unknown pathway "' + pathway + '".');
+  }
+  const want = {};
+  for (const id of rowIds || []) want[String(id)] = true;
+  const sheet = rfpSheet_(RFP_QUEUE_TAB);
+  let changed = 0;
+  if (sheet.getLastRow() > 1) {
+    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+    for (let i = 0; i < vals.length; i++) {
+      if (!want[String(vals[i][0])]) continue;
+      if (String(vals[i][2]).trim().toUpperCase() !== 'OPEN') continue;
+      sheet.getRange(i + 2, 4).setValue(pathway === 'URGENT' ? 'URGENT' : '');
+      sheet.getRange(i + 2, 5).setValue(pathway === 'EXTENSION' ? 'Y' : '');
+      // Leaving the extension pathway clears the ext retailer (stale
+      // otherwise); arriving keeps it blank for the operator to set.
+      if (pathway !== 'EXTENSION') sheet.getRange(i + 2, 14).setValue('');
+      changed++;
+    }
+  }
+  return { ok: true, changed: changed };
+}
+
+/**
+ * Set the extension retailer on OPEN extension rows (9 Nov). The
+ * code must exist on the RFP Retailers tab; standard/urgent rows
+ * are never touched.
+ */
+function apiRfpSetExtRetailer(rowIds, code) {
+  code = String(code || '').trim().toUpperCase();
+  if (code && !loadRfpRetailers_().some(rt => rt.code === code)) {
+    throw new Error('No "' + code + '" row on the RFP Retailers tab.');
+  }
+  const want = {};
+  for (const id of rowIds || []) want[String(id)] = true;
+  const sheet = rfpSheet_(RFP_QUEUE_TAB);
+  let changed = 0;
+  if (sheet.getLastRow() > 1) {
+    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    for (let i = 0; i < vals.length; i++) {
+      if (!want[String(vals[i][0])]) continue;
+      if (String(vals[i][2]).trim().toUpperCase() !== 'OPEN') continue;
+      if (!String(vals[i][4]).trim()) continue; // extension rows only
+      sheet.getRange(i + 2, 14).setValue(code);
+      changed++;
+    }
+  }
+  return { ok: true, changed: changed };
+}
+
+/**
+ * Operator override of an OPEN row's annual kWh. Zero is a valid
+ * figure (10 Nov: zero-consumption ICPs are real); blank, text and
+ * negatives are not.
+ */
 function apiRfpSetAnnual(id, value) {
   const n = Math.round(parseFloat(value));
-  if (!(n > 0)) throw new Error('Annual kWh must be a number greater than zero.');
+  if (String(value === null || value === undefined ? '' : value).trim() === '' || !(n >= 0)) {
+    throw new Error('Annual kWh must be a number, zero or greater.');
+  }
   const sheet = rfpSheet_(RFP_QUEUE_TAB);
   if (sheet.getLastRow() > 1) {
     const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
@@ -589,9 +694,52 @@ function apiRfpClearAll() {
   const files = DriveApp.getFolderById(requireConfig_('output_folder_id')).getFiles();
   while (files.hasNext()) {
     const f = files.next();
-    if (f.getName().indexOf(RFP_FILE_PREFIX) === 0) { f.setTrashed(true); filesTrashed++; }
+    const fn = f.getName();
+    if (fn.indexOf(RFP_FILE_PREFIX) === 0 || fn.indexOf(RFP_URGENT_FILE_PREFIX) === 0) {
+      f.setTrashed(true); filesTrashed++;
+    }
   }
   return { rowsCleared: rowsCleared, filesTrashed: filesTrashed };
+}
+
+/**
+ * EA details for a build (10 Nov): the Betty "EA ICPs" import first
+ * (unchanged behaviour for existing customers), then the EA registry
+ * itself for any electricity ICP the import does not have, which is
+ * every ICP of a prospect. Registry answers come through the EA
+ * module (cache first, live lookup for the rest).
+ * Returns { map: icp -> {trader, address, poc}, info } where info
+ * says what the registry step did, for the draft panel.
+ */
+function rfpEaDetails_(icps) {
+  let map = {};
+  let importError = '';
+  try { map = loadEaDetails_(); } catch (e) { importError = String(e.message || e); }
+  const info = { keySet: eaKeySet_(), asked: 0, resolved: 0, notFound: [], pending: 0, error: '',
+    importError: importError };
+  const missing = (icps || []).filter(i => !(map[i] && map[i].trader));
+  info.asked = missing.length;
+  if (missing.length) {
+    let r = null;
+    try { r = eaLookup_(missing, { budgetMs: 180000 }); } catch (e) { info.error = String(e.message || e); }
+    if (r) {
+      const ctx = eaContext_(eaConfig_());
+      for (const icp in r.results) {
+        const d = eaDetail_(r.results[icp], ctx);
+        if (d.kind === TB_RESULT.FOUND) {
+          map[icp] = { trader: d.trader, address: d.address, poc: d.poc };
+          info.resolved++;
+        } else if (d.kind === TB_RESULT.NOT_FOUND) {
+          info.notFound.push(icp);
+        }
+      }
+      info.pending = r.notFetched.length;
+      if (r.error) info.error = r.error;
+    }
+  }
+  // The import failing is only fatal when nothing else could answer.
+  if (importError && !info.resolved && !Object.keys(map).length) throw new Error(importError);
+  return { map: map, info: info };
 }
 
 /**

@@ -1,8 +1,13 @@
 **/**
 !Analysis.gs
 !Betty.gs
+!CdfIndex.gs
 !Config.gs
 !Detect.gs
+!EaApi.gs
+!EaBridge.gs
+!Flatten.gs
+!IcpParse.gs
 !Index.html
 !Main.gs
 !ParserConsumptionRows.gs

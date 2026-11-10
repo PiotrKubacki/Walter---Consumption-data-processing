@@ -6,14 +6,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --tuc-accent: #4281A4;
-      --tuc-warm-bg: #F2F6F9;
-      --tuc-ink: #12242E;
-      --tuc-line: #D9E6ED;
-      --good: #2E7D32; --warn: #B26A00; --bad: #B3261E;
+      /* Pricing-family teal (10 Nov): the suite scheme, derived from
+         #2F6B75 as a full family, same values as Tobias. */
+      --tuc-accent: #2F6B75;
+      --tuc-accent-dark: #24565E;
+      --tuc-accent-soft: #E3EEF0;
+      --tuc-accent-tint: #F0F6F7;
+      --tuc-warm-bg: #F4F7F7;
+      --tuc-ink: #1F2D30;
+      --tuc-line: #D9E2E4;
+      --tuc-muted: #5F7378;
+      --good: #2E7D4F; --warn: #B7791F; --bad: #B23A3A;
     }
+    a { color: var(--tuc-accent-dark); }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: 'Open Sans', sans-serif; background: var(--tuc-warm-bg); color: var(--tuc-ink); }
+    /* Form fields do not inherit the page font: without this they fall
+       back to the browser default. Open Sans everywhere (11 Nov);
+       monospace fields keep theirs through their own class / id / inline rule. */
+    input, select, textarea { font-family: 'Open Sans', sans-serif; }
     header {
       background: var(--tuc-accent); color: #fff; padding: 14px 22px;
       display: flex; align-items: center; gap: 12px;
@@ -63,7 +74,7 @@
     .error { color: var(--bad); }
     .ok    { color: var(--good); }
     .pill  { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; background: var(--tuc-warm-bg); border: 1px solid var(--tuc-line); margin: 0 4px 2px 0; }
-    .muted { color: #7497AA; }
+    .muted { color: #5F7378; }
     .mono  { font-family: monospace; font-size: 12px; }
     #status, #runStatus { margin: 10px 0; font-size: 13px; }
     progress { width: 240px; vertical-align: middle; }
@@ -76,18 +87,19 @@
     .wb-grid { display: grid; grid-template-columns: 44% 1fr; gap: 18px; align-items: start; }
     .dropzone {
       border: 2px dashed var(--tuc-accent); border-radius: 10px; padding: 18px;
-      text-align: center; color: #7497AA; background: var(--tuc-warm-bg);
+      text-align: center; color: #5F7378; background: var(--tuc-warm-bg);
     }
-    .dropzone.drag { background: #E2EDF4; color: var(--tuc-ink); }
+    .dropzone.drag { background: #E3EEF0; color: var(--tuc-ink); }
     #wbPreview { width: 100%; height: 520px; border: 1px solid var(--tuc-line); border-radius: 8px; background: #fff; }
     .wb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
-    .wb-form label { font-size: 12px; color: #7497AA; display: block; margin-bottom: 2px; }
+    .wb-form label { font-size: 12px; color: #5F7378; display: block; margin-bottom: 2px; }
     .wb-form input, .wb-form textarea, .wb-field input {
       width: 100%; border: 1px solid var(--tuc-line); border-radius: 6px;
       padding: 6px 8px; font-family: 'Open Sans', sans-serif; font-size: 13px; box-sizing: border-box;
     }
     .wb-form .full { grid-column: 1 / -1; }
-    .wb-filerow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--tuc-line); cursor: pointer; }
+    .wb-filerow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--tuc-line); cursor: pointer; min-width: 0; }
+    .wb-filerow .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
     .wb-filerow.sel { background: var(--tuc-warm-bg); }
     #wbNotesOut { width: 100%; height: 300px; font-family: monospace; font-size: 12px; white-space: pre; }
     .copynum { cursor: pointer; border-bottom: 1px dotted var(--tuc-accent); }
@@ -99,20 +111,20 @@
     button.btn-sm:hover { background: var(--tuc-warm-bg); }
     .card2 { background: #fff; border: 1px solid var(--tuc-line); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; }
     .cardhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-    .cardhead h2 { margin: 0; font-size: 12px; letter-spacing: .03em; color: #64859A; text-transform: uppercase; }
+    .cardhead h2 { margin: 0; font-size: 12px; letter-spacing: .03em; color: #5F7378; text-transform: uppercase; }
     .seg { display: flex; border: 1px solid var(--tuc-line); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
     .seg button { min-width: 0; height: 30px; padding: 0 12px; border-radius: 0; background: #fff; color: var(--tuc-ink); font-size: 12px; }
     .seg button.segU { color: var(--bad); }
     .seg button.segE { color: var(--warn); }
     .seg button.active { background: var(--tuc-accent); color: #fff; }
-    .dropzone2 { border: 2px dashed #9DBDCE; border-radius: 10px; padding: 16px 14px; text-align: center; color: #64859A; font-size: 13px; background: #F7FAFC; }
-    .dropzone2.drag { background: #E2EDF4; color: var(--tuc-ink); }
-    .bigdrop { background: #fff; border: 2px dashed #9DBDCE; border-radius: 14px; padding: 36px 24px; text-align: center; margin-bottom: 14px; }
-    .bigdrop.drag { background: #E2EDF4; }
-    .dropstrip { border: 1.5px dashed #9DBDCE; border-radius: 8px; padding: 5px 12px; font-size: 12px; color: #64859A; display: flex; gap: 10px; align-items: center; }
-    .dropstrip.drag { background: #E2EDF4; }
-    .nextstrip { border: 1.5px dashed #C7D9E3; border-radius: 12px; padding: 10px 16px; color: #64859A; font-size: 13px; background: #F4F8FB; margin-bottom: 14px; }
-    .nextstrip.drag { background: #E2EDF4; }
+    .dropzone2 { border: 2px dashed #A9C3C8; border-radius: 10px; padding: 16px 14px; text-align: center; color: #5F7378; font-size: 13px; background: #F0F6F7; }
+    .dropzone2.drag { background: #E3EEF0; color: var(--tuc-ink); }
+    .bigdrop { background: #fff; border: 2px dashed #A9C3C8; border-radius: 14px; padding: 36px 24px; text-align: center; margin-bottom: 14px; }
+    .bigdrop.drag { background: #E3EEF0; }
+    .dropstrip { border: 1.5px dashed #A9C3C8; border-radius: 8px; padding: 5px 12px; font-size: 12px; color: #5F7378; display: flex; gap: 10px; align-items: center; }
+    .dropstrip.drag { background: #E3EEF0; }
+    .nextstrip { border: 1.5px dashed #C9D9DC; border-radius: 12px; padding: 10px 16px; color: #5F7378; font-size: 13px; background: #F0F6F7; margin-bottom: 14px; }
+    .nextstrip.drag { background: #E3EEF0; }
     button.linkbtn { background: none; border: 0; color: var(--tuc-accent); font-weight: 600; font-size: 12px; cursor: pointer; min-width: 0; height: auto; padding: 0; }
     button.linkbtn:hover { text-decoration: underline; }
     #wToast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--tuc-ink); color: #fff; border-radius: 12px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-family: 'Poppins', sans-serif; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 99; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
@@ -125,11 +137,12 @@
 <body>
   <header>
     <h1><img src="data:image/png;base64,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" alt="Walter" style="height:26px;border-radius:5px"> <span>I'm Walter · I know what you <s style="opacity:.6">did</s> consumed last summer</span></h1>
-    <span style="margin-left:auto;font-size:12px;opacity:.75">build <?= (typeof build === 'undefined' ? '?' : build) ?></span>
+    <span style="margin-left:auto;font-size:12px;opacity:.75;text-align:right;line-height:1.35">build <?= (typeof build === 'undefined' ? '?' : build) ?><br><span id="hdrCdfTotals" style="font-size:11px" title="Total storage used by CDF (consumption data) files in the output folder"></span></span>
   </header>
   <nav class="tabs">
     <button id="tabBtnWb" class="active" onclick="showTab('wb')">🛠 Workbench</button>
     <button id="tabBtnBq" onclick="showTab('bq')">💰 RFP</button>
+    <button id="tabBtnArc" onclick="showTab('arc')">🗄 Archive</button>
     <button id="tabBtnBatch" onclick="showTab('batch')" style="margin-left:auto">⚡ Batch</button>
   </nav>
   <main>
@@ -169,6 +182,18 @@
           <input type="file" id="wbPick" multiple style="display:none" onchange="wbPicked(this)">
           <div id="wbFiles"></div>
           <p style="margin:8px 0 0"><button class="linkbtn" onclick="wbShowManual(true)">or add ICPs manually — no files needed</button></p>
+          <p style="margin:10px 0 0">
+            <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="wbProspectChk" onchange="wbProspectToggle(this.checked)"> Prospect — not in Betty
+            </label>
+          </p>
+          <div id="wbProspectBox" style="display:none;margin-top:6px">
+            <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0">
+              <input type="text" id="wbProsName" placeholder="Registered name (required)" onchange="wbProspectChanged()" style="flex:1;min-width:180px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+              <input type="text" id="wbProsTrading" placeholder="Trading name (optional)" onchange="wbProspectChanged()" style="flex:1;min-width:160px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+            </p>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">No Betty customer: rows are queued under PROSPECT with these names. The Betty link and Betty bulk update are off for this session.</p>
+          </div>
           <iframe id="wbPreview" style="display:none;width:100%;height:420px;border:1px solid var(--tuc-line);border-radius:8px;background:#fff;margin-top:8px" allow="autoplay"></iframe>
         </div>
 
@@ -182,7 +207,7 @@
             </div>
           </div>
           <div id="wbQueuePrev"></div>
-          <p style="margin:8px 0 2px"><button class="linkbtn" onclick="wbShowManual()">＋ Add ICP manually</button></p>
+          <p style="margin:8px 0 2px"><button class="linkbtn" onclick="wbShowManual()">＋ Add ICP(s) manually</button></p>
           <div id="wbManualBox" style="display:none;border-top:1px solid var(--tuc-line);padding-top:8px;margin-top:6px">
             <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input type="text" id="wbManCustId" placeholder="Customer ID" onchange="wbRenderQueuePrev()" style="width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
@@ -196,6 +221,10 @@
               <input type="number" id="wbManAnnual" placeholder="Annual kWh" style="width:130px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
               <button onclick="wbManAdd()" style="min-width:110px">➕ Add</button>
             </p>
+            <p style="margin:6px 0 4px">
+              <textarea id="wbManPaste" placeholder="…or paste a LIST — one ICP per line; GAS/ELEC and annual kWh optional on each line, fill blanks in the table later" style="width:100%;height:70px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px;font-family:monospace;font-size:12px"></textarea>
+            </p>
+            <p style="margin:0 0 4px"><button onclick="wbManAddList()" style="min-width:0;padding:0 16px">➕ Add list</button></p>
             <p class="muted" style="font-size:12px;margin:2px 0 0">Added ICPs appear in the table above.</p>
           </div>
           <p style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -293,6 +322,17 @@
       <div id="rfpMsg"></div>
       <div id="rfpDraft"></div>
       <div id="rfpArea" class="muted">Loading…</div>
+    </div>
+  </div>
+  <div id="tab-archive" style="display:none">
+    <div class="card" style="padding:18px 20px">
+      <h2>🗄 Archive — consumption data files (CDF)</h2>
+      <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="arcQ" placeholder="Customer ID, name or ICP" onkeydown="if(event.key==='Enter')arcSearch()" style="flex:1;min-width:220px;max-width:420px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">
+        <button onclick="arcSearch()" style="min-width:0;padding:0 16px">Search</button>
+        <button class="btn-sm" onclick="document.getElementById('arcQ').value='';arcSearch()">show latest</button>
+      </p>
+      <div id="arcArea" class="muted">Loading…</div>
     </div>
   </div>
   <div id="tab-batch" style="display:none">
@@ -936,11 +976,146 @@
       document.getElementById('tab-workbench').style.display = which === 'wb' ? '' : 'none';
       document.getElementById('tab-batch').style.display = which === 'batch' ? '' : 'none';
       document.getElementById('tab-bulkquote').style.display = which === 'bq' ? '' : 'none';
+      document.getElementById('tab-archive').style.display = which === 'arc' ? '' : 'none';
+      document.getElementById('tabBtnArc').className = which === 'arc' ? 'active' : '';
       document.getElementById('tabBtnWb').className = which === 'wb' ? 'active' : '';
       document.getElementById('tabBtnBatch').className = which === 'batch' ? 'active' : '';
       document.getElementById('tabBtnBq').className = which === 'bq' ? 'active' : '';
       if (which === 'batch' && !batchLoaded) { batchLoaded = true; loadFiles(); }
       if (which === 'bq' && !rfpLoaded) { rfpLoaded = true; rfpLoad(null); }
+      if (which === 'arc' && !arcLoaded) { arcLoaded = true; arcSearch(); }
+    }
+
+    // ---------------- Archive (CDF Index search, 10 Nov) ----------------
+    // Every finished session writes one row to the CDF Index tab; this
+    // tab searches it by customer id, name or ICP. Blank search = the
+    // most recent files.
+    var arcLoaded = false;
+
+    function fmtSize(bytes) {
+      var b = Number(bytes) || 0;
+      if (b >= 1048576) return (Math.round(b / 104857.6) / 10) + ' MB';
+      if (b >= 1024) return Math.round(b / 1024) + ' KB';
+      return b + ' B';
+    }
+
+    /** Small print by the build number: how much storage the CDF files use. */
+    function cdfTotalsLoad(force) {
+      google.script.run
+        .withSuccessHandler(function (t) {
+          var el = document.getElementById('hdrCdfTotals');
+          if (!el || !t) return;
+          el.textContent = 'CDF files: ' + (t.partial ? 'at least ' : '') + fmtNum(t.count) + ' · ' + fmtSize(t.bytes);
+        })
+        .withFailureHandler(function () {})
+        .apiCdfTotals(!!force);
+    }
+
+    var arcLast = null;     // last search result, so the table can re-render in place
+    var arcDelOpen = '';    // file id whose delete panel is open
+
+    function arcSearch() {
+      var area = document.getElementById('arcArea');
+      var q = document.getElementById('arcQ').value.trim();
+      area.innerHTML = '<span class="muted">Searching…</span>';
+      google.script.run
+        .withSuccessHandler(function (res) { arcLast = res; arcDelOpen = ''; arcRender(); })
+        .withFailureHandler(function (e) { area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+        .apiCdfSearch(q);
+    }
+
+    function arcRender() {
+      var area = document.getElementById('arcArea');
+      var res = arcLast;
+      if (!res) return;
+      var h = '<p class="muted">' + fmtNum(res.total) + ' file(s) in the index · ' + fmtSize(res.totalBytes) + ' in total' +
+        (res.deletedCount ? ' · ' + fmtNum(res.deletedCount) + ' deleted (kept below as a record)' : '') +
+        (res.q
+          ? ' · ' + fmtNum(res.matched) + ' match(es) for “' + esc(res.q) + '”' +
+            (res.matched > res.rows.length ? ' (first ' + res.rows.length + ' shown — narrow the search)' : '')
+          : ' · showing the ' + res.rows.length + ' most recent') + '</p>';
+      h += '<p class="muted" style="font-size:12px">The index covers files finished from v2.14 onwards; older CDF files are in the output folder but not listed here.</p>';
+      if (!res.rows.length) {
+        area.innerHTML = h + '<p class="muted">' + ((res.total || res.deletedCount) ? 'Nothing matches.' : 'No files indexed yet — a row is added each time a customer is finished.') + '</p>';
+        return;
+      }
+      h += '<div class="tblwrap"><table><thead><tr><th class="tL">Finished</th><th class="tL">Customer</th>' +
+        '<th class="tL">ICPs</th><th class="tL">File</th><th class="tR">Size</th><th class="tL">Operator</th><th></th></tr></thead><tbody>';
+      for (var i = 0; i < res.rows.length; i++) {
+        var r = res.rows[i];
+        var icpList = r.hitIcps && r.hitIcps.length ? r.hitIcps : r.icpSample;
+        var more = r.icpCount - icpList.length;
+        var fileCell = r.deleted
+          ? '<span style="text-decoration:line-through">' + esc(r.fileName) + '</span>' +
+            '<div class="flag" style="font-size:12px">Deleted ' + esc(r.deletedAt) + ' by ' + esc(r.deletedBy || 'unknown') + '</div>' +
+            '<div class="muted" style="font-size:12px">Reason: ' + esc(r.deleteReason) + '</div>'
+          : '<b>' + esc(r.fileName) + '</b><br>' +
+            (r.url ? '<a href="' + esc(r.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' : '') +
+            (r.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(r.fileId) + '">' + ICONS.download + ' download to PC</a>' : '');
+        h += '<tr' + (r.deleted ? ' style="opacity:.7"' : '') + '><td class="tL mono">' + esc(r.date) + '</td>' +
+          '<td class="tL">' + esc(r.customer) + (r.tradingName && r.tradingName !== r.customer ? ' <span class="muted">(' + esc(r.tradingName) + ')</span>' : '') +
+            (r.prospect ? '<div><span class="pill">PROSPECT</span></div>' : '<div class="muted">' + esc(r.customerId) + '</div>') + '</td>' +
+          '<td class="tL mono">' + icpList.map(esc).join('<br>') +
+            (more > 0 ? '<div class="muted" style="font-family:inherit">+' + more + ' more</div>' : '') + '</td>' +
+          '<td class="tL">' + fileCell + '</td>' +
+          '<td class="tR">' + fmtSize(r.sizeBytes) + '</td>' +
+          '<td class="tL muted" style="font-size:12px">' + esc(r.operator) + '</td>' +
+          '<td>' + (!r.deleted && r.fileId
+            ? '<button class="btn-sm" title="Delete this file (moves it to the Drive bin)" onclick="arcAskDelete(' + i + ')" style="color:var(--bad)">' + ICONS.trash + ' delete</button>'
+            : '') + '</td></tr>';
+        if (!r.deleted && r.fileId && arcDelOpen === r.fileId) {
+          // Inline delete panel: a reason is required and is recorded
+          // with the time and the operator on the index row.
+          h += '<tr><td colspan="7" class="tL" style="background:var(--tuc-accent-tint)">' +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+            '<b>Delete ' + esc(r.fileName) + '?</b>' +
+            '<span class="muted" style="font-size:12px">The file moves to the Drive bin. The index keeps a record of when, who and why.</span></div>' +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">' +
+            '<input type="text" id="arcDelReason" maxlength="500" placeholder="Reason for deleting (required)"' +
+            ' onkeydown="if(event.key===\'Enter\')arcDoDelete(' + i + ', document.getElementById(\'arcDelBtn\'))"' +
+            ' style="flex:1;min-width:240px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px">' +
+            '<button id="arcDelBtn" onclick="arcDoDelete(' + i + ', this)" style="min-width:0;padding:0 16px;background:var(--bad)">' + ICONS.trash + ' Move to bin</button>' +
+            '<button class="btn-sm" onclick="arcCancelDelete()">cancel</button>' +
+            '<span id="arcDelMsg"></span></div></td></tr>';
+        }
+      }
+      area.innerHTML = h + '</tbody></table></div>';
+      var inp = document.getElementById('arcDelReason');
+      if (inp && inp.focus) inp.focus();
+    }
+
+    function arcAskDelete(i) {
+      if (!arcLast || !arcLast.rows[i]) return;
+      arcDelOpen = arcLast.rows[i].fileId;
+      arcRender();
+    }
+
+    function arcCancelDelete() { arcDelOpen = ''; arcRender(); }
+
+    function arcDoDelete(i, btn) {
+      if (!arcLast || !arcLast.rows[i]) return;
+      var r = arcLast.rows[i];
+      var inp = document.getElementById('arcDelReason');
+      var msg = document.getElementById('arcDelMsg');
+      var reason = inp ? String(inp.value || '').trim() : '';
+      if (!reason) {
+        if (msg) msg.innerHTML = '<span class="error">Type a reason first.</span>';
+        if (inp && inp.focus) inp.focus();
+        return;
+      }
+      if (btn) btn.disabled = true;
+      if (msg) msg.innerHTML = '<span class="muted">Deleting…</span>';
+      google.script.run
+        .withSuccessHandler(function () {
+          arcSearch();          // reload: the row now shows as deleted
+          cdfTotalsLoad(true);  // header storage total
+        })
+        .withFailureHandler(function (e) {
+          if (btn) btn.disabled = false;
+          var m = document.getElementById('arcDelMsg');
+          if (m) m.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>';
+        })
+        .apiCdfDelete(r.fileId, reason);
     }
 
     // ---------------- Workbench ----------------
@@ -1026,7 +1201,7 @@
         var f = wbSession[i];
         var known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
         h += '<div class="wb-filerow' + (wbSelected === f.id ? ' sel' : '') + '" onclick="wbSelect(\'' + f.id + '\')">' +
-          '<span style="flex:1" class="tL">' + esc(f.name) + '</span>' +
+          '<span class="fname" title="' + esc(f.name) + '">' + esc(f.name) + '</span>' +
           '<span class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</span>' +
           '<span class="muted">' + Math.round(f.sizeBytes / 1024) + ' KB</span>' +
           (known ? '' : '<button class="icon" title="Email this file to Peter so the format can be added" onclick="event.stopPropagation();wbReport(\'' + f.id + '\', this)">✉</button>') +
@@ -1069,10 +1244,12 @@
     }
 
     var wbLastRows = null;
+    var wbLastRes = null; // whole analysis result, so a prospect toggle can re-render
     var wbAnalysedIds = null;
 
     function wbRenderCalcs(res) {
       wbLastRows = res.rows;
+      wbLastRes = res;
       var area = document.getElementById('wbCalcs');
       if (!res.rows.length) {
         area.innerHTML = '<p class="error">No records found' +
@@ -1082,16 +1259,26 @@
       // Customer resolution + multi-customer warning
       var rmap = res.retailerMap || {};
       var custIds = {}, custNames = {}, traders = {};
+      var tradingName = '';
       for (var i = 0; i < res.rows.length; i++) {
         var lk = res.rows[i].lookup;
         if (lk.customerId) { custIds[lk.customerId] = true; custNames[lk.registeredName] = true; }
+        if (!tradingName && lk.tradingName && lk.tradingName !== 'Not found') tradingName = lk.tradingName;
         if (lk.traderId && lk.traderId !== 'Not found') traders[rmap[lk.traderId] || lk.traderId] = true;
       }
       var ids = Object.keys(custIds);
       wbAnalysedCust = ids.length === 1 ? { id: ids[0], name: Object.keys(custNames)[0] || '' } : null;
       var warn = '';
       if (ids.length > 1) warn = '<p class="error">⚠ Files resolve to ' + ids.length + ' DIFFERENT customers (' + ids.join(', ') + ') — the workbench session is one customer. Check the files.</p>';
-      if (!ids.length) warn = '<p class="flag">⚠ No ICP resolved to a Betty customer — check the lookup sheets.</p>';
+      if (!ids.length) warn = '<p class="flag">⚠ No ICP resolved to a Betty customer — check the lookup sheets, or tick “Prospect — not in Betty” if this customer is not in Betty.</p>';
+      if (wbProspect) {
+        // Prospect session (10 Nov): Betty lookups do not apply. An ICP
+        // that DOES belong to a Betty customer is worth a loud warning.
+        wbAnalysedCust = null;
+        warn = ids.length
+          ? '<p class="error">⚠ Prospect session, but some ICPs belong to Betty customer(s) ' + ids.map(esc).join(', ') + ' — check before queueing.</p>'
+          : '<p class="muted">Prospect session: Betty customer lookups do not apply.</p>';
+      }
       var skips = res.skipped.length ? '<p class="flag">⚠ Skipped: ' + res.skipped.map(function (s) { return esc(s.name) + ' (' + esc(s.reason) + ')'; }).join('; ') + '</p>' : '';
       document.getElementById('wbWarn').innerHTML = warn + skips;
 
@@ -1111,20 +1298,24 @@
 
       // Notes form: show + auto-fill (never overwrite operator-entered values)
       document.getElementById('wbNotes').style.display = '';
-      document.getElementById('wbBettySec').style.display = '';
+      document.getElementById('wbBettySec').style.display = wbProspect ? 'none' : '';
       document.getElementById('wbQueueBtn').style.display = '';
       var fill = function (id, val) {
         var el = document.getElementById(id);
         if (el && !el.value && val) el.value = val;
       };
-      fill('wb_customerId', ids.length === 1 ? ids[0] : '');
-      fill('wb_customer', ids.length === 1 ? Object.keys(custNames)[0] : '');
-      var now = new Date();
-      fill('wb_date', ('0' + now.getDate()).slice(-2) + '/' + ('0' + (now.getMonth() + 1)).slice(-2) + '/' + now.getFullYear());
-      fill('wb_retailers', Object.keys(traders).join(', '));
+      // HEADER auto-fill is customer id + customer ONLY (3 Nov) —
+      // date/retailer(s) stay blank for the operator. Customer format:
+      // "Registered Name (Trading Name)" when a trading name exists.
+      fill('wb_customerId', wbProspect ? '' : (ids.length === 1 ? ids[0] : ''));
+      var regName = ids.length === 1 ? (Object.keys(custNames)[0] || '') : '';
+      var custLabel = wbProspect ? wbProspectLabel() : regName +
+        (regName && tradingName && tradingName !== regName ? ' (' + tradingName + ')' : '');
+      fill('wb_customer', custLabel);
       fill('wb_curRetailer', Object.keys(traders).join(', '));
       wbRenderQueuePrev();
       wbRenderSession();
+      wbEaKick();
     }
 
     function wbCalcRow(r) {
@@ -1140,12 +1331,21 @@
         if (ph) profileHtml = '<details><summary class="muted">⚡ profile</summary><div style="font-size:12px">' + ph + '</div></details>';
       }
       var flagItems = [];
-      var arrs = [r.lookup.flags || [], a.breaches || [], a.flags || []];
+      // "Not found in the Betty lookups" is expected on every row of a
+      // prospect session, so it is not repeated there as a flag.
+      var unresolved = !r.lookup.customerId && /not found/i.test((r.lookup.flags || []).join(' '));
+      var lkFlags = (wbProspect && unresolved) ? [] : (r.lookup.flags || []);
+      var arrs = [lkFlags, a.breaches || [], a.flags || []];
       for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) flagItems.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
+      // An ICP the lookups do not know has no known fuel here: its type
+      // is set (and shown) in the ICPs-to-queue table.
+      var fuelCellCalc = unresolved
+        ? '<span class="muted" title="Not in the Betty lookups — the type is set in the ICPs to queue table">?</span>'
+        : fuelLabel(r.lookup);
       return '<tr>' +
         '<td style="font-size:18px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
         '<td class="mono tL">' + copyableIcp(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
-        '<td>' + fuelLabel(r.lookup) + '</td>' +
+        '<td>' + fuelCellCalc + '</td>' +
         '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
         '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
         '<td class="tR">' + fmtNum(Math.round(a.daysCovered)) + ' / ' + fmtNum(Math.round(a.windowDays)) + ' d</td>' +
@@ -1327,7 +1527,7 @@
       for (var i = 0; i < wbNext.files.length; i++) {
         var f = wbNext.files[i];
         var known = f.format !== 'UNKNOWN' && f.format !== 'UNREADABLE';
-        h += '<div class="wb-filerow"><span style="flex:1" class="tL">' + esc(f.name) + '</span>' +
+        h += '<div class="wb-filerow"><span class="fname" title="' + esc(f.name) + '">' + esc(f.name) + '</span>' +
           '<span class="' + (known ? 'ok' : 'error') + '">' + esc(f.format) + '</span>' +
           '<button class="icon" style="color:var(--bad)" title="Remove from staged customer" onclick="wbNextRemove(\'' + f.id + '\')">✕</button></div>';
       }
@@ -1347,6 +1547,13 @@
       var st = wbNext.status, res = wbNext.res, ids = wbNext.analysedIds, gen = wbNext.gen, err = wbNext.err;
       wbNext = wbNextFresh();
       wbNextRender();
+      // Select + preview the first promoted file, same as a manual add
+      // (without this the preview pane never appears for promoted
+      // customers — reported 3 Nov).
+      if (wbSession.length) {
+        wbSelected = wbSession[0].id;
+        wbPreview(wbSession[0]);
+      }
       wbRenderFiles();
       if (st === 'ready' && res) {
         wbAnalysedIds = ids;
@@ -1364,15 +1571,79 @@
     var wbManual = [];
 
     function wbManAdd() {
-      var icp = document.getElementById('wbManIcp').value.trim();
+      var icp = document.getElementById('wbManIcp').value.trim().toUpperCase();
       var fuel = document.getElementById('wbManFuel').value;
-      var annual = parseFloat(document.getElementById('wbManAnnual').value);
+      var rawAnnual = String(document.getElementById('wbManAnnual').value).trim();
       if (!/^\d{10}[A-Z0-9]{5}$/.test(icp)) { alert('That does not look like an ICP (15 characters, 10 digits then 5).'); return; }
-      if (!(annual > 0)) { alert('Enter the annual kWh.'); return; }
+      // Annual may be left blank (4 Nov) — fill it later in the table.
+      // Blank = unknown (null); 0 = a real zero-consumption ICP (10 Nov).
+      var annual = rawAnnual === '' ? null : Math.round(parseFloat(rawAnnual));
+      if (annual !== null && !(annual >= 0)) { alert('Annual kWh must be zero or greater — leave it blank if unknown.'); return; }
       wbManual.push({ icp: icp, fuel: fuel, annualKwh: annual });
       document.getElementById('wbManIcp').value = '';
       document.getElementById('wbManAnnual').value = '';
       wbManRender();
+    }
+
+    /**
+     * Paste-a-list entry (4 Nov): one ICP per line, at minimum. A
+     * GAS/ELEC token and an annual kWh number are optional per line;
+     * anything missing stays blank for the operator to fill in the
+     * table (manual rows have editable fuel + annual there).
+     */
+    function wbManAddList() {
+      var ta = document.getElementById('wbManPaste');
+      var lines = String(ta.value || '').split(/\r?\n/);
+      var added = 0, dups = 0, bad = [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+        var icpM = line.toUpperCase().match(/\d{10}[A-Z0-9]{5}/);
+        if (!icpM) { bad.push(line.slice(0, 40)); continue; }
+        var icp = icpM[0];
+        if (wbManFind(icp)) { dups++; continue; }
+        var fuel = 'ELEC';
+        if (/\bGAS\b|\bG\b/i.test(line.replace(icpM[0], ''))) fuel = 'GAS';
+        // No number on the line = unknown (null). A written 0 is a
+        // real zero-consumption ICP and is kept as 0 (10 Nov).
+        var annual = null;
+        var rest = line.toUpperCase().replace(icpM[0], ' ');
+        var nums = rest.replace(/,/g, '').match(/\d+(\.\d+)?/g) || [];
+        for (var n = 0; n < nums.length; n++) {
+          var val = parseFloat(nums[n]);
+          if (val >= 0) { annual = Math.round(val); break; }
+        }
+        wbManual.push({ icp: icp, fuel: fuel, annualKwh: annual });
+        added++;
+      }
+      ta.value = '';
+      wbManRender();
+      var msg = added + ' ICP(s) added';
+      if (dups) msg += ' · ' + dups + ' duplicate(s) skipped';
+      if (bad.length) msg += ' · ' + bad.length + ' line(s) without an ICP: ' + bad.join(' | ');
+      document.getElementById('wbWarn').innerHTML =
+        '<p class="' + (bad.length ? 'flag' : 'ok') + '">' + esc(msg) + '</p>';
+    }
+
+    function wbManFind(icp) {
+      for (var i = 0; i < wbManual.length; i++) if (wbManual[i].icp === icp) return wbManual[i];
+      return null;
+    }
+
+    function wbManSetAnnual(icp, val) {
+      var m = wbManFind(icp);
+      if (m) {
+        var t = String(val === null || val === undefined ? '' : val).trim();
+        var n = Math.round(parseFloat(t));
+        m.annualKwh = (t !== '' && n >= 0) ? n : null; // blank = unknown, 0 = real zero
+      }
+      wbRenderQueuePrev();
+    }
+
+    function wbManSetFuel(icp, val) {
+      var m = wbManFind(icp);
+      if (m) m.fuel = val;
+      wbRenderQueuePrev();
     }
 
     function wbManRender() {
@@ -1381,6 +1652,7 @@
       if (wbManual.length) document.getElementById('wbQueueBtn').style.display = '';
       wbRenderQueuePrev();
       wbRenderSession();
+      wbEaKick();
     }
 
     function wbManRemove(icp) {
@@ -1414,6 +1686,7 @@
     }
 
     function wbQueueNow(btn) {
+      if (wbProspect && !wbProsName()) { alert('Prospect session: enter the registered name first (under “Prospect — not in Betty”).'); return; }
       if (wbQCustConflict()) { alert('Customer ID conflict — resolve it in the "Queue under Customer ID" field first (see the red notice).'); return; }
       var meta = wbBuildFinishMeta();
       if (!meta) { alert('Analyse the session (or add manual ICPs) first.'); return; }
@@ -1425,7 +1698,7 @@
           wbSentToQueue = true;
           var h = '';
           if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (💰 RFP tab).</p>';
-          if (res.duplicates && res.duplicates.length) h += '<p class="flag">⚠ Already queued (now duplicated — resolve on the RFP tab): ' + res.duplicates.map(esc).join(', ') + '</p>';
+          h += wbDupHtml(res);
           if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">⚠ Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
           document.getElementById('wbWarn').innerHTML = h;
           rfpLoaded = false;
@@ -1480,6 +1753,42 @@
     var wbPathways = {}; // icp -> 'STANDARD' | 'URGENT' | 'EXTENSION'
     var wbDefPathVal = 'STANDARD'; // segmented control state (v2.6 redesign)
 
+    // ---- Extension retailer (9 Nov) ----
+    // The retailer an extension goes to is OPERATOR INPUT (the
+    // expiring quote's retailer, which may never have held the ICP) —
+    // never derived from the EA incumbent. Blank is allowed at queue
+    // time; it can be set/changed later on the RFP tab.
+    var wbExtRet = {};        // icp -> retailer code
+    var wbDefExtRetVal = '';  // batch-level choice
+    var wbRetailers = null;   // lazy registry list [{code, name, active}]
+
+    function wbLoadRetailers() {
+      if (wbRetailers) return;
+      wbRetailers = []; // marks "loading" so we only fetch once
+      google.script.run
+        .withSuccessHandler(function (list) { wbRetailers = list || []; wbRenderQueuePrev(); })
+        .withFailureHandler(function () { wbRetailers = null; })
+        .apiRfpRetailerOptions();
+    }
+
+    function wbRetOpts(selVal) {
+      var h = '<option value="">— retailer? —</option>';
+      for (var i = 0; i < (wbRetailers || []).length; i++) {
+        var rt = wbRetailers[i];
+        h += '<option value="' + esc(rt.code) + '"' + (selVal === rt.code ? ' selected' : '') + '>' +
+          esc(rt.name) + (rt.active ? '' : ' (inactive)') + '</option>';
+      }
+      return h;
+    }
+
+    function wbDefExtRetChange(val) {
+      wbDefExtRetVal = val;
+      for (var k in wbPathways) if (wbPathways[k] === 'EXTENSION') wbExtRet[k] = val;
+      wbRenderQueuePrev();
+    }
+
+    function wbSetExtRet(icp, val) { wbExtRet[icp] = val; }
+
     // ---------------- v2.6 layout helpers ----------------
 
     function wbToggleLink() {
@@ -1527,11 +1836,13 @@
         document.getElementById('wbQueueCard').style.display = 'none';
       }
       document.getElementById('wbAnalyseBtn').style.display = hasFiles ? '' : 'none';
-      var name = (wbAnalysedCust && wbAnalysedCust.name) ||
-        (document.getElementById('wbManCustName').value || '').trim() || 'New session';
+      var name = wbProspect ? (wbProspectLabel() || 'Prospect (name needed)')
+        : ((wbAnalysedCust && wbAnalysedCust.name) ||
+          (document.getElementById('wbManCustName').value || '').trim() || 'New session');
       document.getElementById('wbSessName').textContent = name;
       var bits = [];
-      if (wbQCustVal) bits.push('Customer ID ' + wbQCustVal);
+      if (wbProspect) bits.push('Prospect, not in Betty');
+      else if (wbQCustVal) bits.push('Customer ID ' + wbQCustVal);
       if (hasFiles) bits.push(wbSession.length + ' file(s)');
       if (wbManual.length) bits.push(wbManual.length + ' manual ICP(s)');
       bits.push(wbLastRows ? 'analysed ✓' : hasFiles ? 'not analysed yet' : '');
@@ -1544,8 +1855,148 @@
         }
       }
       var bl = document.getElementById('wbBettyLink');
-      if (burl) { bl.href = burl; bl.style.display = 'inline-flex'; }
+      if (burl && !wbProspect) { bl.href = burl; bl.style.display = 'inline-flex'; }
       else bl.style.display = 'none';
+    }
+
+    // ---------------- Prospect session (10 Nov) ----------------
+    // A customer that is not in Betty and may never be: no customer
+    // id, names typed by the operator, Betty link and Betty bulk
+    // update off. Everything else is the normal session: files ->
+    // ICPs -> annual kWh -> RFP queue. Queue rows carry the PROSPECT
+    // marker in the customer id column.
+    var wbProspect = false;
+
+    function wbProsName() { return (document.getElementById('wbProsName').value || '').trim(); }
+    function wbProsTrading() { return (document.getElementById('wbProsTrading').value || '').trim(); }
+
+    /** "Registered Name (Trading Name)", the same shape the HEADER notes use. */
+    function wbProspectLabel() {
+      var n = wbProsName(), t = wbProsTrading();
+      return n + (n && t && t !== n ? ' (' + t + ')' : '');
+    }
+
+    function wbProspectToggle(on) {
+      wbProspect = !!on;
+      document.getElementById('wbProspectBox').style.display = wbProspect ? '' : 'none';
+      if (wbProspect) document.getElementById('wbProsName').focus();
+      wbProspectChanged();
+    }
+
+    function wbProspectChanged() {
+      // HEADER notes: a prospect never carries a Betty id; switching
+      // back lets the analysis refill both fields.
+      var idEl = document.getElementById('wb_customerId');
+      var cuEl = document.getElementById('wb_customer');
+      if (wbProspect) { idEl.value = ''; cuEl.value = wbProspectLabel(); }
+      else if (wbLastRes) { idEl.value = ''; cuEl.value = ''; }
+      if (!wbProspect) document.getElementById('wbProspectBox').style.display = 'none';
+      if (wbLastRes && wbLastRes.rows && wbLastRes.rows.length) wbRenderCalcs(wbLastRes);
+      else { wbRenderQueuePrev(); wbRenderSession(); }
+    }
+
+    /** "<customer id> <name>" for the CDF file name; prospects say so. */
+    function wbCdfLabel(meta) {
+      if (meta.prospect) return 'PROSPECT ' + (meta.customer || 'unnamed');
+      return (meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer');
+    }
+
+    // ---------------- EA registry details (10 Nov) ----------------
+    // Walter asks the EA registry itself (EaBridge.gs; cache first).
+    // Per ICP this gives the current retailer, the TOU / NHH verdict
+    // and the "not in the registry: gas or typo" flag. Display only:
+    // nothing here blocks queueing.
+    var wbEa = {};       // icp -> detail from apiEaLookup ({kind:'none'} when not answered)
+    var wbEaAsked = {};  // icp -> true once requested
+    var wbEaGen = 0;
+    var wbEaKeySet = null; // null until the first answer
+    var wbEaErr = '';
+
+    function wbEaKick() {
+      var icps = wbQueueIcps();
+      var todo = [];
+      for (var i = 0; i < icps.length; i++) {
+        var k = icps[i].icp;
+        if (!wbEaAsked[k]) { wbEaAsked[k] = true; todo.push(k); }
+      }
+      if (!todo.length) return;
+      var gen = wbEaGen;
+      var chunks = [];
+      for (var c = 0; c < todo.length; c += 20) chunks.push(todo.slice(c, c + 20));
+      var ci = 0;
+      var next = function () {
+        if (gen !== wbEaGen || ci >= chunks.length) return;
+        var chunk = chunks[ci++];
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (gen !== wbEaGen) return;
+            wbEaKeySet = !!res.keySet;
+            wbEaErr = res.error || '';
+            for (var j = 0; j < chunk.length; j++) wbEa[chunk[j]] = (res.rows && res.rows[chunk[j]]) || { kind: 'none' };
+            wbEaRender();
+            next();
+          })
+          .withFailureHandler(function (e) {
+            if (gen !== wbEaGen) return;
+            wbEaErr = e.message || String(e);
+            for (var j = 0; j < chunk.length; j++) wbEa[chunk[j]] = { kind: 'none' };
+            wbEaRender();
+            next();
+          })
+          .apiEaLookup(chunk);
+      };
+      wbRenderQueuePrev(); // shows the "…" placeholders
+      next();
+    }
+
+    // EA answers arrive in the background. Re-rendering the table
+    // would wipe a field the operator is typing in, so the refresh
+    // waits until no input in the table has focus.
+    var wbEaRenderWaiting = false;
+    function wbEaRender() {
+      var box = document.getElementById('wbQueuePrev');
+      var ae = document.activeElement;
+      if (ae && box && box.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')) {
+        if (!wbEaRenderWaiting) {
+          wbEaRenderWaiting = true;
+          setTimeout(function () { wbEaRenderWaiting = false; wbEaRender(); }, 700);
+        }
+        return;
+      }
+      wbRenderQueuePrev();
+    }
+
+    function wbEaCell(c) {
+      var d = wbEa[c.icp];
+      if (!d) return wbEaAsked[c.icp] ? '<span class="muted">…</span>' : '';
+      if (d.kind === 'found') {
+        var fl = '';
+        var flags = d.flags || [];
+        for (var i = 0; i < flags.length && i < 2; i++) fl += '<div class="flag" style="font-size:11px">' + esc(flags[i]) + '</div>';
+        if (flags.length > 2) fl += '<div class="flag" style="font-size:11px" title="' + esc(flags.slice(2).join(' | ')) + '">+' + (flags.length - 2) + ' more</div>';
+        return '<span class="pill" title="EA registry: ' + esc(d.touDetail || '') + '">' + esc(d.tou || '?') + '</span>' +
+          '<span class="muted" style="font-size:11px">' + esc(d.trader || '') + '</span>' + fl;
+      }
+      if (d.kind === 'not_found') {
+        return c.fuel === 'GAS' && !c.assumedGas
+          ? '<span class="muted" style="font-size:11px">not in EA (gas)</span>'
+          : '<span class="error" style="font-size:11px">not in EA registry: gas or typo</span>';
+      }
+      if (d.kind === 'none') return '';
+      return '<span class="flag" style="font-size:11px">' + esc((d.flags && d.flags[0]) || d.message || d.kind) + '</span>';
+    }
+
+    // Fuel for ICPs the Betty lookups do not know (prospects): the
+    // operator can set it. Until they do, an ICP the EA registry does
+    // not have is ASSUMED gas, and says so on the row.
+    var wbFuelOv = {}; // icp -> 'ELEC' | 'GAS'
+    function wbSetFuelOv(icp, val) { wbFuelOv[icp] = val; wbRenderQueuePrev(); }
+
+    /** True when v is a queueable annual figure: a number >= 0. Zero counts; blank does not. */
+    function wbHasAnnual(v) {
+      if (v === null || v === undefined || v === '') return false;
+      var n = Number(v);
+      return isFinite(n) && n >= 0;
     }
 
     // ---- Customer identity for the queue (one customer per session) ----
@@ -1562,6 +2013,7 @@
     function wbManBoxId() { return (document.getElementById('wbManCustId').value || '').trim(); }
 
     function wbQCustConflict() {
+      if (wbProspect) return null; // no customer id on a prospect
       if (wbQCustTouched) return null; // operator decided — block lifted
       var manualId = wbManBoxId();
       var aId = wbAnalysedCust && wbAnalysedCust.id;
@@ -1590,7 +2042,11 @@
       wbRenderQueuePrev();
     }
 
-    function wbSetPath(icp, val) { wbPathways[icp] = val; }
+    function wbSetPath(icp, val) {
+      wbPathways[icp] = val;
+      // Re-render: an EXTENSION row grows its retailer dropdown.
+      wbRenderQueuePrev();
+    }
 
     // Registers with under 30 days of coverage are EXCLUDED from the
     // ICP's queue annual by default (an AVM extrapolated from a day or
@@ -1611,14 +2067,19 @@
       var rows = wbLastRows || [];
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
-        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: 0, srcs: {}, shortRegs: [] });
-        if (r.analysis.annualKwh) {
+        // annualKwh stays null until a register contributes a figure:
+        // null = no annual (not queued); 0 = real zero consumption,
+        // which IS queued (10 Nov).
+        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: null, srcs: {}, shortRegs: [] });
+        if (!r.lookup.customerId && /not found/i.test((r.lookup.flags || []).join(' '))) e.unresolved = true;
+        var regAnnual = r.analysis.annualKwh;
+        if (regAnnual !== null && regAnnual !== undefined) {
           var days = r.analysis.daysCovered || 0;
           if (days >= WB_MIN_REG_DAYS) {
-            e.annualKwh += r.analysis.annualKwh;
+            e.annualKwh = (e.annualKwh || 0) + regAnnual;
           } else {
             var included = !!wbInclReg[r.icp + '|' + r.register];
-            if (included) e.annualKwh += r.analysis.annualKwh;
+            if (included) e.annualKwh = (e.annualKwh || 0) + regAnnual;
             e.shortRegs.push({ reg: r.register, days: days, included: included });
           }
         }
@@ -1632,6 +2093,10 @@
       for (var k in byIcp) {
         var e = byIcp[k];
         e.source = e.manual ? 'manual' : Object.keys(e.srcs || {}).join(', ');
+        if (e.unresolved && !e.manual) {
+          if (wbFuelOv[e.icp]) e.fuel = wbFuelOv[e.icp];
+          else if (wbEa[e.icp] && wbEa[e.icp].kind === 'not_found') { e.fuel = 'GAS'; e.assumedGas = true; }
+        }
         out.push(e);
       }
       return out;
@@ -1640,12 +2105,19 @@
     function wbRenderQueuePrev() {
       var box = document.getElementById('wbQueuePrev');
       var icps = wbQueueIcps();
-      if (!icps.length) { box.innerHTML = ''; wbPathways = {}; return; }
+      if (!icps.length) { box.innerHTML = ''; wbPathways = {}; wbExtRet = {}; return; }
       var def = wbDefPath();
       var present = {};
+      var anyExt = false;
+      for (var i = 0; i < icps.length; i++) {
+        if (!(icps[i].icp in wbPathways)) wbPathways[icps[i].icp] = def;
+        if (wbPathways[icps[i].icp] === 'EXTENSION') anyExt = true;
+      }
+      if (anyExt) wbLoadRetailers();
 
       // Customer line: the editable id every row is queued under
       if (!wbQCustTouched) wbQCustVal = (wbAnalysedCust && wbAnalysedCust.id) || wbManBoxId() || '';
+      if (wbProspect) wbQCustVal = '';
       var conflict = wbQCustConflict();
       var h = '';
       if (conflict) {
@@ -1655,19 +2127,36 @@
           '. One customer per session: Queue and Finish are blocked until you set the Customer ID below ' +
           '(your entry wins), fix the manual box, or remove the odd entry. Multi-customer work belongs on the ⚡ Batch tab.</p>';
       }
-      h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-        '<span class="muted">Queue under Customer ID:</span>' +
-        '<input value="' + esc(wbQCustVal) + '" onchange="wbSetQCust(this)"' +
-        ' style="width:110px;border:1px solid ' + (conflict ? 'var(--bad)' : 'var(--tuc-line)') + ';border-radius:6px;padding:6px 8px;font-weight:600">' +
-        (wbAnalysedCust && wbAnalysedCust.name && wbQCustVal === wbAnalysedCust.id
-          ? '<span class="muted">' + esc(wbAnalysedCust.name) + '</span>' : '') +
-        '</p>';
+      if (wbProspect) {
+        h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<span class="muted">Queue under:</span><span class="pill">PROSPECT</span>' +
+          (wbProsName() ? '<b>' + esc(wbProspectLabel()) + '</b>'
+            : '<span class="error">enter the registered name (under “Prospect — not in Betty”)</span>') +
+          '</p>';
+      } else {
+        h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<span class="muted">Queue under Customer ID:</span>' +
+          '<input value="' + esc(wbQCustVal) + '" onchange="wbSetQCust(this)"' +
+          ' style="width:110px;border:1px solid ' + (conflict ? 'var(--bad)' : 'var(--tuc-line)') + ';border-radius:6px;padding:6px 8px;font-weight:600">' +
+          (wbAnalysedCust && wbAnalysedCust.name && wbQCustVal === wbAnalysedCust.id
+            ? '<span class="muted">' + esc(wbAnalysedCust.name) + '</span>' : '') +
+          '</p>';
+      }
+      if (anyExt) {
+        h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<span class="muted">Extensions go to:</span>' +
+          (wbRetailers && wbRetailers.length
+            ? '<select onchange="wbDefExtRetChange(this.value)" style="height:30px;border:1px solid var(--tuc-line);border-radius:6px">' +
+              wbRetOpts(wbDefExtRetVal) + '</select>' +
+              '<span class="muted" style="font-size:12px">the retailer whose quote is expiring — sets every extension ICP; adjust per ICP in the table. Blank is fine: set it later on the RFP tab.</span>'
+            : '<span class="muted">loading retailers…</span>') +
+          '</p>';
+      }
       h += '<div class="tblwrap"><table><thead><tr><th class="tL">ICP to queue</th><th>Type</th>' +
         '<th class="tL">Source</th><th class="tR">Annual kWh</th><th>Pathway</th><th></th></tr></thead><tbody>';
       for (var i = 0; i < icps.length; i++) {
         var c = icps[i];
         present[c.icp] = true;
-        if (!(c.icp in wbPathways)) wbPathways[c.icp] = def;
         var p = wbPathways[c.icp];
         var sel = '<select onchange="wbSetPath(\'' + c.icp + '\', this.value)"' +
           ' style="height:30px;border:1px solid var(--tuc-line);border-radius:6px">' +
@@ -1675,7 +2164,15 @@
           '<option value="URGENT"' + (p === 'URGENT' ? ' selected' : '') + '>Urgent</option>' +
           '<option value="EXTENSION"' + (p === 'EXTENSION' ? ' selected' : '') + '>Extension</option>' +
           '</select>';
-        var ok = c.annualKwh > 0;
+        if (p === 'EXTENSION') {
+          sel += wbRetailers && wbRetailers.length
+            ? '<div style="margin-top:4px"><select onchange="wbSetExtRet(\'' + esc(c.icp) + '\', this.value)"' +
+              ' style="height:28px;max-width:130px;border:1px solid var(--tuc-line);border-radius:6px">' +
+              wbRetOpts(wbExtRet[c.icp] || '') + '</select></div>'
+            : '<div class="muted" style="font-size:11px;font-weight:400">retailers…</div>';
+        }
+        var ok = wbHasAnnual(c.annualKwh);
+        var isZero = ok && Math.round(c.annualKwh) === 0;
         var regNotes = '';
         for (var si = 0; si < (c.shortRegs || []).length; si++) {
           var sr = c.shortRegs[si];
@@ -1684,12 +2181,29 @@
             '<button class="linkbtn" onclick="wbToggleReg(\'' + esc(c.icp) + '\', \'' + esc(sr.reg) + '\')">' +
             (sr.included ? 'exclude' : 'include') + '</button></div>';
         }
+        // Fuel is editable for manual rows and for ICPs the Betty
+        // lookups do not know (prospects); otherwise it is the lookup's.
+        var fuelCell = (c.manual || c.unresolved)
+          ? '<select onchange="' + (c.manual ? 'wbManSetFuel' : 'wbSetFuelOv') + '(\'' + esc(c.icp) + '\', this.value)" style="height:28px;border:1px solid var(--tuc-line);border-radius:6px">' +
+            '<option value="ELEC"' + (c.fuel === 'GAS' ? '' : ' selected') + '>Electricity</option>' +
+            '<option value="GAS"' + (c.fuel === 'GAS' ? ' selected' : '') + '>Gas</option></select>' +
+            (c.assumedGas ? '<div class="flag" style="font-size:11px">assumed gas — change if it is a typo</div>' : '')
+          : (c.fuel === 'GAS' ? 'Gas' : 'Electricity');
+        // A real zero is queued as 0 and says so; blank is not queued.
+        var zeroCue = isZero ? '<div class="flag" style="font-size:11px;font-weight:400">zero consumption — queued as 0</div>' : '';
+        var annualCell = c.manual
+          ? '<input type="number" min="0" value="' + (ok ? Math.round(c.annualKwh) : '') + '" placeholder="kWh"' +
+            ' style="width:95px;text-align:right;font-weight:600;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px"' +
+            ' onchange="wbManSetAnnual(\'' + esc(c.icp) + '\', this.value)">' +
+            (ok ? zeroCue : '<div class="muted" style="font-size:11px;font-weight:400">(not queued until filled — 0 is allowed)</div>')
+          : (ok ? fmtNum(Math.round(c.annualKwh)) + zeroCue : '— <span style="font-weight:400">(not queued)</span>');
         h += '<tr' + (ok ? '' : ' class="muted"') + '>' +
-          '<td class="tL mono">' + esc(c.icp) + '</td>' +
-          '<td>' + (c.fuel === 'GAS' ? 'Gas' : 'Electricity') + '</td>' +
+          '<td class="tL"><span class="mono" style="white-space:nowrap">' + esc(c.icp) + '</span>' +
+            '<div style="font-family:\'Open Sans\',sans-serif;margin-top:2px">' + wbEaCell(c) + '</div></td>' +
+          '<td>' + fuelCell + '</td>' +
           '<td class="tL muted filecell" style="font-size:12px">' +
             (c.manual ? '<span class="pill">manual</span>' : esc(c.source)) + '</td>' +
-          '<td class="tR" style="font-weight:600">' + (ok ? fmtNum(Math.round(c.annualKwh)) : '— <span style="font-weight:400">(not queued)</span>') + regNotes + '</td>' +
+          '<td class="tR" style="font-weight:600">' + annualCell + regNotes + '</td>' +
           '<td>' + (ok ? sel : '') + '</td>' +
           '<td>' + (c.manual
             ? '<button class="icon" style="color:var(--bad)" title="Remove this manual ICP" onclick="wbManRemove(\'' + esc(c.icp) + '\')">✕</button>'
@@ -1697,8 +2211,52 @@
       }
       h += '</tbody></table></div>';
       for (var k in wbPathways) if (!present[k]) delete wbPathways[k];
+      for (var k2 in wbExtRet) if (!present[k2]) delete wbExtRet[k2];
+      if (wbEaKeySet === false) {
+        h += '<p class="muted" style="font-size:12px">EA registry lookup is not set up for Walter (Script Property EA_API_KEY) — only cached answers are shown.</p>';
+      } else if (wbEaErr) {
+        h += '<p class="flag" style="font-size:12px">⚠ EA registry lookup: ' + esc(wbEaErr) + '</p>';
+      }
       box.innerHTML = h;
       wbRenderSession();
+    }
+
+    // Inline SVG icons (9 Nov) — stroke follows the link colour, so
+    // these beat emojis for consistency and give us the full icon
+    // vocabulary. Add new ones here as needed.
+    var ICONS = {
+      open: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M8 4h12v12"/><path d="M10 14 20 4"/><path d="M16 11v9H4V8h9"/></svg>',
+      download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>',
+      trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+    };
+
+    /** Queueing result: duplicate/re-queue notices with full detail (9 Nov). */
+    function wbDupHtml(res) {
+      var h = '';
+      var dups = res.duplicates || [];
+      for (var i = 0; i < dups.length; i++) {
+        var d = dups[i];
+        if (typeof d === 'string') { h += '<p class="flag">⚠ Already queued: ' + esc(d) + '</p>'; continue; }
+        var locs = d.locations || (d.pathway ? [d] : []);
+        var parts = [];
+        for (var li = 0; li < locs.length; li++) {
+          var L = locs[li];
+          parts.push('in ' + esc(L.pathway) + ' under ' + esc(L.customerId) +
+            (L.customer ? ' ' + esc(L.customer) : '') +
+            (L.added ? ' (added ' + esc(L.added) + ')' : ''));
+        }
+        h += '<p class="' + (d.diffCustomer ? 'error' : 'flag') + '">⚠ ICP ' + esc(d.icp) +
+          ' is already OPEN ' + (locs.length > 1 ? locs.length + ' times: ' : '') + parts.join(' and ') +
+          (d.diffCustomer ? ' — DIFFERENT CUSTOMER, check before sending!' : '.') +
+          ' It has been queued again — resolve the duplicate(s) on the RFP tab.</p>';
+      }
+      var rc = res.reClosed || [];
+      if (rc.length) {
+        var parts = [];
+        for (var j = 0; j < rc.length; j++) parts.push(esc(rc[j].icp) + (rc[j].closed ? ' (closed ' + esc(rc[j].closed) + ')' : ''));
+        h += '<p class="muted">Previously closed, queued again: ' + parts.join(', ') + '.</p>';
+      }
+      return h;
     }
 
     function wbBuildFinishMeta() {
@@ -1717,8 +2275,92 @@
       }
       var icps = wbQueueIcps();
       var def = wbDefPath();
-      for (var i = 0; i < icps.length; i++) icps[i].pathway = wbPathways[icps[i].icp] || def;
-      return { customerId: customerId, customer: customer, tradingName: tradingName, icps: icps };
+      var allIcps = [];
+      for (var i = 0; i < icps.length; i++) {
+        icps[i].pathway = wbPathways[icps[i].icp] || def;
+        icps[i].extRetailer = icps[i].pathway === 'EXTENSION'
+          ? (wbExtRet[icps[i].icp] || wbDefExtRetVal || '') : '';
+        allIcps.push(icps[i].icp);
+      }
+      if (wbProspect) {
+        // Prospect: no Betty id; the names are the operator's.
+        customerId = '';
+        customer = wbProsName();
+        tradingName = wbProsTrading();
+      }
+      return { customerId: customerId, customer: customer, tradingName: tradingName, icps: icps,
+        prospect: wbProspect, allIcps: allIcps };
+    }
+
+    /** file id -> ICPs found in that file (the CDF tabs are named by ICP). */
+    function wbFileIcpMap() {
+      var byName = {};
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) {
+        for (var j = 0; j < (rows[i].sources || []).length; j++) {
+          var nm = rows[i].sources[j];
+          var list = byName[nm] || (byName[nm] = []);
+          if (list.indexOf(rows[i].icp) === -1) list.push(rows[i].icp);
+        }
+      }
+      var byId = {};
+      for (var k = 0; k < wbSession.length; k++) byId[wbSession[k].id] = byName[wbSession[k].name] || [];
+      return byId;
+    }
+
+    /**
+     * The "Analysis" first tab of the CDF: the same figures the
+     * screen shows, as plain rows (server writes them).
+     */
+    function wbAnalysisTable(meta) {
+      var rows = wbLastRows || [];
+      var icps = meta.icps || [];
+      var summary = [
+        ['Customer ID', meta.prospect ? 'PROSPECT (not in Betty)' : (meta.customerId || '')],
+        ['Customer', meta.customer || ''],
+        ['Trading name', meta.tradingName || ''],
+        ['Files', wbSession.map(function (f) { return f.name; }).join('; ')],
+        ['ICP count', icps.length]
+      ];
+      // No TOU / NHH column (removed 11 Nov): the registry rule behind
+      // that label is being rethought, so it is not written to the file.
+      var icpHeader = ['ICP', 'Type', 'Annual kWh', 'Queued for pricing', 'Pathway', 'Source', 'EA retailer', 'Notes'];
+      var icpRows = [];
+      for (var i = 0; i < icps.length; i++) {
+        var c = icps[i];
+        var ok = wbHasAnnual(c.annualKwh);
+        var d = wbEa[c.icp] || {};
+        var notes = [];
+        if (ok && Math.round(c.annualKwh) === 0) notes.push('zero consumption');
+        for (var si = 0; si < (c.shortRegs || []).length; si++) {
+          var sr = c.shortRegs[si];
+          notes.push((sr.included ? 'included ' : 'excluded ') + sr.reg + ' (' + Math.round(sr.days) + ' days of data)');
+        }
+        if (c.assumedGas) notes.push('not in EA registry, assumed gas');
+        if (d.kind === 'not_found' && !c.assumedGas && c.fuel !== 'GAS') notes.push('not in EA registry: gas or typo');
+        if (d.kind === 'found') for (var fi = 0; fi < (d.flags || []).length; fi++) notes.push('EA: ' + d.flags[fi]);
+        icpRows.push([c.icp, c.fuel === 'GAS' ? 'Gas' : 'Electricity',
+          ok ? Math.round(c.annualKwh) : '', ok ? 'Y' : 'N (no annual figure)',
+          c.pathway || '', c.manual ? 'manual entry' : (c.source || ''),
+          d.kind === 'found' ? (d.trader || '') : '',
+          notes.join('; ')]);
+      }
+      var regHeader = ['Grade', 'ICP', 'Register', 'File(s)', 'Layer', 'Window from', 'Window to',
+        'Days covered', 'Window days', 'Estimate share %', 'AVM kWh/month', 'Annual kWh', 'Flags'];
+      var regRows = [];
+      for (var r = 0; r < rows.length; r++) {
+        var row = rows[r], a = row.analysis;
+        var flags = [].concat(row.lookup.flags || [], a.breaches || [], a.flags || []);
+        regRows.push([a.grade || '', row.icp, row.register, (row.sources || []).join('; '), a.layer || '',
+          a.windowFrom || '', a.windowTo || '',
+          a.daysCovered === undefined || a.daysCovered === null ? '' : a.daysCovered,
+          a.windowDays === undefined || a.windowDays === null ? '' : a.windowDays,
+          Math.round((a.estimateShare || 0) * 100),
+          a.avm === null || a.avm === undefined ? '' : a.avm,
+          a.annualKwh === null || a.annualKwh === undefined ? '' : a.annualKwh,
+          flags.join('; ')]);
+      }
+      return { summary: summary, icpHeader: icpHeader, icpRows: icpRows, regHeader: regHeader, regRows: regRows };
     }
 
     // ---------------- Background archive merge ----------------
@@ -1730,6 +2372,7 @@
     var wbFinishPending = false;
     var wbSentToQueue = false;
     var wbFinishBtn = null, wbFinishMeta = null, wbFinishIds = null;
+    var wbFinishTable = null, wbFinishIcpMap = null; // captured at Finish, before the session resets
 
     function wbMergeStatus() {
       var el = document.getElementById('wbMergeState');
@@ -1755,7 +2398,8 @@
       var ids = wbAnalysedIds.slice();
       wbMerge.status = 'running'; wbMerge.total = ids.length; wbMerge.done = 0;
       wbMergeStatus();
-      var label = ((meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer'));
+      var label = wbCdfLabel(meta);
+      var icpMap = wbFileIcpMap();
       var failed = function (e) {
         if (gen !== wbMerge.gen) return;
         wbMerge.status = 'failed'; wbMergeStatus();
@@ -1775,13 +2419,16 @@
           google.script.run
             .withSuccessHandler(function () { if (gen !== wbMerge.gen) return; i++; wbMerge.done = i; wbMergeStatus(); next(); })
             .withFailureHandler(failed)
-            .apiWbMergeAdd(startRes.mergedId, ids[i]);
+            .apiWbMergeAdd(startRes.mergedId, ids[i], icpMap[ids[i]] || []);
         };
         next();
       }).withFailureHandler(failed).apiWbMergeStart(label);
     }
 
     function wbFinish(btn) {
+      if (wbProspect && !wbProsName() && ((wbLastRows && wbLastRows.length) || wbManual.length)) {
+        alert('Prospect session: enter the registered name first (under “Prospect — not in Betty”).'); return;
+      }
       if (wbQCustConflict()) { alert('Customer ID conflict — resolve it in the "Queue under Customer ID" field first (see the red notice).'); return; }
       var meta = wbBuildFinishMeta();
       var ids = wbSession.map(function (f) { return f.id; });
@@ -1808,6 +2455,8 @@
       }
 
       wbFinishBtn = btn; wbFinishMeta = meta; wbFinishIds = ids;
+      wbFinishTable = wbAnalysisTable(meta);
+      wbFinishIcpMap = wbFileIcpMap();
       if (wbMerge.status === 'running') {
         wbFinishPending = true;
         setLbl('Waiting for archive\u2026');
@@ -1831,17 +2480,26 @@
           setLbl('Finishing\u2026');
           google.script.run.withSuccessHandler(function (res) {
             setLbl('Finish customer');
-            var h = '<p class="ok">Consumption archive: <a href="' + esc(merged.url) + '" target="_blank">' + esc(merged.name) + '</a>' +
-              (merged.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(merged.fileId) + '">⬇ download to PC</a>' : '') + '</p>';
+            var h = '<p class="ok">Consumption archive: <b>' + esc(merged.name) + '</b><br>' +
+              '<a href="' + esc(merged.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' +
+              (merged.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(merged.fileId) + '">' + ICONS.download + ' download to PC</a>' : '') +
+              (merged.shared === false ? ' <span class="flag">⚠ link-sharing could not be set (' + esc(merged.shareError || '') + ') — others may hit an access prompt</span>' : '') +
+              '</p>';
+            if (merged.analysisError) h += '<p class="flag">⚠ The “Analysis” tab could not be added to the file (' + esc(merged.analysisError) + ') — the raw data tabs are all there.</p>';
             if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
-            if (res.duplicates && res.duplicates.length) h += '<p class="flag">\u26a0 Already queued (now duplicated \u2014 resolve on the RFP tab): ' + res.duplicates.map(esc).join(', ') + '</p>';
+            h += wbDupHtml(res);
             if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
             if (res.queueError) h += '<p class="error">' + esc(res.queueError) + '</p>';
+            if (res.indexed) h += '<p class="muted">Indexed — find this file again any time on the 🗄 Archive tab.</p>';
+            if (res.indexError) h += '<p class="flag">⚠ ' + esc(res.indexError) + ' (the file itself is fine).</p>';
             wbResetSession(btn);
             document.getElementById('wbWarn').innerHTML = h;
             rfpLoaded = false;
-          }).withFailureHandler(fail).apiWbFinalise(ids, meta, merged.url, wbSentToQueue);
-        }).withFailureHandler(fail).apiWbMergeExport(mergedId);
+            arcLoaded = false;
+            cdfTotalsLoad(true);
+          }).withFailureHandler(fail).apiWbFinalise(ids, meta, merged.url, wbSentToQueue,
+            { fileId: merged.fileId, name: merged.name, url: merged.url });
+        }).withFailureHandler(fail).apiWbMergeExport(mergedId, { label: wbCdfLabel(meta), analysis: wbFinishTable });
       };
 
       if (!ids.length) {
@@ -1851,7 +2509,7 @@
           setLbl('Finish customer');
           var h = '';
           if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
-          if (res.duplicates && res.duplicates.length) h += '<p class="flag">\u26a0 Already queued: ' + res.duplicates.map(esc).join(', ') + '</p>';
+          h += wbDupHtml(res);
           if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
           wbResetSession(btn);
           document.getElementById('wbWarn').innerHTML = h;
@@ -1867,7 +2525,8 @@
       }
 
       // No usable background merge (failed or never ran): rebuild inline.
-      var labelText = ((meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer'));
+      var labelText = wbCdfLabel(meta);
+      var finIcpMap = wbFinishIcpMap || {};
       setLbl('Creating archive\u2026');
       google.script.run.withSuccessHandler(function (startRes) {
         var i = 0;
@@ -1877,7 +2536,7 @@
           google.script.run
             .withSuccessHandler(function () { i++; addNext(); })
             .withFailureHandler(fail)
-            .apiWbMergeAdd(startRes.mergedId, ids[i]);
+            .apiWbMergeAdd(startRes.mergedId, ids[i], finIcpMap[ids[i]] || []);
         };
         addNext();
       }).withFailureHandler(fail).apiWbMergeStart(labelText);
@@ -1889,7 +2548,18 @@
       wbSession = []; wbSelected = null;
       wbAnalysedIds = null;
       wbLastRows = null;
+      wbLastRes = null;
       wbFinishPending = false;
+      wbFinishTable = null; wbFinishIcpMap = null;
+      // Prospect switch, EA answers and fuel overrides belong to the
+      // finished session only.
+      wbProspect = false;
+      document.getElementById('wbProspectChk').checked = false;
+      document.getElementById('wbProspectBox').style.display = 'none';
+      document.getElementById('wbProsName').value = '';
+      document.getElementById('wbProsTrading').value = '';
+      wbEa = {}; wbEaAsked = {}; wbEaGen++; wbEaErr = '';
+      wbFuelOv = {};
       wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
       wbMergeStatus();
       wbRenderFiles();
@@ -1917,6 +2587,8 @@
         if (el) el.value = '';
       }
       wbPathways = {};
+      wbExtRet = {};
+      wbDefExtRetVal = '';
       wbInclReg = {};
       wbQCustVal = '';
       wbQCustTouched = false;
@@ -1941,7 +2613,8 @@
 
     // ---------------- RFP tab ----------------
     // Three pathway sections over ONE queue: Standard bulk / Urgent /
-    // Extensions (grouped by incumbent), plus Closed and Send history.
+    // Extensions (grouped by the operator-set extension retailer),
+    // plus Closed and Send history.
     // "Sent" is never a status — the chips derive from the send log.
     // Build = file + draft only; Send = email + immutable log batch;
     // Close = operator-confirmed tick boxes (pre-assisted, never auto).
@@ -2006,6 +2679,17 @@
       return out;
     }
 
+    // Retailers an extension can target: BULK + schema, inactive
+    // included (an expiring quote can sit with an inactive retailer).
+    function rfpExtRetailers() {
+      var out = [];
+      var rts = (rfpData && rfpData.retailers) || [];
+      for (var i = 0; i < rts.length; i++) {
+        if (rts[i].mode === 'BULK' && rts[i].hasSchema) out.push(rts[i]);
+      }
+      return out;
+    }
+
     function rfpFuelOk(rt, row) {
       var gas = String(row.icpType).toLowerCase() === 'gas';
       return rt.fuels === 'BOTH' || (gas ? rt.fuels === 'GAS' : rt.fuels === 'ELEC');
@@ -2019,7 +2703,7 @@
         ? '<img src="' + logo + '" alt="' + esc(code) + '" title="' + esc(code) + (date ? ' — sent ' + esc(date) : ' — not sent') + '" style="height:18px;vertical-align:middle;border-radius:3px' + (date ? '' : ';filter:grayscale(1);opacity:.35') + '">'
         : esc(code.slice(0, 4));
       return '<span class="pill" style="white-space:nowrap;' +
-        (date ? 'color:var(--good);border-color:var(--good)' : 'color:#7497AA;opacity:.6') + '">' +
+        (date ? 'color:var(--good);border-color:var(--good)' : 'color:#5F7378;opacity:.6') + '">' +
         label + (date ? ' ' + esc(date.slice(5)) : '') + '</span>';
     }
 
@@ -2027,9 +2711,11 @@
       var cov = (rfpData.coverage || {})[row.icp] || {};
       var parts = [];
       if (row.extension) {
-        var code = row.incumbent && row.incumbent.code;
+        // 9 Nov: the extension retailer is operator-set (the expiring
+        // quote's retailer), never derived from the EA incumbent.
+        var code = row.extRetailer;
         if (code) parts.push(rfpChip(code, cov[code]));
-        else parts.push('<span class="pill muted">' + esc((row.incumbent && row.incumbent.name) || 'retailer unknown') + '</span>');
+        else parts.push('<span class="pill muted">retailer not set</span>');
       } else {
         var rts = rfpBulkRetailers();
         for (var i = 0; i < rts.length; i++) {
@@ -2043,8 +2729,7 @@
     function rfpCovered(row) {
       var cov = (rfpData.coverage || {})[row.icp] || {};
       if (row.extension) {
-        var code = row.incumbent && row.incumbent.code;
-        return !!(code && cov[code]);
+        return !!(row.extRetailer && cov[row.extRetailer]);
       }
       var rts = rfpBulkRetailers();
       var any = false;
@@ -2104,6 +2789,9 @@
         rfpSmallBtn("rfpTickSection('" + key + "', false)", 'untick all') +
         rfpSmallBtn("rfpInvertSection('" + key + "')", 'invert ticks') +
         rfpSmallBtn("rfpSelectCovered('" + key + "')", 'tick fully sent') +
+        (key === 'urg' ? rfpSmallBtn("rfpMoveTicked('" + key + "', 'STANDARD', this)", '→ standard')
+                       : rfpSmallBtn("rfpMoveTicked('" + key + "', 'URGENT', this)", '→ urgent')) +
+        rfpSmallBtn("rfpMoveTicked('" + key + "', 'EXTENSION', this)", '→ extensions') +
         '<span style="flex:1"></span>' +
         (opts
           ? '<select id="rfpRet_' + key + '" style="height:38px;border:1px solid var(--tuc-line);border-radius:6px;padding:0 8px">' + opts + '</select>' +
@@ -2118,37 +2806,83 @@
     function rfpExtSectionHtml(rows) {
       rfpExtGroupList = [];
       if (!rows.length) return '<p class="muted">Nothing here.</p>';
-      var h = '<p class="muted">An extension goes to the ICP’s CURRENT retailer — one file and one email per retailer below.</p>';
-      var byName = {};
+      // 9 Nov: grouped by the OPERATOR-SET extension retailer (the
+      // expiring quote's retailer — set at the Workbench when queueing,
+      // or here with "set retailer for ticked"). The old EA-incumbent
+      // grouping was the wrong concept and is gone.
+      var h = '<p class="muted">An extension goes to the retailer whose quote is expiring — set it per row below; one file and one email per retailer.</p>';
+      var rts = rfpExtRetailers();
+      var rtNames = {};
+      var retOpts = '<option value="">— retailer —</option>';
+      for (var ri = 0; ri < rts.length; ri++) {
+        rtNames[rts[ri].code] = rts[ri].name;
+        retOpts += '<option value="' + esc(rts[ri].code) + '">' + esc(rts[ri].name) +
+          (rts[ri].active ? '' : ' (inactive)') + '</option>';
+      }
+      var byCode = {};
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
-        var nm = (r.incumbent && r.incumbent.name) || 'Unknown retailer';
-        if (!byName[nm]) {
-          byName[nm] = { name: nm, code: (r.incumbent && r.incumbent.code) || null, rows: [] };
-          rfpExtGroupList.push(byName[nm]);
+        var code = r.extRetailer || '';
+        if (!byCode[code]) {
+          byCode[code] = { code: code || null, name: code ? (rtNames[code] || code) : 'Retailer not set', rows: [] };
+          rfpExtGroupList.push(byCode[code]);
         }
-        byName[nm].rows.push(r);
+        byCode[code].rows.push(r);
       }
+      // "Retailer not set" first so it cannot be missed.
+      rfpExtGroupList.sort(function (a, b) {
+        return (a.code ? 1 : 0) - (b.code ? 1 : 0) || String(a.name).localeCompare(String(b.name));
+      });
       for (var gi = 0; gi < rfpExtGroupList.length; gi++) {
         var g = rfpExtGroupList[gi];
         // Same control row as Standard/Urgent (decided 2 Nov), scoped
-        // to this incumbent's group.
+        // to this retailer's group.
         h += '<div style="margin:10px 0;border:1px solid var(--tuc-line);border-radius:8px;padding:6px 12px 10px">' +
-          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><b>' + esc(g.name) + '</b> <span class="muted">(' + g.rows.length + ')</span></p>' +
+          '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><b>' + esc(g.name) + '</b> <span class="muted">(' + g.rows.length + ')</span>' +
+          '<span style="flex:1"></span>' +
+          '<span class="muted">set retailer:</span>' +
+          '<select id="rfpExtRet_' + gi + '" style="height:30px;border:1px solid var(--tuc-line);border-radius:6px;padding:0 6px">' + retOpts + '</select>' +
+          rfpSmallBtn('rfpSetExtRetTicked(' + gi + ', this)', 'apply to ticked') +
+          '</p>' +
           '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
           rfpSmallBtn('rfpTickGroup(' + gi + ', true)', 'tick all') +
           rfpSmallBtn('rfpTickGroup(' + gi + ', false)', 'untick all') +
           rfpSmallBtn('rfpInvertGroup(' + gi + ')', 'invert ticks') +
           rfpSmallBtn('rfpCoveredGroup(' + gi + ')', 'tick fully sent') +
+          rfpSmallBtn('rfpMoveGroupTicked(' + gi + ", 'STANDARD', this)", '→ standard') +
+          rfpSmallBtn('rfpMoveGroupTicked(' + gi + ", 'URGENT', this)", '→ urgent') +
           '<span style="flex:1"></span>' +
           (g.code
             ? '<button onclick="rfpBuildExt(' + gi + ', this)" style="min-width:0;padding:0 16px">🧾 Build file &amp; draft</button>'
-            : '<span class="flag">⚠ not in the RFP Retailers registry — add it (and its schema rows) to build a file</span>') +
+            : '<span class="flag">⚠ pick a retailer above and apply it to ticked rows to build a file</span>') +
           '<button onclick="rfpCloseGroup(' + gi + ', this)" style="min-width:0;padding:0 16px;background:var(--good)">✅ Close ticked</button>' +
           '<button onclick="rfpRemoveGroupTicked(' + gi + ', this)" style="min-width:0;padding:0 16px;background:var(--bad)">🗑 Remove ticked</button>' +
           '</p>' + rfpTableHtml(g.rows, false) + '</div>';
       }
       return h;
+    }
+
+    // Set the extension retailer on ticked rows in a group (9 Nov).
+    function rfpSetExtRetTicked(gi, btn) {
+      var g = rfpExtGroupList[gi];
+      if (!g) return;
+      var ids = rfpTickedIds(g.rows);
+      if (!ids.length) { alert('Tick the row(s) first.'); return; }
+      var sel = document.getElementById('rfpExtRet_' + gi);
+      var code = sel ? sel.value : '';
+      if (!code) { alert('Pick a retailer first.'); return; }
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="ok">' + r.changed + ' row(s) set to ' + esc(code) + '.</p>';
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) {
+          btn.disabled = false;
+          document.getElementById('rfpMsg').innerHTML = '<p class="error">' + esc(e.message || e) + '</p>';
+        })
+        .apiRfpSetExtRetailer(ids, code);
     }
 
     function rfpTickGroup(gi, on) {
@@ -2218,14 +2952,16 @@
       h += '<td class="tL mono">' + esc(r.added) +
           (r.urgent ? '<div class="error" style="font-weight:600;font-size:11px">URGENT</div>' : '') +
           (r.extension ? '<div class="flag" style="font-weight:600;font-size:11px">EXT</div>' : '') + '</td>' +
-        '<td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+        '<td class="tL">' + esc(r.customer) +
+          (r.customerId === 'PROSPECT' ? '<div><span class="pill">PROSPECT</span></div>'
+            : '<div class="muted">' + esc(r.customerId) + '</div>') + '</td>' +
         '<td class="tL mono">' + esc(r.icp) +
           (r.fileUrl ? '<div style="font-size:11px"><a href="' + esc(r.fileUrl) + '" target="_blank">consumption file</a></div>' : '') + '</td>' +
         '<td>' + esc(r.icpType) + '</td>';
       if (closed) {
         h += '<td class="tR" style="font-weight:600">' + fmtNum(r.annualKwh) + '</td>';
       } else {
-        h += '<td class="tR"><input type="number" value="' + esc(r.annualKwh) + '" title="Edit annual kWh — saves on change"' +
+        h += '<td class="tR"><input type="number" min="0" value="' + esc(r.annualKwh) + '" title="Edit annual kWh — saves on change; 0 is a valid figure"' +
           ' style="width:100px;text-align:right;font-weight:600;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px"' +
           ' onchange="rfpSetAnnual(\'' + esc(r.id) + '\', this)"></td>';
       }
@@ -2350,6 +3086,18 @@
       if (r.skippedFuel) h += '<p class="muted">' + r.skippedFuel + ' ICP(s) excluded (' + esc(r.retailerName) + ' takes ' +
         (r.fuels === 'ELEC' ? 'electricity' : 'gas') + ' only).</p>';
       if (r.gasBlanks) h += '<p class="flag">⚠ ' + r.gasBlanks + ' gas ICP(s) have blank retailer/address — fix and Build again before sending.</p>';
+      // EA registry step (10 Nov): electricity ICPs the Betty import
+      // does not have (prospects) are filled from the EA registry.
+      var ei = r.eaInfo;
+      if (ei && ei.asked) {
+        if (ei.resolved) h += '<p class="muted">' + ei.resolved + ' ICP(s) not in the Betty import were filled from the EA registry.</p>';
+        if (ei.notFound && ei.notFound.length) h += '<p class="flag">⚠ Not in the EA registry (gas or typo) — retailer/address blank in the file: ' + ei.notFound.map(esc).join(', ') + '</p>';
+        if (ei.pending) h += '<p class="flag">⚠ ' + ei.pending + ' ICP(s) have blank retailer/address: ' +
+          (ei.keySet
+            ? 'the EA lookup ran out of time or failed' + (ei.error ? ' (' + esc(ei.error) + ')' : '') + ' — Build again to pick up the rest.'
+            : 'they are not in the Betty import and the EA lookup is not set up for Walter (Script Property EA_API_KEY).') + '</p>';
+      }
+      if (ei && ei.importError) h += '<p class="flag">⚠ Betty EA import could not be read: ' + esc(ei.importError) + '</p>';
       if (r.dups && r.dups.length) {
         var dl = [];
         for (var i = 0; i < r.dups.length; i++) dl.push(esc(r.dups[i].icp) + ' (last ' + esc(r.dups[i].last) + ')');
@@ -2362,14 +3110,16 @@
       } else if (!r.draft.to) {
         h += '<p class="error">No email address for ' + esc(r.retailerName) + ' on the RFP Retailers tab — fill it there (or set rfp_test_redirect), or type one below.</p>';
       }
-      h += '<p class="muted">Check the file via the link. Wrong rows or numbers? Edit the queue and Build again — a fresh file replaces this draft.</p>' +
+      h += '<p class="muted">Check the file via the link. Wrong rows or numbers? Edit the queue and Build again — a fresh file replaces this draft. Cancel deletes the file; nothing is sent or logged.</p>' +
         '<div style="max-width:640px">' +
         '<label class="muted">To</label><input id="rfpTo" style="width:100%;border:1px solid var(--tuc-line);border-radius:6px;padding:8px" value="' + esc(r.draft.to) + '">' +
         '<label class="muted" style="margin-top:6px;display:block">Subject</label><input id="rfpSubject" style="width:100%;border:1px solid var(--tuc-line);border-radius:6px;padding:8px" value="' + esc(r.draft.subject) + '">' +
         '<label class="muted" style="margin-top:6px;display:block">Body</label>' +
         '<textarea id="rfpBody" style="width:100%;height:140px;border:1px solid var(--tuc-line);border-radius:6px;padding:8px;font-family:inherit">' + esc(r.draft.body) + '</textarea>' +
         '</div>' +
-        '<p style="margin-top:10px"><button onclick="rfpSend(this)">✉ <span>Send &amp; log batch</span></button></p></div>';
+        '<p style="margin-top:10px"><button onclick="rfpSend(this)">✉ <span>Send &amp; log batch</span></button> ' +
+        '<button onclick="rfpCancel(this)" style="min-width:0;padding:0 16px;margin-left:8px;background:var(--bad)">✖ ' +
+        (rfpAll ? 'Cancel &amp; stop the run' : 'Cancel') + '</button></p></div>';
       var area = document.getElementById('rfpDraft');
       area.innerHTML = h;
       area.scrollIntoView({ behavior: 'smooth' });
@@ -2398,6 +3148,52 @@
         .apiRfpSend({ fileId: rfpDraft.fileId, to: document.getElementById('rfpTo').value, cc: rfpDraft.draft.cc,
           subject: document.getElementById('rfpSubject').value, body: document.getElementById('rfpBody').value,
           rowIds: rfpDraft.rowIds, icps: rfpDraft.icps, retailer: rfpDraft.retailer, pathway: rfpDraft.pathway });
+    }
+
+    // Cancel a built draft (9 Nov): trash the file, send and log
+    // nothing, mark nothing as sent — no History trace. In an ALL
+    // run this also stops the remaining retailers; batches already
+    // sent earlier in the run stay logged as normal.
+    function rfpCancel(btn) {
+      if (!rfpDraft) return;
+      btn.disabled = true;
+      var d = rfpDraft;
+      var sentEarlier = !!(rfpAll && rfpAll.idx > 0);
+      rfpDraft = null;
+      rfpAll = null;
+      document.getElementById('rfpDraft').innerHTML = '';
+      google.script.run
+        .withSuccessHandler(function () {
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="ok">Cancelled — ' + esc(d.name) + ' deleted; nothing sent or logged.' +
+            (sentEarlier ? ' Retailers already sent in this run stay logged.' : '') + '</p>';
+        })
+        .withFailureHandler(function (e) {
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="flag">Cancelled — nothing sent or logged, but the file could not be deleted (' +
+            esc(e.message || e) + '). Remove ' + esc(d.name) + ' from the output folder by hand.</p>';
+        })
+        .apiRfpDiscardBuild(d.fileId);
+    }
+
+    // Move ticked rows to another pathway tab (9 Nov)
+    function rfpMoveTicked(key, pathway, btn) { rfpMoveIds(rfpTickedIds(rfpSections()[key]), pathway, btn); }
+    function rfpMoveGroupTicked(gi, pathway, btn) {
+      var g = rfpExtGroupList[gi];
+      if (g) rfpMoveIds(rfpTickedIds(g.rows), pathway, btn);
+    }
+
+    function rfpMoveIds(ids, pathway, btn) {
+      if (!ids.length) { alert('Tick the row(s) to move first.'); return; }
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (r) {
+          document.getElementById('rfpMsg').innerHTML =
+            '<p class="ok">' + r.changed + ' row(s) moved to ' + esc(pathway.toLowerCase()) + '.</p>';
+          rfpLoad(null);
+        })
+        .withFailureHandler(function (e) { if (btn) btn.disabled = false; alert(e.message || e); })
+        .apiRfpSetPathway(ids, pathway);
     }
 
     function rfpCloseTicked(key, btn) { rfpCloseIds(rfpTickedIds(rfpSections()[key]), btn); }
@@ -2493,6 +3289,8 @@
         .withFailureHandler(function (e) { btn.disabled = false; alert(e.message || e); })
         .apiRfpClearAll();
     }
+
+    cdfTotalsLoad(false); // header small print, loaded once the page is up
 
   </script>
 </body>

@@ -91,7 +91,7 @@ function loadRetailerCodes_() {
 /** Queue the session's ICPs for bulk pricing NOW, without finishing. */
 function apiWbQueueOnly(meta) {
   const q = wbQueueBulkQuote_(meta, '');
-  return { queued: q.queued, duplicates: q.duplicates, skippedIcps: q.skipped };
+  return { queued: q.queued, duplicates: q.duplicates, skippedIcps: q.skipped, reClosed: q.reClosed };
 }
 
 /**
@@ -224,15 +224,33 @@ function apiWbFinishV2(fileIds, meta) {
 }
 
 function apiWbMergeStart(label) {
-  const stamp = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd');
-  const name = 'CONS - ' + String(label || 'Unknown customer').replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' + stamp;
+  // CDF = Consumption Data File (renamed from CONS, 9 Nov)
+  const name = wbCdfName_(label);
   const merged = SpreadsheetApp.create(name);
   // Move it straight into CDP Output so nothing ever strands in My Drive root.
   DriveApp.getFileById(merged.getId()).moveTo(DriveApp.getFolderById(requireConfig_('output_folder_id')));
   return { mergedId: merged.getId(), name: name };
 }
 
-function apiWbMergeAdd(mergedId, fileId) {
+/**
+ * Tab label for one source file in the CDF (10 Nov): the ICP number(s)
+ * the file holds, as found by the analysis. Up to five ICPs are listed
+ * in full; beyond that the first four plus a count. A file with no
+ * ICP found keeps its file name.
+ */
+function wbCdfTabBase_(icps, fileName) {
+  const list = [];
+  const seen = {};
+  for (const x of icps || []) {
+    const u = String(x || '').trim();
+    if (u && !seen[u]) { seen[u] = true; list.push(u); }
+  }
+  if (!list.length) return fileName;
+  if (list.length <= 5) return list.join(', ');
+  return list.slice(0, 4).join(', ') + ' +' + (list.length - 4) + ' more';
+}
+
+function apiWbMergeAdd(mergedId, fileId, icps) {
   const merged = SpreadsheetApp.openById(mergedId);
   const used = {};
   for (const s of merged.getSheets()) used[s.getName().toLowerCase()] = true;
@@ -245,6 +263,8 @@ function apiWbMergeAdd(mergedId, fileId) {
   };
   const file = DriveApp.getFileById(fileId);
   const mime = file.getMimeType();
+  // Tabs are named by ICP (10 Nov), not by source file name.
+  const base = wbCdfTabBase_(icps, file.getName());
   let tabs = 0;
   let tempId = null;
   try {
@@ -262,7 +282,7 @@ function apiWbMergeAdd(mergedId, fileId) {
         if (s.getLastRow() === 0) continue;
         const copied = s.copyTo(merged);
         copied.setName(tabName(sheets.length > 1
-          ? file.getName() + ' - ' + s.getName() : file.getName()));
+          ? base + ' - ' + s.getName() : base));
         tabs++;
       }
     } else {
@@ -280,7 +300,7 @@ function apiWbMergeAdd(mergedId, fileId) {
       while (rows.length && rows[rows.length - 1].join('') === '') rows.pop();
       if (rows.length) {
         for (const r of rows) while (r.length < maxLen) r.push('');
-        const sheet = merged.insertSheet(tabName(file.getName()));
+        const sheet = merged.insertSheet(tabName(base));
         sheet.getRange(1, 1, rows.length, maxLen).setValues(rows);
         tabs++;
       }
@@ -292,26 +312,138 @@ function apiWbMergeAdd(mergedId, fileId) {
   }
 }
 
-function apiWbMergeExport(mergedId) {
+/**
+ * Best-effort link sharing (9 Nov): ANYONE_WITH_LINK first; when the
+ * Workspace admin blocks public links (the call throws), fall back to
+ * DOMAIN_WITH_LINK so everyone signed into a TUC account can open and
+ * download. Only total failure is reported.
+ */
+function shareForLinks_(file) {
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return { shared: true, shareError: '' };
+  } catch (e1) {
+    try {
+      file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+      return { shared: true, shareError: '' };
+    } catch (e2) {
+      return { shared: false, shareError: String(e2.message || e2) };
+    }
+  }
+}
+
+/** CDF file name: "CDF - <label> - <yyyy-MM-dd>". */
+function wbCdfName_(label) {
+  const stamp = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd');
+  return 'CDF - ' + String(label || 'Unknown customer').replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' + stamp;
+}
+
+/** A cell value that can never turn into a formula when written. */
+function wbSafeCell_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return isFinite(v) ? v : '';
+  const s = String(v);
+  return /^[=+\-@]/.test(s) && isNaN(Number(s)) ? "'" + s : s;
+}
+
+/**
+ * Write the "Analysis" tab as the FIRST tab of the CDF
+ * (10 Nov): the session summary, the ICP list with the annual figure
+ * that was queued, and the per ICP-register calculations with their
+ * flags. The client sends the same data it shows on screen.
+ * analysis: { summary: [[label, value]], icpHeader: [], icpRows: [[]],
+ *             regHeader: [], regRows: [[]] }
+ */
+function wbWriteAnalysisSheet_(merged, analysis) {
+  const a = analysis || {};
+  const rows = [];
+  const bold = [];
+  let operator = '';
+  try { operator = Session.getActiveUser().getEmail(); } catch (e) {}
+  const push = (r, isBold) => { if (isBold) bold.push(rows.length + 1); rows.push(r); };
+  push(['Analysis'], true);
+  for (const kv of a.summary || []) push([kv[0], kv[1]]);
+  push(['Built', Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HH:mm')]);
+  push(['Operator', operator]);
+  push(['Walter build', (typeof CDP_BUILD === 'undefined') ? '' : CDP_BUILD]);
+  push([]);
+  push(['ICPs'], true);
+  push(a.icpHeader || [], true);
+  for (const r of (a.icpRows || []).slice(0, 5000)) push(r);
+  push([]);
+  push(['ICP-registers (calculations)'], true);
+  push(a.regHeader || [], true);
+  for (const r of (a.regRows || []).slice(0, 20000)) push(r);
+
+  let width = 2;
+  for (const r of rows) if (r.length > width) width = r.length;
+  const grid = rows.map(r => {
+    const out = [];
+    for (let c = 0; c < width; c++) out.push(wbSafeCell_(r[c]));
+    return out;
+  });
+  let name = 'Analysis';
+  let n = 2;
+  while (merged.getSheetByName(name)) name = 'Analysis (' + (n++) + ')';
+  const sheet = merged.insertSheet(name, 0);
+  sheet.getRange(1, 1, grid.length, width).setValues(grid);
+  for (const rowNo of bold) sheet.getRange(rowNo, 1, 1, width).setFontWeight('bold');
+  sheet.setColumnWidth(1, 190);
+}
+
+/**
+ * opts (10 Nov, optional): { label, analysis }.
+ *   label    - final "<customer id> <name>" for the file name. The
+ *              workbook was named when the background merge STARTED;
+ *              the customer id/name can be edited after that, so the
+ *              name is settled here, at export.
+ *   analysis - data for the "Analysis" first tab.
+ */
+function apiWbMergeExport(mergedId, opts) {
+  opts = opts || {};
   const merged = SpreadsheetApp.openById(mergedId);
   const first = merged.getSheets()[0];
   if (merged.getSheets().length > 1 && first.getLastRow() === 0) merged.deleteSheet(first);
+  let analysisError = '';
+  if (opts.analysis) {
+    // The archive is still worth having if this tab cannot be built,
+    // but the operator is told (never a silent miss).
+    try { wbWriteAnalysisSheet_(merged, opts.analysis); }
+    catch (e) { analysisError = String(e.message || e); }
+  }
   SpreadsheetApp.flush();
-  const name = merged.getName();
+  const name = opts.label ? wbCdfName_(opts.label) : merged.getName();
   const blob = exportXlsx_(mergedId).setName(name + '.xlsx');
   const outFile = DriveApp.getFolderById(requireConfig_('output_folder_id')).createFile(blob);
   try { DriveApp.getFileById(mergedId).setTrashed(true); } catch (e) {}
-  return { name: outFile.getName(), url: outFile.getUrl(), fileId: outFile.getId() };
+  // Link sharing (9 Nov): operators clicking the archive links were
+  // hitting "request access" — anyone-with-link, with a domain
+  // fallback when the admin blocks public links. Failure is surfaced,
+  // not swallowed — the links still work for the owner.
+  const sh = shareForLinks_(outFile);
+  return { name: outFile.getName(), url: outFile.getUrl(), fileId: outFile.getId(),
+    sizeBytes: outFile.getSize(), shared: sh.shared, shareError: sh.shareError,
+    analysisError: analysisError };
 }
 
-function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue) {
+/**
+ * merged (10 Nov, optional): { fileId, name, url } of the exported
+ * CDF. When given, one row is appended to the CDF Index tab so the
+ * file can be found again from the Archive tab without Betty.
+ */
+function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue, merged) {
   const out = { queued: 0, duplicates: [], skippedIcps: [], trashed: [] };
+  if (meta && merged && merged.fileId) {
+    try { cdfIndexAdd_(meta, merged); out.indexed = true; }
+    catch (e) { out.indexError = 'CDF Index not updated: ' + e.message; }
+  }
   if (meta && !skipQueue) {
     try {
       const q = wbQueueBulkQuote_(meta, mergedUrl || '');
       out.queued = q.queued;
       out.duplicates = q.duplicates;
       out.skippedIcps = q.skipped;
+      out.reClosed = q.reClosed;
     } catch (e) {
       out.queueError = 'Queueing failed: ' + e.message;
     }
@@ -322,9 +454,20 @@ function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue) {
 }
 
 /**
+ * True when an ICP has an annual figure to queue. A genuine 0 kWh
+ * COUNTS (10 Nov: zero-consumption ICPs are rare but real and must
+ * reach the queue); only blank / unknown / negative does not.
+ */
+function wbHasAnnual_(v) {
+  if (v === null || v === undefined || v === '') return false;
+  const n = Number(v);
+  return isFinite(n) && n >= 0;
+}
+
+/**
  * Append one RFP Queue row per ICP that has an annual figure
  * (legacy appendToBulkPricing rule: ICP + type + annual or it does
- * not price). Rows arrive OPEN. Each ICP carries its OWN pathway
+ * not price; a real zero is an annual figure). Rows arrive OPEN. Each ICP carries its OWN pathway
  * (STANDARD | URGENT | EXTENSION — mutually exclusive, decided
  * 31 Oct; the Workbench queue-preview table sets it per ICP).
  * Duplicate OPEN ICPs are reported, never replaced — the operator
@@ -334,35 +477,72 @@ function wbQueueBulkQuote_(meta, fileUrl) {
   rfpEnsureSetup_();
   const sheet = SpreadsheetApp.openById(getConfig_()._backingId).getSheetByName(RFP_QUEUE_TAB);
 
+  // Duplicate detail (9 Nov): say WHERE the existing OPEN row lives
+  // (pathway tab, customer, date) instead of just naming the ICP.
+  // Behaviour stays add-anyway — the operator resolves on the RFP tab.
+  const fmtD = (d) => d ? Utilities.formatDate(new Date(d), 'Pacific/Auckland', 'yyyy-MM-dd') : '';
+  // EVERY open row per ICP is collected (9 Nov fix) — an ICP sitting
+  // in Urgent AND Standard gets both named, not just the last found.
   const existingOpen = {};
+  const lastClosed = {};
   if (sheet.getLastRow() > 1) {
-    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 13).getValues();
     for (const r of vals) {
-      if (String(r[2]).trim().toUpperCase() === 'OPEN') existingOpen[String(r[8]).trim()] = true;
+      const st = String(r[2]).trim().toUpperCase();
+      const icpKey = String(r[8]).trim();
+      if (!icpKey) continue;
+      if (st === 'OPEN') {
+        (existingOpen[icpKey] = existingOpen[icpKey] || []).push({
+          pathway: String(r[4]).trim() ? 'Extensions' : String(r[3]).trim() ? 'Urgent' : 'Standard',
+          customerId: String(r[5]), customer: String(r[6]), added: fmtD(r[1]),
+        });
+      } else if (st === 'CLOSED') {
+        lastClosed[icpKey] = fmtD(r[12] || r[1]);
+      }
     }
   }
 
   const rows = [];
   const duplicates = [];
   const skipped = [];
+  const reClosed = [];
   const now = new Date();
+  const normName = (s) => String(s || '').trim().toLowerCase();
+  // Prospect sessions (10 Nov): the customer is not in Betty, so the
+  // row carries the PROSPECT marker in the customer id column and the
+  // operator-typed names.
+  const custId = meta.prospect ? RFP_PROSPECT_ID : (meta.customerId || '');
   for (const icp of (meta.icps || [])) {
     if (!icp.icp) continue;
-    if (!(icp.annualKwh > 0)) { skipped.push(icp.icp); continue; }
-    if (existingOpen[icp.icp]) duplicates.push(icp.icp);
+    if (!wbHasAnnual_(icp.annualKwh)) { skipped.push(icp.icp); continue; }
+    const ex = existingOpen[icp.icp];
+    if (ex) {
+      // A prospect has no customer id, so "different customer" is
+      // judged on the name as well (10 Nov).
+      const diff = meta.prospect
+        ? ex.some(loc => loc.customerId !== RFP_PROSPECT_ID || normName(loc.customer) !== normName(meta.customer))
+        : String(meta.customerId || '') !== '' &&
+          ex.some(loc => String(meta.customerId) !== loc.customerId);
+      duplicates.push({ icp: icp.icp, locations: ex, diffCustomer: diff });
+    } else if (lastClosed[icp.icp]) {
+      reClosed.push({ icp: icp.icp, closed: lastClosed[icp.icp] });
+    }
     const icpType = icp.fuel === 'ELEC' ? 'Electricity' : icp.fuel === 'GAS' ? 'Gas' : '-';
     const pw = String(icp.pathway || 'STANDARD').toUpperCase();
     rows.push([
       Utilities.getUuid().slice(0, 8),
       now, 'OPEN', pw === 'URGENT' ? 'URGENT' : '', pw === 'EXTENSION' ? 'Y' : '',
-      meta.customerId || '', meta.customer || '', meta.tradingName || '',
-      icp.icp, icpType, Math.round(icp.annualKwh), fileUrl, '',
+      custId, meta.customer || '', meta.tradingName || '',
+      icp.icp, icpType, Math.round(Number(icp.annualKwh)), fileUrl, '',
+      // ext retailer (9 Nov): operator-chosen, extensions only; blank
+      // is allowed — set later on the RFP tab.
+      pw === 'EXTENSION' ? String(icp.extRetailer || '').trim().toUpperCase() : '',
     ]);
   }
   if (rows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
   }
-  return { queued: rows.length, duplicates: duplicates, skipped: skipped };
+  return { queued: rows.length, duplicates: duplicates, skipped: skipped, reClosed: reClosed };
 }
 
 /** Discard a background-merge workbook (stale: files added / re-analysed). */
