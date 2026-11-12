@@ -66,7 +66,31 @@ function translateRegister_(register, fuel, regMap) {
 
 // ---------------- Template fill ----------------
 
-function apiBettyFill(base64Data, uploadName, fileIds) {
+/**
+ * Betty meter type for a retailer time band (v2.16.1): the template's
+ * own vocabulary entry with the same name once case, spaces and
+ * hyphens are ignored ("Off-Peak" -> "Off Peak"); a weekend band also
+ * tries the "All ..." form ("Weekend Off-Peak" -> "All Weekend Off
+ * Peak"). null = Betty has no such meter type.
+ */
+function bettyMeterForBand_(band, vocab) {
+  const key = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const k = key(band);
+  if (!k) return null;
+  for (const v of vocab) if (key(v) === k) return v;
+  for (const v of vocab) if (key(v) === 'all' + k) return v;
+  return null;
+}
+
+/**
+ * bandData (v2.16.1, optional): { "<icp>|<register>": { schedule,
+ * slots: [{ name, monthly }] } } - the time bands shown on the
+ * Workbench (after any fold). An ICP-register listed there is written
+ * band by band; every other register is written whole, through the
+ * Register Map, as before.
+ */
+function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
+  const bandMap = bandData || {};
   const cfg = getConfig_();
   const runRef = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyyMMdd-HHmmss');
 
@@ -138,12 +162,60 @@ function apiBettyFill(base64Data, uploadName, fileIds) {
 
       const rowUpdates = [];
       const rowFlags = [];
+      const writtenCols = {};
+      let usedBands = false;
       for (const g of groups) {
         const a = g.analysis;
         if (a.avm === null || a.grade === 'NO_DATA') {
           rowFlags.push(g.register + ': no AVM (' + a.grade + ')');
           continue;
         }
+        // Slot: existing slot with this name, else first empty slot.
+        const writeSlot = (label, bettyType, value) => {
+          let target = null;
+          for (const s of slots) {
+            if (String(row[s.meterCol] || '').trim().toLowerCase() === bettyType.toLowerCase()) { target = s; break; }
+          }
+          let writeName = false;
+          if (!target) {
+            for (const s of slots) {
+              if (!String(row[s.meterCol] || '').trim()) { target = s; writeName = true; break; }
+            }
+          }
+          if (!target) {
+            rowFlags.push(label + ': no free meter slot (all 4 used) \u2014 not written');
+            flagsLog.push([icp, label, 'NO_FREE_SLOT', '']);
+            return;
+          }
+          const sheetRow = i + 2;
+          if (writeName) bulk.getRange(sheetRow, target.meterCol + 1).setValue(bettyType);
+          bulk.getRange(sheetRow, target.consCol + 1).setValue(value);
+          row[target.meterCol] = bettyType; // keep local copy current for multi-register ICPs
+          row[target.consCol] = value;
+          writtenCols[target.meterCol] = true;
+          rowUpdates.push(label + ' \u2192 ' + bettyType + ' = ' + value + ' (' + a.gradeEmoji + ' ' + a.grade + ')');
+        };
+
+        // Time bands shown on the Workbench: one Betty meter per band.
+        const bandEntry = bandMap[icp + '|' + g.register];
+        if (bandEntry && bandEntry.slots && bandEntry.slots.length) {
+          usedBands = true;
+          for (const sl of bandEntry.slots) {
+            const monthly = Number(sl.monthly);
+            const label = g.register + ' / ' + sl.name;
+            if (!isFinite(monthly) || monthly < 0) { rowFlags.push(label + ': no figure \u2014 not written'); continue; }
+            const bandType = bettyMeterForBand_(sl.name, vocab);
+            if (!bandType) {
+              rowFlags.push(label + ': Betty has no meter type for this band \u2014 not written');
+              flagsLog.push([icp, label, 'NO_METER_TYPE_FOR_BAND', String(bandEntry.schedule || '')]);
+              continue;
+            }
+            writeSlot(label, bandType, Math.round(monthly));
+          }
+          if (a.grade !== 'GOOD') flagsLog.push([icp, g.register, 'GRADE_' + a.grade, 'AVM ' + a.avm]);
+          continue;
+        }
+
         const bettyType = translateRegister_(g.register, g.lookup.fuel, regMap);
         if (!bettyType) {
           rowFlags.push(g.register + ': no Register Map entry \u2014 not written');
@@ -156,29 +228,20 @@ function apiBettyFill(base64Data, uploadName, fileIds) {
           if (summary.vocabularyGaps.indexOf(bettyType) === -1) summary.vocabularyGaps.push(bettyType);
           continue;
         }
-        // Slot: existing slot with this name, else first empty slot
-        let target = null;
+        writeSlot(g.register, bettyType, a.avm);
+        if (a.grade !== 'GOOD') flagsLog.push([icp, g.register, 'GRADE_' + a.grade, 'AVM ' + a.avm]);
+      }
+      // A meter already on the row that this run did not write (say an
+      // old "Anytime" total) now sits beside the bands: say so, it would
+      // double count in Betty.
+      if (usedBands && rowUpdates.length) {
         for (const s of slots) {
-          if (String(row[s.meterCol] || '').trim().toLowerCase() === bettyType.toLowerCase()) { target = s; break; }
-        }
-        let writeName = false;
-        if (!target) {
-          for (const s of slots) {
-            if (!String(row[s.meterCol] || '').trim()) { target = s; writeName = true; break; }
+          const nm = String(row[s.meterCol] || '').trim();
+          const val = Number(row[s.consCol]);
+          if (nm && !writtenCols[s.meterCol] && isFinite(val) && val !== 0) {
+            rowFlags.push('existing meter "' + nm + '" (' + val + ') was left as it is \u2014 check it does not double count with the bands');
           }
         }
-        if (!target) {
-          rowFlags.push(g.register + ': no free meter slot (all 4 used) \u2014 not written');
-          flagsLog.push([icp, g.register, 'NO_FREE_SLOT', '']);
-          continue;
-        }
-        const sheetRow = i + 2;
-        if (writeName) bulk.getRange(sheetRow, target.meterCol + 1).setValue(bettyType);
-        bulk.getRange(sheetRow, target.consCol + 1).setValue(a.avm);
-        row[target.meterCol] = bettyType; // keep local copy current for multi-register ICPs
-        row[target.consCol] = a.avm;
-        rowUpdates.push(g.register + ' \u2192 ' + bettyType + ' = ' + a.avm + ' (' + a.gradeEmoji + ' ' + a.grade + ')');
-        if (a.grade !== 'GOOD') flagsLog.push([icp, g.register, 'GRADE_' + a.grade, 'AVM ' + a.avm]);
       }
       if (rowUpdates.length) summary.updated.push({ icp: icp, customer: groups[0].lookup.registeredName, detail: rowUpdates, flags: rowFlags });
       else summary.notUpdated.push({ icp: icp, reason: rowFlags.join('; ') || 'nothing writable' });

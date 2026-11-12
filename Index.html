@@ -306,6 +306,8 @@
         <details id="wbBettySec" class="card2" style="display:none"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
           <p style="margin-top:8px"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
           <div id="wbBettyIdsArea"></div>
+          <p class="muted" style="font-size:12px;margin:8px 0 0">Export the customer’s Bulk Import Template from Betty, choose it here and Walter returns it filled:
+            Meter and Monthly Consumption on the <b>Current</b> rows, matched by ICP. An ICP whose time bands are shown above gets one meter per band; every other register goes through the Register Map. Unit costs are not written.</p>
           <p style="margin-top:10px">Betty template:
             <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
             <button onclick="document.getElementById('wbBettyFile').click()" style="min-width:0;padding:0 16px">📁 Choose template</button>
@@ -1762,7 +1764,7 @@
         google.script.run
           .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '📥 Fill template'; renderBettyResult(res, 'wbBettyFillArea', false); })
           .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
-          .apiBettyFill(b64, file.name, wbAnalysedIds);
+          .apiBettyFill(b64, file.name, wbAnalysedIds, wbBandBettyData());
       };
       reader.onerror = function () { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
       reader.readAsDataURL(file);
@@ -3689,6 +3691,11 @@
         shownN++;
         h += wbBandBlock(rows[i], res);
       }
+      if (shownN && !wbProspect) {
+        h += '<p style="margin:10px 0 0;border-top:1px solid var(--tuc-line);padding-top:10px">' +
+          '<button onclick="wbBandGoBetty()" style="min-width:0;padding:0 16px">📥 Fill a Betty template with these bands</button> ' +
+          '<span class="muted" style="font-size:12px">consumption only: one Betty meter per band with its average monthly kWh — unit costs are not written</span></p>';
+      }
       if (hidden.length) {
         h += '<div class="muted" style="font-size:12px;margin-top:6px">' +
           (shownN ? 'Half-hourly data, time bands not shown (current retailer has no schedules in the register): '
@@ -4012,6 +4019,39 @@
       var rt = wbBandRt(i); if (!rt) return;
       rt.folds = [];
       wbBandRes(i);
+    }
+
+    /**
+     * Time bands for the Betty template fill (v2.16.1): for every
+     * ICP-register whose bands are shown, the slots after any fold with
+     * their average monthly kWh. Consumption only - rates are typed
+     * into Betty by hand for now.
+     */
+    function wbBandBettyData() {
+      var out = {};
+      if (wbBandReg === null) return out;
+      var rows = wbBandRows();
+      for (var q = 0; q < rows.length; q++) {
+        var x = rows[q];
+        var res = wbBandResolve(x);
+        if (!res.shown || !res.sched) continue;
+        var c = bandCompute(x.sm, res.sched, res.st.rates);
+        var slots = [];
+        for (var s = 0; s < c.sl.slots.length; s++) {
+          var m = bandMonthly(c.sl.slots[s].total, c.split.days);
+          slots.push({ name: c.sl.slots[s].name, monthly: m === null ? null : Math.round(m) });
+        }
+        out[x.key] = { schedule: res.sched.retailer + ' · ' + res.sched.network, slots: slots };
+      }
+      return out;
+    }
+
+    /** Open the Betty bulk update section and bring it into view. */
+    function wbBandGoBetty() {
+      var sec = document.getElementById('wbBettySec');
+      if (!sec) return;
+      sec.open = true;
+      if (sec.scrollIntoView) sec.scrollIntoView({ block: 'center' });
     }
 
     /** Sections for the CDF "Analysis" tab: one per ICP-register whose time bands are shown. */
