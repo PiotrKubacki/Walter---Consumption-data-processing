@@ -165,10 +165,13 @@ function analyseFromCache_(fileIds) {
     const lookup = cdpLookupIcp_(icp);
     // B5: time profile from interval data inside the analysis window
     let timeProfile = null;
+    // v2.16: slot matrix for the retailer time-band split (Bands.gs).
+    let slotMatrix = null;
     if (analysis.layer === 'HH' && analysis.windowFrom && analysis.windowTo) {
       const hhInWindow = recs.filter(r => r.granularity === 'HH' &&
         r.periodStart >= analysis.windowFrom && r.periodEnd <= analysis.windowTo);
       if (hhInWindow.length) {
+        try { slotMatrix = bandSlotMatrix_(hhInWindow); } catch (e) { slotMatrix = null; }
         let registerConfig = '';
         for (const r of hhInWindow) if (r.registerConfig) { registerConfig = r.registerConfig; break; }
         const windowSel = selectWindows_(boundaries, lookup.networkName, lookup.networkId, registerConfig);
@@ -182,6 +185,7 @@ function analyseFromCache_(fileIds) {
     }
     const serialised = serialiseAnalysis_(analysis);
     serialised.timeProfile = timeProfile;
+    serialised.slotMatrix = slotMatrix;
     rows.push({
       icp: icp, register: register,
       sources: sourceList,

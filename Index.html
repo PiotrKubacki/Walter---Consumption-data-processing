@@ -143,6 +143,7 @@
     <button id="tabBtnWb" class="active" onclick="showTab('wb')">🛠 Workbench</button>
     <button id="tabBtnBq" onclick="showTab('bq')">💰 RFP</button>
     <button id="tabBtnArc" onclick="showTab('arc')">🗄 Archive</button>
+    <button id="tabBtnReg" onclick="showTab('reg')">📒 Register</button>
     <button id="tabBtnBatch" onclick="showTab('batch')" style="margin-left:auto">⚡ Batch</button>
   </nav>
   <main>
@@ -256,6 +257,10 @@
           <div class="cardhead"><h2>⚡ Calculations</h2></div>
           <div id="wbCalcs" class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</div>
         </div>
+        <div class="card2" id="wbBandCard" style="display:none">
+          <div class="cardhead"><h2>🕑 Time bands</h2><span class="muted" style="font-size:11px">half-hourly consumption split into the retailer’s bands for the network · schedules live on the 📒 Register tab</span></div>
+          <div id="wbBands"></div>
+        </div>
         <div class="card2" id="wbNotes" style="display:none">
           <div class="cardhead">
             <h2>📝 Proposal notes</h2>
@@ -333,6 +338,21 @@
         <button class="btn-sm" onclick="document.getElementById('arcQ').value='';arcSearch()">show latest</button>
       </p>
       <div id="arcArea" class="muted">Loading…</div>
+    </div>
+  </div>
+  <div id="tab-register" style="display:none">
+    <div class="card" style="padding:18px 20px">
+      <h2>📒 Register — retailer time bands by network</h2>
+      <p class="muted" style="font-size:13px;max-width:900px">Which tariff band applies at which time of day is decided by the <b>retailer</b>, network by network.
+        These schedules are typed by hand from the retailer’s own page
+        (Powershop: <a href="https://www.powershop.co.nz/welcome-to-get-shifty/find-peak-and-off-peak-times/" target="_blank">find peak and off-peak times</a>),
+        so they need re-checking from time to time — use “checked today” once a row has been compared with the page.
+        The Workbench uses them to split half-hourly consumption into bands.</p>
+      <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button onclick="regEdit(-1)" style="min-width:0;padding:0 16px">＋ Add a network</button>
+        <button class="btn-sm" onclick="regReload()">reload</button>
+      </p>
+      <div id="regArea" class="muted">Loading…</div>
     </div>
   </div>
   <div id="tab-batch" style="display:none">
@@ -978,12 +998,15 @@
       document.getElementById('tab-bulkquote').style.display = which === 'bq' ? '' : 'none';
       document.getElementById('tab-archive').style.display = which === 'arc' ? '' : 'none';
       document.getElementById('tabBtnArc').className = which === 'arc' ? 'active' : '';
+      document.getElementById('tab-register').style.display = which === 'reg' ? '' : 'none';
+      document.getElementById('tabBtnReg').className = which === 'reg' ? 'active' : '';
       document.getElementById('tabBtnWb').className = which === 'wb' ? 'active' : '';
       document.getElementById('tabBtnBatch').className = which === 'batch' ? 'active' : '';
       document.getElementById('tabBtnBq').className = which === 'bq' ? 'active' : '';
       if (which === 'batch' && !batchLoaded) { batchLoaded = true; loadFiles(); }
       if (which === 'bq' && !rfpLoaded) { rfpLoaded = true; rfpLoad(null); }
       if (which === 'arc' && !arcLoaded) { arcLoaded = true; arcSearch(); }
+      if (which === 'reg' && !regTabLoaded) { regTabLoaded = true; regShow(); }
     }
 
     // ---------------- Archive (CDF Index search, 10 Nov) ----------------
@@ -1316,6 +1339,7 @@
       wbRenderQueuePrev();
       wbRenderSession();
       wbEaKick();
+      wbBandsRender(true);
     }
 
     function wbCalcRow(r) {
@@ -1954,6 +1978,7 @@
     // waits until no input in the table has focus.
     var wbEaRenderWaiting = false;
     function wbEaRender() {
+      wbBandsRender(); // an EA answer can supply the network / retailer of a prospect's ICP
       var box = document.getElementById('wbQueuePrev');
       var ae = document.activeElement;
       if (ae && box && box.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')) {
@@ -2360,7 +2385,9 @@
           a.annualKwh === null || a.annualKwh === undefined ? '' : a.annualKwh,
           flags.join('; ')]);
       }
-      return { summary: summary, icpHeader: icpHeader, icpRows: icpRows, regHeader: regHeader, regRows: regRows };
+      var sections = [];
+      try { sections = wbBandSections(); } catch (e) { sections = [{ title: 'Time bands', rows: [['Could not be written', String(e.message || e)]] }]; }
+      return { summary: summary, icpHeader: icpHeader, icpRows: icpRows, regHeader: regHeader, regRows: regRows, sections: sections };
     }
 
     // ---------------- Background archive merge ----------------
@@ -2560,6 +2587,8 @@
       document.getElementById('wbProsTrading').value = '';
       wbEa = {}; wbEaAsked = {}; wbEaGen++; wbEaErr = '';
       wbFuelOv = {};
+      wbBand = {}; // time-band picks and typed rates belong to the finished session
+      wbBandsRender(true);
       wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
       wbMergeStatus();
       wbRenderFiles();
@@ -3290,7 +3319,982 @@
         .apiRfpClearAll();
     }
 
+
+    // ---------------- Retailer time bands (v2.16, 13 Nov) ----------------
+    // Replaces the "HHR v2.0" sheet. A retailer (Powershop) decides which
+    // tariff band applies at which time of day on each network; the
+    // schedules live in the Band Register (Register tab). For an ICP
+    // with half-hourly data the server sends a slot matrix (kWh by
+    // weekday/weekend x month x half-hour); everything below is worked
+    // out here from that matrix:
+    //   1. consumption per band (average monthly + annual, by season);
+    //   2. a consumption-weighted average of the current monthly rates
+    //      per band ($/kWh excl GST);
+    //   3. a fold down to Betty's four rate slots when a network has
+    //      more than four bands (always with a visible warning).
+    // Public holidays are ordinary days. Summer = Oct-Mar, Winter =
+    // Apr-Sep (Powershop's seasons).
+
+    var wbBandReg = null;   // register rows from the server; null until loaded
+    var wbBandRegErr = '';
+    var wbBand = {};        // 'icp|register' -> per ICP-register state (this session only)
+    var BAND_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var BAND_AVG_MONTH = 365.25 / 12;
+    var BAND_MAX_SLOTS = 4;
+    var BAND_GST = 1.15;
+
+    function bandIsWinter(m) { return m >= 3 && m <= 8; } // month index: Apr..Sep
+
+    function bandRegLoad(then) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          wbBandReg = (res && res.rows) || [];
+          wbBandRegErr = '';
+          wbBandsRender(true);
+          if (then) then();
+        })
+        .withFailureHandler(function (e) {
+          wbBandReg = [];
+          wbBandRegErr = e.message || String(e);
+          wbBandsRender(true);
+          if (then) then();
+        })
+        .apiBandRegister();
+    }
+
+    /** Network / retailer names compared loosely: case, accents, punctuation and "Limited" ignored. */
+    function bandNorm(s) {
+      var t = String(s === undefined || s === null ? '' : s).toUpperCase();
+      if (t.normalize) t = t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+      return t.replace(/[^A-Z0-9]+/g, ' ').replace(/\b(LIMITED|LTD)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function bandRegKey(row) { return bandNorm(row.retailer) + '|' + bandNorm(row.network); }
+
+    function bandRetailers() {
+      var out = [], seen = {};
+      var rows = wbBandReg || [];
+      for (var i = 0; i < rows.length; i++) {
+        var k = bandNorm(rows[i].retailer);
+        if (k && !seen[k]) { seen[k] = true; out.push(rows[i].retailer); }
+      }
+      return out;
+    }
+
+    /** The usable register row for retailer x network, or null. Exact name first, then one name containing the other. */
+    function bandFindSched(retailer, network) {
+      var rows = wbBandReg || [];
+      var rn = bandNorm(retailer), nn = bandNorm(network);
+      if (!rn || !nn) return null;
+      var loose = null;
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (!r.ok || bandNorm(r.retailer) !== rn) continue;
+        var bn = bandNorm(r.network);
+        if (bn === nn) return r;
+        if (!loose && bn.length >= 5 && nn.length >= 5 && (bn.indexOf(nn) !== -1 || nn.indexOf(bn) !== -1)) loose = r;
+      }
+      return loose;
+    }
+
+    function bandSchedByKey(key) {
+      var rows = wbBandReg || [];
+      for (var i = 0; i < rows.length; i++) if (rows[i].ok && bandRegKey(rows[i]) === key) return rows[i];
+      return null;
+    }
+
+    /**
+     * Split a slot matrix into the schedule's bands.
+     * Returns { bands: [names, weekday order first], kwh: { band:
+     * { summer, winter, total, months: [12] } }, days, total }.
+     */
+    function bandSplit(sm, sched) {
+      var bands = [], kwh = {};
+      var add = function (b) {
+        if (!Object.prototype.hasOwnProperty.call(kwh, b)) {
+          kwh[b] = { summer: 0, winter: 0, total: 0, months: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+          bands.push(b);
+        }
+      };
+      var s;
+      for (s = 0; s < 48; s++) add(sched.wdSlots[s]);
+      for (s = 0; s < 48; s++) add(sched.weSlots[s]);
+      var total = 0;
+      for (var dt = 0; dt < 2; dt++) {
+        var slots = dt ? sched.weSlots : sched.wdSlots;
+        for (var m = 0; m < 12; m++) {
+          for (s = 0; s < 48; s++) {
+            var v = sm.m[dt * 576 + m * 48 + s];
+            if (!v) continue;
+            var k = kwh[slots[s]];
+            k.months[m] += v;
+            k.total += v;
+            if (bandIsWinter(m)) k.winter += v; else k.summer += v;
+            total += v;
+          }
+        }
+      }
+      return { bands: bands, kwh: kwh, days: Number(sm.days) || 0, total: total };
+    }
+
+    function bandRatesFresh(bands) {
+      var grid = [];
+      for (var m = 0; m < 12; m++) grid.push([]);
+      return { cols: bands.slice(), grid: grid, daily: '', gst: true, map: {}, folds: [], forBands: bands.join('|') };
+    }
+
+    /** A typed rate as a number, or null when blank / not a number / negative. */
+    function bandNum(v) {
+      if (v === null || v === undefined) return null;
+      var s = String(v).replace(/[$,\s]/g, '').replace(/c$/i, '');
+      if (s === '') return null;
+      var n = Number(s);
+      return isFinite(n) && n >= 0 ? n : null;
+    }
+
+    function bandRatesAny(rt) {
+      if (!rt) return false;
+      for (var m = 0; m < 12; m++) for (var c = 0; c < rt.cols.length; c++) if (bandNum(rt.grid[m][c]) !== null) return true;
+      return false;
+    }
+
+    function bandNameKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+
+    function bandTraits(name) {
+      var n = String(name || '').toLowerCase();
+      var off = /off\s*-?\s*peak/.test(n);
+      return {
+        weekend: /week\s*-?\s*end/.test(n),
+        off: off,
+        peak: !off && /peak/.test(n),
+        night: /night/.test(n),
+        shoulder: /shoulder/.test(n),
+        day: /\bday\b/.test(n) && !/week\s*day/.test(n)
+      };
+    }
+
+    /**
+     * Which rate column prices a band: the operator's choice if there
+     * is one, else the column with the same name, else the best match
+     * on the words in the name. -1 = none.
+     */
+    function bandMapCol(rt, band) {
+      var cols = rt.cols;
+      if (Object.prototype.hasOwnProperty.call(rt.map, band)) {
+        var m = rt.map[band];
+        if (m === -1) return -1;
+        if (m >= 0 && m < cols.length) return m;
+      }
+      var nb = bandNameKey(band), i;
+      for (i = 0; i < cols.length; i++) if (bandNameKey(cols[i]) === nb) return i;
+      var bt = bandTraits(band);
+      var best = -1, bestScore = 0;
+      for (i = 0; i < cols.length; i++) {
+        var ct = bandTraits(cols[i]);
+        var sc = 0;
+        if (bt.weekend && ct.weekend) sc += 3;
+        if (bt.weekend !== ct.weekend) sc -= 2;
+        if (bt.peak && ct.peak) sc += 3;
+        if (bt.off && ct.off) sc += 2;
+        if (bt.night && ct.night) sc += 3;
+        if (bt.shoulder && ct.shoulder) sc += 3;
+        if (bt.day && ct.day) sc += 2;
+        if (bt.night && ct.off && !ct.night) sc += 1; // no night rate: off-peak is the nearest thing
+        if (sc > bestScore) { bestScore = sc; best = i; }
+      }
+      return best;
+    }
+
+    /**
+     * Weighted average rate per band: sum(month kWh x that month's
+     * rate) / sum(month kWh), over the months that have consumption.
+     * Typed rates are c/kWh (incl GST unless unticked); results are
+     * $/kWh excl GST. A month with consumption but no rate is listed
+     * in "missing" and left out of the average.
+     */
+    function bandWeighted(split, rt) {
+      var div = 100 * (rt.gst ? BAND_GST : 1);
+      var out = { byBand: {}, daily: null };
+      for (var b = 0; b < split.bands.length; b++) {
+        var band = split.bands[b];
+        var col = bandMapCol(rt, band);
+        var res = { col: col, rate: null, missing: [] };
+        if (col >= 0) {
+          var num = 0, den = 0, plain = 0, plainN = 0;
+          for (var m = 0; m < 12; m++) {
+            var r = bandNum(rt.grid[m][col]);
+            if (r !== null) { plain += r; plainN++; }
+            var k = split.kwh[band].months[m];
+            if (!(k > 0)) continue;
+            if (r === null) { res.missing.push(BAND_MONTHS[m]); continue; }
+            num += k * r; den += k;
+          }
+          if (den > 0) res.rate = num / den / div;
+          else if (!(split.kwh[band].total > 0) && plainN) res.rate = plain / plainN / div; // no consumption: plain average
+        }
+        out.byBand[band] = res;
+      }
+      var d = bandNum(rt.daily);
+      if (d !== null) out.daily = d / div;
+      return out;
+    }
+
+    /**
+     * Betty has four rate slots. Start with one slot per band; apply
+     * the operator's folds; then, while more than four remain and every
+     * slot has a rate, fold the slot with the least consumption into
+     * the slot with the closest rate (combined rate weighted by kWh, so
+     * the total cost does not change).
+     */
+    function bandSlots(split, w, rt) {
+      var slots = [];
+      for (var b = 0; b < split.bands.length; b++) {
+        var band = split.bands[b], k = split.kwh[band];
+        slots.push({ name: band, parts: [band], summer: k.summer, winter: k.winter, total: k.total, rate: w.byBand[band].rate });
+      }
+      var folds = [];
+      var find = function (name) { for (var i = 0; i < slots.length; i++) if (slots[i].name === name) return i; return -1; };
+      var merge = function (fi, ti, auto) {
+        var f = slots[fi], t = slots[ti];
+        if (!(f.total > 0)) { /* nothing consumed in f: t keeps its rate */ }
+        else if (!(t.total > 0)) t.rate = f.rate;
+        else if (f.rate === null || t.rate === null) t.rate = null;
+        else t.rate = (f.rate * f.total + t.rate * t.total) / (f.total + t.total);
+        t.summer += f.summer; t.winter += f.winter; t.total += f.total;
+        t.parts = t.parts.concat(f.parts);
+        folds.push({ from: f.name, to: t.name, auto: auto });
+        slots.splice(fi, 1);
+      };
+      var manual = rt.folds || [];
+      for (var mi = 0; mi < manual.length; mi++) {
+        var a = find(manual[mi].from), c = find(manual[mi].to);
+        if (a !== -1 && c !== -1 && a !== c) merge(a, c, false);
+      }
+      var needRates = false;
+      while (slots.length > BAND_MAX_SLOTS) {
+        var all = true, i;
+        for (i = 0; i < slots.length; i++) if (slots[i].rate === null) all = false;
+        if (!all) { needRates = true; break; }
+        var src = 0;
+        for (i = 1; i < slots.length; i++) if (slots[i].total <= slots[src].total) src = i;
+        var tgt = -1;
+        for (i = 0; i < slots.length; i++) {
+          if (i === src) continue;
+          if (tgt === -1) { tgt = i; continue; }
+          var di = Math.abs(slots[i].rate - slots[src].rate), dt = Math.abs(slots[tgt].rate - slots[src].rate);
+          if (di < dt - 1e-12 || (Math.abs(di - dt) <= 1e-12 && slots[i].total > slots[tgt].total)) tgt = i;
+        }
+        merge(src, tgt, true);
+      }
+      return { slots: slots, folds: folds, needRates: needRates };
+    }
+
+    function bandMonthly(kwh, days) { return days > 0 ? kwh / days * BAND_AVG_MONTH : null; }
+    function bandAnnual(kwh, days) { return days > 0 ? kwh / days * 365.25 : null; }
+    function bandRateTxt(r) { return r === null || r === undefined ? '' : (Math.round(r * 100000) / 100000).toFixed(5); }
+    function bandInt(n) { return n === null || n === undefined ? '' : Math.round(n); }
+
+    /** Everything worked out for one ICP-register against one schedule. */
+    function bandCompute(sm, sched, rt) {
+      var split = bandSplit(sm, sched);
+      var w = bandWeighted(split, rt);
+      var sl = bandSlots(split, w, rt);
+      var anyRate = bandRatesAny(rt);
+      var energy = 0, complete = true;
+      for (var i = 0; i < sl.slots.length; i++) {
+        var s = sl.slots[i];
+        if (!(s.total > 0)) continue;
+        if (s.rate === null) { complete = false; continue; }
+        energy += bandAnnual(s.total, split.days) * s.rate;
+      }
+      return { split: split, w: w, sl: sl, anyRate: anyRate,
+        cost: { energy: energy, daily: w.daily === null ? null : w.daily * 365, complete: complete && w.daily !== null } };
+    }
+
+    // ---- Workbench card ----
+
+    function wbBandRows() {
+      var out = [];
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) {
+        var sm = rows[i].analysis && rows[i].analysis.slotMatrix;
+        if (sm && sm.m && sm.m.length === 1152) out.push({ i: i, r: rows[i], key: rows[i].icp + '|' + rows[i].register, sm: sm });
+      }
+      return out;
+    }
+
+    /** Current retailer and network of a row: Betty lookups first, EA registry answer second. */
+    function wbBandInfo(r) {
+      var rmap = (wbLastRes && wbLastRes.retailerMap) || {};
+      var lk = r.lookup || {};
+      var d = wbEa[r.icp] || {};
+      var found = d.kind === 'found';
+      var tid = lk.traderId && lk.traderId !== 'Not found' ? lk.traderId : (found ? (d.traderId || '') : '');
+      var name = tid && rmap[tid] ? rmap[tid] : (found && d.trader ? d.trader : tid);
+      var net = lk.networkName && lk.networkName !== 'Not found' ? lk.networkName : (found ? (d.network || '') : '');
+      var matched = '';
+      var rets = bandRetailers();
+      var nn = bandNorm(name);
+      for (var i = 0; i < rets.length; i++) {
+        var rn = bandNorm(rets[i]);
+        if (rn && nn && nn.indexOf(rn) !== -1) { matched = rets[i]; break; }
+      }
+      return { retailer: name || '', network: net || '', matched: matched };
+    }
+
+    function wbBandState(key) {
+      return wbBand[key] || (wbBand[key] = { show: null, sched: '', rates: null, ratesOpen: false });
+    }
+
+    /** The schedule in force for a row (operator's pick, else by retailer + network) and its rates state. */
+    function wbBandResolve(x) {
+      var st = wbBandState(x.key);
+      var info = wbBandInfo(x.r);
+      var retailer = info.matched || bandRetailers()[0] || '';
+      var sched = st.sched ? bandSchedByKey(st.sched) : bandFindSched(retailer, info.network);
+      if (sched) {
+        var bands = bandSplit({ m: [], days: 0 }, sched).bands;
+        if (!st.rates) st.rates = bandRatesFresh(bands);
+        else if (st.rates.forBands !== bands.join('|') && !bandRatesAny(st.rates)) st.rates = bandRatesFresh(bands);
+      }
+      var shown = st.show === true || (st.show === null && !!info.matched);
+      return { st: st, info: info, retailer: retailer, sched: sched, shown: shown };
+    }
+
+    var wbBandsWaiting = false;
+    function wbBandsRender(force) {
+      var card = document.getElementById('wbBandCard');
+      var box = document.getElementById('wbBands');
+      if (!card || !box) return;
+      var rows = wbBandRows();
+      if (!rows.length) { card.style.display = 'none'; box.innerHTML = ''; return; }
+      // A background refresh must not wipe a field being typed in.
+      var ae = document.activeElement;
+      if (!force && ae && box.contains && box.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')) {
+        if (!wbBandsWaiting) {
+          wbBandsWaiting = true;
+          setTimeout(function () { wbBandsWaiting = false; wbBandsRender(); }, 700);
+        }
+        return;
+      }
+      card.style.display = '';
+      if (wbBandReg === null) { box.innerHTML = '<span class="muted">Loading the band register…</span>'; return; }
+      var h = '';
+      if (wbBandRegErr) h += '<p class="error">Band register could not be loaded: ' + esc(wbBandRegErr) + '</p>';
+      var hidden = [];
+      var shownN = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var res = wbBandResolve(rows[i]);
+        if (!res.shown) { hidden.push(rows[i]); continue; }
+        shownN++;
+        h += wbBandBlock(rows[i], res);
+      }
+      if (hidden.length) {
+        h += '<div class="muted" style="font-size:12px;margin-top:6px">' +
+          (shownN ? 'Half-hourly data, time bands not shown (current retailer has no schedules in the register): '
+                  : 'No ICP here is with a retailer that has time-band schedules in the register. Half-hourly data is available for: ');
+        for (var j = 0; j < hidden.length; j++) {
+          h += '<span class="pill mono">' + esc(hidden[j].r.icp) + ' · ' + esc(hidden[j].r.register) +
+            ' <button class="linkbtn" onclick="wbBandShow(' + hidden[j].i + ', true)">show</button></span>';
+        }
+        h += '</div>';
+      }
+      box.innerHTML = h;
+    }
+
+    function wbBandBlock(x, res) {
+      var st = res.st, info = res.info, sched = res.sched, i = x.i;
+      var h = '<div style="border-top:1px solid var(--tuc-line);padding:10px 0 12px">';
+      h += '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">' +
+        '<b class="mono">' + esc(x.r.icp) + '</b><span class="muted">' + esc(x.r.register) + '</span>' +
+        '<span class="muted" style="font-size:12px">network: ' + esc(info.network || 'unknown') +
+        ' · current retailer: ' + esc(info.retailer || 'unknown') + '</span>' +
+        '<button class="linkbtn" style="margin-left:auto" onclick="wbBandShow(' + i + ', false)">hide</button></div>';
+      // Schedule picker: automatic by network, or any register row.
+      var opts = '<option value="">automatic (by network)</option>';
+      var regRows = wbBandReg || [];
+      for (var k = 0; k < regRows.length; k++) {
+        if (!regRows[k].ok) continue;
+        var key = bandRegKey(regRows[k]);
+        opts += '<option value="' + esc(key) + '"' + (st.sched === key ? ' selected' : '') + '>' +
+          esc(regRows[k].retailer) + ' · ' + esc(regRows[k].network) + '</option>';
+      }
+      h += '<div style="font-size:12px;margin:6px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="muted">Schedule</span>' +
+        '<select onchange="wbBandSetSched(' + i + ', this.value)" style="height:28px;border:1px solid var(--tuc-line);border-radius:6px;font-size:12px;max-width:100%">' + opts + '</select></div>';
+      if (!sched) {
+        h += '<p class="flag">⚠ No schedule in the register for ' +
+          (info.network ? 'network “' + esc(info.network) + '”' : 'this ICP (its network is not known yet)') +
+          (res.retailer ? ' (' + esc(res.retailer) + ')' : '') +
+          '. Add it on the 📒 Register tab, or pick a schedule above.</p></div>';
+        return h;
+      }
+      h += '<div class="muted" style="font-size:12px"><b>' + esc(sched.retailer) + ' · ' + esc(sched.network) + '</b> — weekdays: ' +
+        esc(sched.weekday) + ' · weekends: ' + esc(sched.weekend || 'same as weekdays') + '</div>';
+      h += '<div style="font-size:12px">' +
+        (sched.status === 'UNVERIFIED' ? '<span class="flag">⚠ This schedule is UNVERIFIED' + (sched.note ? ' — ' + esc(sched.note) : '') + '</span> · ' : '') +
+        '<span class="muted">' + (sched.lastChecked ? 'last checked against the retailer’s page: ' + esc(sched.lastChecked)
+          : 'never re-checked against the retailer’s page since it was typed in') + '</span></div>';
+      h += '<div id="wbBandRes_' + i + '" style="margin-top:8px">' + wbBandResHtml(x, res) + '</div>';
+      h += '<details' + (st.ratesOpen ? ' open' : '') + ' ontoggle="wbBandRatesToggle(' + i + ', this.open)" style="margin-top:8px">' +
+        '<summary style="cursor:pointer;font-weight:600;font-size:13px">Current rates — for the weighted average and the annual cost</summary>' +
+        wbBandRatesHtml(x, res) + '</details>';
+      return h + '</div>';
+    }
+
+    function wbBandResHtml(x, res) {
+      var rt = res.st.rates, i = x.i;
+      var c = bandCompute(x.sm, res.sched, rt);
+      var split = c.split, days = split.days;
+      var num = function (v) { return v === null ? '—' : copyableNum(Math.round(v)); };
+      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">Band</th>' +
+        '<th class="tR" title="Average monthly kWh used in this band during Oct–Mar. Summer + Winter = Avg monthly.">Summer</th>' +
+        '<th class="tR" title="Average monthly kWh used in this band during Apr–Sep. Summer + Winter = Avg monthly.">Winter</th>' +
+        '<th class="tR">Avg monthly kWh</th><th class="tR">Annual kWh</th><th class="tR">Share</th>' +
+        '<th class="tL">Rate column</th><th class="tR" title="Consumption-weighted average of the monthly rates, $/kWh excl GST">Weighted avg $/kWh</th></tr></thead><tbody>';
+      var notes = [];
+      for (var b = 0; b < split.bands.length; b++) {
+        var band = split.bands[b], k = split.kwh[band], wb = c.w.byBand[band];
+        var sel = '<select onchange="wbBandSetMap(' + i + ', ' + b + ', this.value)" style="height:26px;border:1px solid var(--tuc-line);border-radius:6px;font-size:12px;max-width:170px">' +
+          '<option value="-1"' + (wb.col === -1 ? ' selected' : '') + '>— none —</option>';
+        for (var ci = 0; ci < rt.cols.length; ci++) {
+          sel += '<option value="' + ci + '"' + (wb.col === ci ? ' selected' : '') + '>' + esc(rt.cols[ci] || ('rate ' + (ci + 1))) + '</option>';
+        }
+        sel += '</select>';
+        var rateTxt = bandRateTxt(wb.rate);
+        h += '<tr><td class="tL" style="white-space:nowrap"><b>' + esc(band) + '</b></td>' +
+          '<td class="tR">' + num(bandMonthly(k.summer, days)) + '</td>' +
+          '<td class="tR">' + num(bandMonthly(k.winter, days)) + '</td>' +
+          '<td class="tR" style="font-weight:600">' + num(bandMonthly(k.total, days)) + '</td>' +
+          '<td class="tR">' + num(bandAnnual(k.total, days)) + '</td>' +
+          '<td class="tR muted">' + (split.total > 0 ? Math.round(k.total / split.total * 100) + '%' : '—') + '</td>' +
+          '<td class="tL">' + sel + '</td>' +
+          '<td class="tR" style="font-weight:600">' + (rateTxt
+            ? '<span class="copynum" title="Click to copy" onclick="copyPlain(\'' + rateTxt + '\', this)">' + rateTxt + '</span>'
+            : '<span class="muted">—</span>') + '</td></tr>';
+        if (c.anyRate && wb.col === -1 && k.total > 0) notes.push(band + ': no rate column chosen');
+        if (c.anyRate && wb.missing.length) notes.push(band + ': no rate typed for ' + wb.missing.join(', ') + ' — those months are left out of its average');
+      }
+      h += '<tr style="font-weight:600"><td class="tL">Total</td>' +
+        '<td class="tR">' + num(bandMonthly(sumBand(split, 'summer'), days)) + '</td>' +
+        '<td class="tR">' + num(bandMonthly(sumBand(split, 'winter'), days)) + '</td>' +
+        '<td class="tR">' + num(bandMonthly(split.total, days)) + '</td>' +
+        '<td class="tR">' + num(bandAnnual(split.total, days)) + '</td><td></td><td></td><td></td></tr>';
+      h += '</tbody></table></div>';
+      h += '<div class="muted" style="font-size:11px">' + fmtNum(Math.round(days)) + ' days of half-hourly data · Summer = Oct–Mar, Winter = Apr–Sep · public holidays count as ordinary days · click a figure to copy it</div>';
+      for (var n = 0; n < notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(notes[n]) + '</div>';
+
+      // Betty's four slots.
+      var sl = c.sl;
+      if (split.bands.length > BAND_MAX_SLOTS || sl.folds.length) {
+        if (sl.folds.length) {
+          var parts = [];
+          for (var f = 0; f < sl.folds.length; f++) {
+            parts.push(esc(sl.folds[f].from) + ' → ' + esc(sl.folds[f].to) +
+              (sl.folds[f].auto ? ' (automatic: least consumption into the closest rate)' : ' (your choice)'));
+          }
+          h += '<p class="flag" style="margin:8px 0 4px">⚠ ' + split.bands.length + ' bands, Betty has ' + BAND_MAX_SLOTS +
+            ' rate slots — folded: ' + parts.join('; ') + '. The combined rate is weighted by kWh, so the total cost is unchanged.</p>';
+        }
+        if (sl.needRates) {
+          h += '<p class="flag" style="margin:8px 0 4px">⚠ ' + sl.slots.length + ' bands, Betty has ' + BAND_MAX_SLOTS +
+            ' rate slots. Type the current rates below and the smallest band is folded into the band with the closest rate — or choose the fold yourself.</p>';
+        }
+        // Pick lists start on the automatic choice: the band with the least consumption.
+        var leastB = 0;
+        for (var lb = 1; lb < split.bands.length; lb++) if (split.kwh[split.bands[lb]].total <= split.kwh[split.bands[leastB]].total) leastB = lb;
+        var bopts = '', boptsTo = '';
+        for (var bo = 0; bo < split.bands.length; bo++) {
+          bopts += '<option' + (bo === leastB ? ' selected' : '') + '>' + esc(split.bands[bo]) + '</option>';
+          boptsTo += '<option' + (bo === (leastB === 0 ? 1 : 0) ? ' selected' : '') + '>' + esc(split.bands[bo]) + '</option>';
+        }
+        h += '<div style="font-size:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><span class="muted">Fold</span>' +
+          '<select id="wbBandFoldFrom_' + i + '" style="height:26px;border:1px solid var(--tuc-line);border-radius:6px;font-size:12px">' + bopts + '</select>' +
+          '<span class="muted">into</span>' +
+          '<select id="wbBandFoldTo_' + i + '" style="height:26px;border:1px solid var(--tuc-line);border-radius:6px;font-size:12px">' + boptsTo + '</select>' +
+          '<button class="btn-sm" onclick="wbBandFoldApply(' + i + ')">apply</button>' +
+          ((rt.folds || []).length ? '<button class="linkbtn" onclick="wbBandFoldReset(' + i + ')">back to automatic</button>' : '') + '</div>';
+        if (sl.folds.length) {
+          h += '<div class="tblwrap"><table><thead><tr><th class="tL">For Betty — slot</th><th class="tL">Made of</th>' +
+            '<th class="tR">Avg monthly kWh</th><th class="tR">Annual kWh</th><th class="tR">Rate $/kWh</th></tr></thead><tbody>';
+          for (var s = 0; s < sl.slots.length; s++) {
+            var so = sl.slots[s], srt = bandRateTxt(so.rate);
+            h += '<tr><td class="tL"><b>' + esc(so.name) + '</b></td><td class="tL muted">' + esc(so.parts.join(' + ')) + '</td>' +
+              '<td class="tR" style="font-weight:600">' + num(bandMonthly(so.total, days)) + '</td>' +
+              '<td class="tR">' + num(bandAnnual(so.total, days)) + '</td>' +
+              '<td class="tR" style="font-weight:600">' + (srt
+                ? '<span class="copynum" title="Click to copy" onclick="copyPlain(\'' + srt + '\', this)">' + srt + '</span>'
+                : '<span class="muted">—</span>') + '</td></tr>';
+          }
+          h += '</tbody></table></div>';
+        }
+      }
+
+      // Annual cost of the current contract.
+      if (c.anyRate || c.w.daily !== null) {
+        var dTxt = bandRateTxt(c.w.daily);
+        h += '<p style="margin:8px 0 0"><b>Estimated annual cost of the current contract (excl GST):</b> energy $' + fmtNum(Math.round(c.cost.energy)) +
+          (c.cost.daily === null ? '' : ' + daily charge $' + fmtNum(Math.round(c.cost.daily)) +
+            ' (<span class="copynum" title="Click to copy" onclick="copyPlain(\'' + dTxt + '\', this)">' + dTxt + '</span> $/day)') +
+          ' = <b>$' + fmtNum(Math.round(c.cost.energy + (c.cost.daily || 0))) + '</b>' +
+          (c.cost.complete ? '' : ' <span class="flag">⚠ incomplete — ' +
+            (c.w.daily === null ? 'no daily charge typed' : 'a band with consumption has no rate') + '</span>') + '</p>';
+      }
+      return h;
+    }
+
+    function sumBand(split, field) {
+      var t = 0;
+      for (var b = 0; b < split.bands.length; b++) t += split.kwh[split.bands[b]][field];
+      return t;
+    }
+
+    function wbBandRatesHtml(x, res) {
+      var rt = res.st.rates, i = x.i;
+      var inp = 'width:92px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right';
+      var h = '<p class="muted" style="font-size:12px;margin:6px 0">Type the customer’s current rates in <b>c/kWh</b>, one column per rate on the retailer’s rate sheet. ' +
+        'A block copied from a spreadsheet can be pasted into any cell. Each band above uses the column picked under “Rate column”.</p>';
+      h += '<div class="tblwrap"><table style="width:auto"><thead><tr><th class="tL">Month</th>';
+      for (var c = 0; c < rt.cols.length; c++) {
+        h += '<th><input type="text" value="' + esc(rt.cols[c]) + '" title="Rate name" onchange="wbBandSetCol(' + i + ', ' + c + ', this.value)"' +
+          ' style="width:120px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:12px;font-weight:600">' +
+          '<div style="font-weight:400"><button class="linkbtn" title="Copy each typed rate down into the blank months after it" onclick="wbBandFill(' + i + ', ' + c + ')">fill blanks</button>' +
+          (rt.cols.length > 1 ? ' · <button class="linkbtn" title="Remove this rate column" onclick="wbBandDelCol(' + i + ', ' + c + ')">remove</button>' : '') + '</div></th>';
+      }
+      h += '<th><button class="btn-sm" onclick="wbBandAddCol(' + i + ')">+ rate</button></th></tr></thead><tbody>';
+      for (var m = 0; m < 12; m++) {
+        h += '<tr><td class="tL">' + BAND_MONTHS[m] + '</td>';
+        for (var c2 = 0; c2 < rt.cols.length; c2++) {
+          var v = rt.grid[m][c2];
+          h += '<td><input type="text" inputmode="decimal" value="' + esc(v === undefined ? '' : v) + '"' +
+            ' onchange="wbBandSetRate(' + i + ', ' + m + ', ' + c2 + ', this.value)"' +
+            ' onpaste="wbBandPaste(event, ' + i + ', ' + m + ', ' + c2 + ')" style="' + inp + '"></td>';
+        }
+        h += '<td></td></tr>';
+      }
+      h += '</tbody></table></div>';
+      h += '<p style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px;margin:8px 0 0">' +
+        '<label>Daily charge (c/day) <input type="text" inputmode="decimal" value="' + esc(rt.daily) + '" onchange="wbBandSetDaily(' + i + ', this.value)" style="' + inp + '"></label>' +
+        '<label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox"' + (rt.gst ? ' checked' : '') +
+        ' onchange="wbBandSetGst(' + i + ', this.checked)"> typed rates include GST</label>' +
+        '<button class="linkbtn" onclick="wbBandClearRates(' + i + ')">clear all rates</button></p>';
+      return h;
+    }
+
+    function wbBandX(i) {
+      var rows = wbBandRows();
+      for (var k = 0; k < rows.length; k++) if (rows[k].i === i) return rows[k];
+      return null;
+    }
+
+    /** Re-draw only the results of one block (the rate fields keep focus and content). */
+    function wbBandRes(i) {
+      var x = wbBandX(i);
+      var el = document.getElementById('wbBandRes_' + i);
+      if (!x || !el) { wbBandsRender(true); return; }
+      var res = wbBandResolve(x);
+      if (!res.sched) { wbBandsRender(true); return; }
+      el.innerHTML = wbBandResHtml(x, res);
+    }
+
+    function wbBandShow(i, on) {
+      var x = wbBandX(i); if (!x) return;
+      wbBandState(x.key).show = !!on;
+      wbBandsRender(true);
+    }
+    function wbBandSetSched(i, key) {
+      var x = wbBandX(i); if (!x) return;
+      wbBandState(x.key).sched = key || '';
+      wbBandsRender(true);
+    }
+    function wbBandRatesToggle(i, open) {
+      var x = wbBandX(i); if (!x) return;
+      wbBandState(x.key).ratesOpen = !!open;
+    }
+    function wbBandRt(i) {
+      var x = wbBandX(i);
+      return x ? wbBandState(x.key).rates : null;
+    }
+    function wbBandSetRate(i, m, c, val) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.grid[m][c] = String(val).trim();
+      wbBandRes(i);
+    }
+    function wbBandSetDaily(i, val) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.daily = String(val).trim();
+      wbBandRes(i);
+    }
+    function wbBandSetGst(i, on) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.gst = !!on;
+      wbBandRes(i);
+    }
+    function wbBandSetMap(i, bandIdx, val) {
+      var x = wbBandX(i); if (!x) return;
+      var res = wbBandResolve(x);
+      if (!res.sched) return;
+      var bands = bandSplit({ m: [], days: 0 }, res.sched).bands;
+      if (bandIdx < 0 || bandIdx >= bands.length) return;
+      res.st.rates.map[bands[bandIdx]] = parseInt(val, 10);
+      wbBandRes(i);
+    }
+    function wbBandSetCol(i, c, val) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.cols[c] = String(val).replace(/\s+/g, ' ').trim().slice(0, 40);
+      wbBandRes(i); // the rate-column pick lists show the new name
+    }
+    function wbBandAddCol(i) {
+      var rt = wbBandRt(i); if (!rt) return;
+      if (rt.cols.length >= 8) { alert('Eight rate columns is the limit.'); return; }
+      rt.cols.push('Rate ' + (rt.cols.length + 1));
+      wbBandsRender(true);
+    }
+    function wbBandDelCol(i, c) {
+      var rt = wbBandRt(i); if (!rt || rt.cols.length < 2) return;
+      var has = false;
+      for (var m = 0; m < 12; m++) if (bandNum(rt.grid[m][c]) !== null) has = true;
+      if (has && !confirm('Remove the rate column “' + rt.cols[c] + '” and the rates typed in it?')) return;
+      rt.cols.splice(c, 1);
+      for (var m2 = 0; m2 < 12; m2++) rt.grid[m2].splice(c, 1);
+      // Column picks shift with the columns; a pick of the removed column is dropped.
+      for (var band in rt.map) {
+        if (!Object.prototype.hasOwnProperty.call(rt.map, band)) continue;
+        if (rt.map[band] === c) delete rt.map[band];
+        else if (rt.map[band] > c) rt.map[band]--;
+      }
+      wbBandsRender(true);
+    }
+    function wbBandFill(i, c) {
+      var rt = wbBandRt(i); if (!rt) return;
+      var last = null, m;
+      for (m = 0; m < 12; m++) if (bandNum(rt.grid[m][c]) !== null) last = rt.grid[m][c];
+      if (last === null) return;
+      // Carry each typed rate forward; the year wraps (Dec carries into Jan).
+      for (m = 0; m < 12; m++) {
+        if (bandNum(rt.grid[m][c]) !== null) last = rt.grid[m][c];
+        else rt.grid[m][c] = last;
+      }
+      wbBandsRender(true);
+    }
+    function wbBandClearRates(i) {
+      var x = wbBandX(i); if (!x) return;
+      var st = wbBandState(x.key);
+      if (bandRatesAny(st.rates) && !confirm('Clear every rate typed for this ICP?')) return;
+      st.rates = null;
+      wbBandsRender(true);
+    }
+    /** A block pasted from a spreadsheet fills the grid from the cell it was pasted into. */
+    function wbBandPaste(ev, i, m, c) {
+      var text = '';
+      try { text = (ev.clipboardData || window.clipboardData).getData('text'); } catch (e) { return; }
+      if (!/[\t\n]/.test(String(text).replace(/[\r\n]+$/, ''))) return; // a single value: normal paste
+      var rt = wbBandRt(i); if (!rt) return;
+      if (ev.preventDefault) ev.preventDefault();
+      var lines = String(text).replace(/[\r\n]+$/, '').split(/\r?\n/);
+      for (var a = 0; a < lines.length && m + a < 12; a++) {
+        var cells = lines[a].split('\t');
+        for (var b = 0; b < cells.length && c + b < rt.cols.length; b++) {
+          var n = bandNum(cells[b]);
+          if (n !== null) rt.grid[m + a][c + b] = String(n);
+        }
+      }
+      wbBandsRender(true);
+    }
+    function wbBandFoldApply(i) {
+      var rt = wbBandRt(i); if (!rt) return;
+      var f = document.getElementById('wbBandFoldFrom_' + i), t = document.getElementById('wbBandFoldTo_' + i);
+      if (!f || !t) return;
+      if (f.value === t.value) { alert('Pick two different bands.'); return; }
+      rt.folds = [{ from: f.value, to: t.value }];
+      wbBandRes(i);
+    }
+    function wbBandFoldReset(i) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.folds = [];
+      wbBandRes(i);
+    }
+
+    /** Sections for the CDF "Analysis" tab: one per ICP-register whose time bands are shown. */
+    function wbBandSections() {
+      var out = [];
+      if (wbBandReg === null) return out;
+      var rows = wbBandRows();
+      for (var q = 0; q < rows.length; q++) {
+        var x = rows[q];
+        var res = wbBandResolve(x);
+        if (!res.shown || !res.sched) continue;
+        var rt = res.st.rates, sched = res.sched;
+        var c = bandCompute(x.sm, sched, rt);
+        var split = c.split, days = split.days;
+        var R = [], bold = [];
+        var r2 = function (v) { return v === null ? '' : Math.round(v * 100) / 100; };
+        R.push(['Network', res.info.network || '']);
+        R.push(['Current retailer', res.info.retailer || '']);
+        R.push(['Schedule', sched.retailer + ' · ' + sched.network + (sched.status === 'UNVERIFIED' ? ' (UNVERIFIED)' : '')]);
+        R.push(['Weekdays', sched.weekday]);
+        R.push(['Weekends', sched.weekend || 'same as weekdays']);
+        R.push(['Schedule last checked', sched.lastChecked || 'never']);
+        R.push(['Basis', 'Summer = Oct-Mar, Winter = Apr-Sep; public holidays count as ordinary days; average monthly = kWh / days x 365.25 / 12']);
+        R.push(['Days of half-hourly data', r2(days)]);
+        R.push([]);
+        bold.push(R.length);
+        R.push(['Band', 'Summer avg monthly kWh', 'Winter avg monthly kWh', 'Avg monthly kWh', 'Annual kWh', 'Share %', 'Rate column', 'Weighted avg $/kWh excl GST']);
+        for (var b = 0; b < split.bands.length; b++) {
+          var band = split.bands[b], k = split.kwh[band], wb = c.w.byBand[band];
+          R.push([band, r2(bandMonthly(k.summer, days)), r2(bandMonthly(k.winter, days)), r2(bandMonthly(k.total, days)),
+            bandInt(bandAnnual(k.total, days)), split.total > 0 ? Math.round(k.total / split.total * 1000) / 10 : '',
+            c.anyRate && wb.col >= 0 ? rt.cols[wb.col] : '',
+            wb.rate === null ? '' : Number(bandRateTxt(wb.rate))]);
+          if (c.anyRate && wb.missing.length) R.push(['', 'no rate typed for ' + wb.missing.join(', ') + ' - left out of the average']);
+        }
+        R.push(['Total', r2(bandMonthly(sumBand(split, 'summer'), days)), r2(bandMonthly(sumBand(split, 'winter'), days)),
+          r2(bandMonthly(split.total, days)), bandInt(bandAnnual(split.total, days))]);
+        if (c.sl.folds.length || c.sl.needRates) {
+          R.push([]);
+          if (c.sl.needRates) R.push(['WARNING', c.sl.slots.length + ' bands but Betty has ' + BAND_MAX_SLOTS + ' rate slots - not folded (rates missing)']);
+          for (var f = 0; f < c.sl.folds.length; f++) {
+            R.push(['WARNING - folded', c.sl.folds[f].from + ' into ' + c.sl.folds[f].to +
+              (c.sl.folds[f].auto ? ' (automatic: least consumption into the closest rate)' : ' (operator choice)')]);
+          }
+          if (c.sl.folds.length) {
+            bold.push(R.length);
+            R.push(['For Betty - slot', 'Made of', 'Avg monthly kWh', 'Annual kWh', 'Rate $/kWh excl GST']);
+            for (var s = 0; s < c.sl.slots.length; s++) {
+              var so = c.sl.slots[s];
+              R.push([so.name, so.parts.join(' + '), r2(bandMonthly(so.total, days)), bandInt(bandAnnual(so.total, days)),
+                so.rate === null ? '' : Number(bandRateTxt(so.rate))]);
+            }
+          }
+        }
+        if (c.anyRate || c.w.daily !== null) {
+          R.push([]);
+          bold.push(R.length);
+          R.push(['Current rates as typed (c/kWh, ' + (rt.gst ? 'incl' : 'excl') + ' GST)'].concat(rt.cols));
+          for (var m = 0; m < 12; m++) {
+            var line = [BAND_MONTHS[m]];
+            for (var cc = 0; cc < rt.cols.length; cc++) { var nv = bandNum(rt.grid[m][cc]); line.push(nv === null ? '' : nv); }
+            R.push(line);
+          }
+          var dn = bandNum(rt.daily);
+          R.push(['Daily charge c/day as typed', dn === null ? '' : dn]);
+          R.push(['Daily charge $/day excl GST', c.w.daily === null ? '' : Number(bandRateTxt(c.w.daily))]);
+          R.push(['Annual energy cost $ excl GST', Math.round(c.cost.energy)]);
+          R.push(['Annual daily charges $ excl GST', c.cost.daily === null ? '' : Math.round(c.cost.daily)]);
+          R.push(['Estimated annual cost $ excl GST', Math.round(c.cost.energy + (c.cost.daily || 0)),
+            c.cost.complete ? '' : 'INCOMPLETE - a rate or the daily charge is missing']);
+        }
+        out.push({ title: 'Time bands - ' + x.r.icp + ' ' + x.r.register, rows: R, boldRows: bold });
+      }
+      return out;
+    }
+
+    // ---------------- Register tab (v2.16) ----------------
+    // The Band Register is data, typed from the retailer's own page.
+    // It is viewed and edited here; the Workbench uses it straight away.
+
+    var regTabLoaded = false;
+    var regEd = null;   // row being added / edited
+    var regBusy = false;
+
+    function regHm(mins) { return ('0' + Math.floor(mins / 60)).slice(-2) + ':' + ('0' + (mins % 60)).slice(-2); }
+
+    function regSegs(slots) {
+      var out = [];
+      for (var s = 0; s < 48; s++) if (s === 0 || slots[s] !== slots[s - 1]) out.push({ start: s * 30, band: slots[s] });
+      return out;
+    }
+
+    function regSegStr(segs) {
+      var parts = [];
+      for (var i = 0; i < segs.length; i++) parts.push(regHm(segs[i].start) + ' ' + String(segs[i].band).replace(/[;\n]/g, ' ').trim());
+      return parts.join('; ');
+    }
+
+    function regShow() {
+      if (wbBandReg === null) {
+        document.getElementById('regArea').innerHTML = '<span class="muted">Loading…</span>';
+        bandRegLoad(regRender);
+      } else regRender();
+    }
+
+    function regReload() {
+      document.getElementById('regArea').innerHTML = '<span class="muted">Loading…</span>';
+      regEd = null;
+      bandRegLoad(regRender);
+    }
+
+    function regRender() {
+      var area = document.getElementById('regArea');
+      if (!area) return;
+      var rows = wbBandReg || [];
+      var h = '';
+      if (wbBandRegErr) h += '<p class="error">' + esc(wbBandRegErr) + '</p>';
+      h += '<div id="regMsg"></div>';
+      if (regEd) h += regEditorHtml();
+      h += '<p class="muted">' + rows.length + ' schedule(s). Each band runs from its start time to the next one; the last runs to midnight.</p>';
+      h += '<div class="tblwrap"><table><thead><tr><th class="tL">Retailer</th><th class="tL">Network</th><th class="tL">Weekdays</th>' +
+        '<th class="tL">Weekends</th><th class="tL">Checked</th><th class="tL">Note</th><th></th></tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        h += '<tr><td class="tL">' + esc(r.retailer) + '</td><td class="tL"><b>' + esc(r.network) + '</b>' +
+          (r.status === 'UNVERIFIED' ? '<div><span class="pill flag">UNVERIFIED</span></div>' : '') +
+          (r.ok ? '' : '<div class="error" style="font-size:12px">cannot be used — ' + esc(r.error) + '</div>') + '</td>' +
+          '<td class="tL" style="font-size:12px">' + esc(r.weekday).replace(/; /g, '<br>') + '</td>' +
+          '<td class="tL" style="font-size:12px">' + (r.weekend ? esc(r.weekend).replace(/; /g, '<br>') : '<span class="muted">same as weekdays</span>') + '</td>' +
+          '<td class="tL" style="font-size:12px">' + (r.lastChecked ? esc(r.lastChecked) : '<span class="muted">never</span>') +
+            '<div><button class="linkbtn" title="Record that you compared this row with the retailer’s page today" onclick="regChecked(' + i + ')">checked today</button></div></td>' +
+          '<td class="tL muted" style="font-size:12px;max-width:240px">' + esc(r.note) +
+            (r.updatedAt ? '<div>updated ' + esc(r.updatedAt) + (r.updatedBy ? ' by ' + esc(r.updatedBy) : '') + '</div>' : '') + '</td>' +
+          '<td style="white-space:nowrap"><button class="btn-sm" onclick="regEdit(' + i + ')">edit</button> ' +
+            '<button class="btn-sm" style="color:var(--bad)" onclick="regDelete(' + i + ')">' + ICONS.trash + ' delete</button></td></tr>';
+      }
+      area.innerHTML = h + '</tbody></table></div>';
+    }
+
+    function regEdit(i) {
+      var rows = wbBandReg || [];
+      if (i === -1) {
+        regEd = { orig: null, retailer: bandRetailers()[0] || 'Powershop', network: '', wd: [{ start: 0, band: '' }],
+          weSame: true, we: [{ start: 0, band: '' }], unverified: false, note: '', checkedToday: true };
+      } else {
+        var r = rows[i];
+        if (!r) return;
+        var wd = r.wdSlots.length === 48 ? regSegs(r.wdSlots) : [{ start: 0, band: '' }];
+        var we = r.weekend && r.weSlots.length === 48 ? regSegs(r.weSlots) : wd.map(function (s) { return { start: s.start, band: s.band }; });
+        regEd = { orig: { retailer: r.retailer, network: r.network }, retailer: r.retailer, network: r.network, wd: wd,
+          weSame: !r.weekend, we: we, unverified: r.status === 'UNVERIFIED', note: r.note, checkedToday: false };
+      }
+      regRender();
+      var el = document.getElementById('regEdNetwork');
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    }
+
+    function regEditorHtml() {
+      var e = regEd;
+      var fld = 'border:1px solid var(--tuc-line);border-radius:6px;padding:7px 8px;font-size:13px';
+      var names = {}, rows = wbBandReg || [], i, s;
+      for (i = 0; i < rows.length; i++) {
+        for (s = 0; s < rows[i].wdSlots.length; s++) names[rows[i].wdSlots[s]] = true;
+        for (s = 0; s < rows[i].weSlots.length; s++) names[rows[i].weSlots[s]] = true;
+      }
+      var dl = '<datalist id="regBandNames">';
+      for (var nm in names) if (Object.prototype.hasOwnProperty.call(names, nm)) dl += '<option value="' + esc(nm) + '">';
+      dl += '</datalist>';
+      var segHtml = function (which, segs) {
+        var o = '';
+        for (var k = 0; k < segs.length; k++) {
+          var topts = '';
+          for (var t = 0; t < 48; t++) topts += '<option value="' + (t * 30) + '"' + (segs[k].start === t * 30 ? ' selected' : '') + '>' + regHm(t * 30) + '</option>';
+          o += '<div style="display:flex;gap:6px;align-items:center;margin:3px 0"><span class="muted" style="font-size:12px;width:34px">from</span>' +
+            '<select' + (k === 0 ? ' disabled' : '') + ' onchange="regSegTime(\'' + which + '\', ' + k + ', this.value)" style="height:32px;border:1px solid var(--tuc-line);border-radius:6px">' + topts + '</select>' +
+            '<input type="text" list="regBandNames" placeholder="Band name, e.g. Peak" value="' + esc(segs[k].band) + '" onchange="regSegBand(\'' + which + '\', ' + k + ', this.value)" style="width:190px;' + fld + '">' +
+            (k > 0 ? '<button class="linkbtn" onclick="regSegDel(\'' + which + '\', ' + k + ')">remove</button>' : '') + '</div>';
+        }
+        return o + '<button class="linkbtn" onclick="regSegAdd(\'' + which + '\')">+ add a band</button>';
+      };
+      var h = '<div style="background:var(--tuc-accent-tint);border:1px solid var(--tuc-line);border-radius:10px;padding:12px 16px;margin-bottom:14px">' + dl +
+        '<b>' + (e.orig ? 'Edit schedule' : 'Add a network') + '</b>' +
+        '<p style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' +
+        '<input type="text" id="regEdRetailer" placeholder="Retailer" value="' + esc(e.retailer) + '" onchange="regEd.retailer=this.value" style="width:160px;' + fld + '">' +
+        '<input type="text" id="regEdNetwork" placeholder="Network name, as the EA registry writes it (e.g. WELLINGTON ELECTRICITY LINES LIMITED)" value="' + esc(e.network) + '" onchange="regEd.network=this.value" style="flex:1;min-width:260px;' + fld + '"></p>' +
+        '<div style="display:flex;gap:28px;flex-wrap:wrap">' +
+        '<div><div style="font-weight:600;font-size:13px">Weekdays (Mon–Fri)</div>' + segHtml('wd', e.wd) + '</div>' +
+        '<div><div style="font-weight:600;font-size:13px">Weekends (Sat–Sun)</div>' +
+        '<label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;margin:3px 0"><input type="checkbox"' + (e.weSame ? ' checked' : '') +
+        ' onchange="regEd.weSame=this.checked;regRender()"> same as weekdays</label>' +
+        (e.weSame ? '' : '<div>' + segHtml('we', e.we) + '</div>') + '</div></div>' +
+        '<p style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:10px 0 6px;font-size:13px">' +
+        '<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox"' + (e.unverified ? ' checked' : '') + ' onchange="regEd.unverified=this.checked"> unverified (source not confirmed)</label>' +
+        '<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox"' + (e.checkedToday ? ' checked' : '') + ' onchange="regEd.checkedToday=this.checked"> checked against the retailer’s page today</label></p>' +
+        '<p style="margin:0 0 8px"><input type="text" placeholder="Note (where this came from)" maxlength="300" value="' + esc(e.note) + '" onchange="regEd.note=this.value" style="width:100%;' + fld + '"></p>' +
+        '<p style="margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="regSaveBtn" onclick="regSave(this)" style="min-width:0;padding:0 18px">Save</button>' +
+        '<button class="btn-sm" onclick="regEd=null;regRender()">cancel</button><span id="regEdMsg"></span></p></div>';
+      return h;
+    }
+
+    function regSegList(which) { return which === 'we' ? regEd.we : regEd.wd; }
+    function regSegTime(which, k, val) { regSegList(which)[k].start = parseInt(val, 10); }
+    function regSegBand(which, k, val) { regSegList(which)[k].band = String(val).replace(/\s+/g, ' ').trim(); }
+    function regSegDel(which, k) { regSegList(which).splice(k, 1); regRender(); }
+    function regSegAdd(which) {
+      var list = regSegList(which);
+      if (list.length >= 12) { alert('Twelve bands a day is the limit.'); return; }
+      var next = Math.min(1410, list[list.length - 1].start + 60);
+      list.push({ start: next, band: '' });
+      regRender();
+    }
+
+    function regSave(btn) {
+      var e = regEd;
+      if (!e || regBusy) return;
+      var msg = document.getElementById('regEdMsg');
+      var say = function (t) { if (msg) msg.innerHTML = '<span class="error">' + esc(t) + '</span>'; };
+      var check = function (label, segs) {
+        for (var k = 0; k < segs.length; k++) {
+          if (!segs[k].band) return label + ': a band has no name.';
+          if (k > 0 && segs[k].start <= segs[k - 1].start) return label + ': start times must go up (' + regHm(segs[k].start) + ').';
+        }
+        return '';
+      };
+      if (!String(e.retailer).trim()) { say('Retailer is required.'); return; }
+      if (!String(e.network).trim()) { say('Network is required.'); return; }
+      var err = check('Weekdays', e.wd) || (e.weSame ? '' : check('Weekends', e.we));
+      if (err) { say(err); return; }
+      regBusy = true;
+      if (btn) btn.disabled = true;
+      if (msg) msg.innerHTML = '<span class="muted">Saving…</span>';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          regBusy = false;
+          wbBandReg = res.rows || [];
+          regEd = null;
+          regRender();
+          wbBandsRender(true);
+          var m = document.getElementById('regMsg');
+          if (m) m.innerHTML = '<p class="ok">Saved.</p>';
+        })
+        .withFailureHandler(function (er) {
+          regBusy = false;
+          if (btn) btn.disabled = false;
+          say(er.message || String(er));
+        })
+        .apiBandRegisterSave({ retailer: e.retailer, network: e.network, weekday: regSegStr(e.wd),
+          weekend: e.weSame ? '' : regSegStr(e.we), unverified: e.unverified, note: e.note, checkedToday: e.checkedToday }, e.orig);
+    }
+
+    function regAfter(res, text) {
+      wbBandReg = res.rows || [];
+      regRender();
+      wbBandsRender(true);
+      var m = document.getElementById('regMsg');
+      if (m) m.innerHTML = '<p class="ok">' + esc(text) + '</p>';
+    }
+    function regFail(e) {
+      var m = document.getElementById('regMsg');
+      if (m) m.innerHTML = '<p class="error">' + esc(e.message || String(e)) + '</p>';
+    }
+
+    function regChecked(i) {
+      var r = (wbBandReg || [])[i];
+      if (!r) return;
+      google.script.run
+        .withSuccessHandler(function (res) { regAfter(res, r.network + ': marked as checked today.'); })
+        .withFailureHandler(regFail)
+        .apiBandRegisterChecked(r.retailer, r.network);
+    }
+
+    function regDelete(i) {
+      var r = (wbBandReg || [])[i];
+      if (!r) return;
+      if (!confirm('Delete the ' + r.retailer + ' schedule for ' + r.network + '?\n\nICPs on that network will show “no schedule” until it is added again.')) return;
+      google.script.run
+        .withSuccessHandler(function (res) { regEd = null; regAfter(res, r.network + ': schedule deleted.'); })
+        .withFailureHandler(regFail)
+        .apiBandRegisterDelete(r.retailer, r.network);
+    }
+
     cdfTotalsLoad(false); // header small print, loaded once the page is up
+    bandRegLoad();        // band register, used by the Workbench time bands and the Register tab
 
   </script>
 </body>

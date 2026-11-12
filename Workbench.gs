@@ -352,7 +352,7 @@ function wbSafeCell_(v) {
  * that was queued, and the per ICP-register calculations with their
  * flags. The client sends the same data it shows on screen.
  * analysis: { summary: [[label, value]], icpHeader: [], icpRows: [[]],
- *             regHeader: [], regRows: [[]] }
+ *             regHeader: [], regRows: [[]], sections: [{title, rows}] }
  */
 function wbWriteAnalysisSheet_(merged, analysis) {
   const a = analysis || {};
@@ -374,6 +374,16 @@ function wbWriteAnalysisSheet_(merged, analysis) {
   push(['ICP-registers (calculations)'], true);
   push(a.regHeader || [], true);
   for (const r of (a.regRows || []).slice(0, 20000)) push(r);
+  // v2.16: free-form extra sections (retailer time bands, weighted
+  // average rates). Each: { title, rows: [[...]], boldRows: [index] }.
+  for (const sec of (a.sections || []).slice(0, 400)) {
+    push([]);
+    push([sec.title || ''], true);
+    const secRows = (sec.rows || []).slice(0, 400);
+    const boldSet = {};
+    for (const bi of sec.boldRows || []) boldSet[bi] = true;
+    for (let si = 0; si < secRows.length; si++) push(secRows[si], !!boldSet[si]);
+  }
 
   let width = 2;
   for (const r of rows) if (r.length > width) width = r.length;
