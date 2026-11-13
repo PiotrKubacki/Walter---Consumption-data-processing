@@ -261,9 +261,9 @@
       </div>
       <div style="flex:2 1 560px;min-width:0">
         <div id="wbWarn"></div>
-        <div class="card2">
-          <div class="cardhead"><h2>⚡ Calculations</h2></div>
-          <div id="wbCalcs" class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</div>
+        <div class="card2" id="wbCalcCard">
+          <div class="cardhead"><h2>⚡ Analysis</h2></div>
+          <div id="wbCalcs" class="muted">Add files and analyse — each ICP then gets its own block below: meters, reliability grade, monthly and annual kWh, and flags.</div>
         </div>
         <div class="card2" id="wbBandCard" style="display:none">
           <div class="cardhead"><h2>🧾 ICP meters</h2><span class="muted" style="font-size:11px">one block per ICP, as on the bill and in Betty · half-hourly uncontrolled load is split into the retailer’s time bands, controlled load stays whole · every row can be edited</span></div>
@@ -1357,10 +1357,10 @@
 
       var h = '';
       if (fileFlagItems.length) h += '<details><summary class="flag">File notices (' + fileFlagItems.length + ')</summary>' + fileFlagItems.join('') + '</details>';
-      h += '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th>Fuel</th><th class="tL">File</th><th>Layer</th><th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>';
-      for (var i = 0; i < res.rows.length; i++) h += wbCalcRow(res.rows[i]);
-      h += '</tbody></table></div>';
+      // v2.19: the per-register calculation rows live in each ICP's block
+      // (ICP meters card); this card only carries file notices now.
       area.innerHTML = h;
+      document.getElementById('wbCalcCard').style.display = h ? '' : 'none';
 
       // Notes form: show + auto-fill (never overwrite operator-entered values)
       document.getElementById('wbNotes').style.display = '';
@@ -2636,6 +2636,7 @@
       wbEa = {}; wbEaAsked = {}; wbEaGen++; wbEaErr = '';
       wbFuelOv = {};
       wbMeters = {}; // meter edits belong to the finished session too
+      wbSeasonOv = null; wbSeasonEditOpen = false;
       wbBand = {}; // time-band picks and typed rates belong to the finished session
       wbBandsRender(true);
       wbRates = {}; wbRatesEd = null; wbRatesDraftTried = false;
@@ -2646,7 +2647,8 @@
       wbMergeStatus();
       wbRenderFiles();
       document.getElementById('wbPreview').style.display = 'none';
-      document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</span>';
+      document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse — each ICP then gets its own block below: meters, reliability grade, monthly and annual kWh, and flags.</span>';
+      document.getElementById('wbCalcCard').style.display = '';
       document.getElementById('wbWarn').innerHTML = '';
       document.getElementById('wbNotes').style.display = 'none';
       document.getElementById('wbBettySec').style.display = 'none';
@@ -3396,12 +3398,53 @@
     var BAND_MAX_SLOTS = 4;
     var BAND_GST = 1.15;
 
-    function bandIsWinter(m) { return m >= 3 && m <= 8; } // month index: Apr..Sep
+    // Seasons (v2.19): which months are Winter. A default per retailer
+    // is kept in the Register (Apr-Sep unless changed there); the
+    // operator can change the months for the session, and everything is
+    // re-split at once - the slot matrix is by calendar month.
+    var BAND_WINTER_DEFAULT = [false, false, false, true, true, true, true, true, true, false, false, false];
+    var wbBandSeasons = {};  // retailer (normalised) -> [12 x bool] from the Register
+    var wbSeasonOv = null;   // [12 x bool] chosen for this session, or null
+    var wbSeasonEditOpen = false;
+
+    function bandWinterFor(retailer) {
+      if (wbSeasonOv) return wbSeasonOv;
+      return wbBandSeasons[bandNorm(retailer)] || BAND_WINTER_DEFAULT;
+    }
+    /** "Apr–Sep" / "Oct–Mar" / "May–Aug, Dec" for the months whose flag equals want. */
+    function bandMonthsText(flags, want) {
+      var any = false, all = true, m;
+      for (m = 0; m < 12; m++) { if (!!flags[m] === want) any = true; else all = false; }
+      if (!any) return 'no months';
+      if (all) return 'all year';
+      var start = 0;
+      while (!!flags[start] === want) start++;     // begin just after a month that is NOT wanted,
+      var out = [], runStart = -1;                 // so a run that wraps the year end stays in one piece
+      for (var k = 1; k <= 12; k++) {
+        m = (start + k) % 12;
+        if (!!flags[m] === want) { if (runStart === -1) runStart = m; }
+        else if (runStart !== -1) { var end = (m + 11) % 12; out.push(runStart === end ? BAND_MONTHS[runStart] : BAND_MONTHS[runStart] + '–' + BAND_MONTHS[end]); runStart = -1; }
+      }
+      return out.join(', ');
+    }
+    function bandSeasonText(W) { return 'Summer = ' + bandMonthsText(W, false) + ', Winter = ' + bandMonthsText(W, true); }
+    function bandSeasonsFromServer(map) {
+      var out = {};
+      for (var k in map || {}) {
+        if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+        var flags = [false, false, false, false, false, false, false, false, false, false, false, false];
+        var parts = String(map[k]).split(/[^0-9]+/);
+        for (var i = 0; i < parts.length; i++) { var n = parseInt(parts[i], 10); if (n >= 1 && n <= 12) flags[n - 1] = true; }
+        out[bandNorm(k)] = flags;
+      }
+      return out;
+    }
 
     function bandRegLoad(then) {
       google.script.run
         .withSuccessHandler(function (res) {
           wbBandReg = (res && res.rows) || [];
+          wbBandSeasons = bandSeasonsFromServer(res && res.seasons);
           wbBandRegErr = '';
           wbBandsRender(true);
           if (then) then();
@@ -3469,6 +3512,7 @@
           bands.push(b);
         }
       };
+      var W = bandWinterFor(sched.retailer);
       var s;
       for (s = 0; s < 48; s++) add(sched.wdSlots[s]);
       for (s = 0; s < 48; s++) add(sched.weSlots[s]);
@@ -3482,18 +3526,18 @@
             var k = kwh[slots[s]];
             k.months[m] += v;
             k.total += v;
-            if (bandIsWinter(m)) k.winter += v; else k.summer += v;
+            if (W[m]) k.winter += v; else k.summer += v;
             total += v;
           }
         }
       }
-      return { bands: bands, kwh: kwh, days: Number(sm.days) || 0, total: total };
+      return { bands: bands, kwh: kwh, days: Number(sm.days) || 0, total: total, winter: W };
     }
 
     function bandRatesFresh(bands) {
       var grid = [];
       for (var m = 0; m < 12; m++) grid.push([]);
-      return { cols: bands.slice(), grid: grid, daily: '', gst: true, map: {}, folds: [], forBands: bands.join('|') };
+      return { cols: bands.slice(), grid: grid, mode: 'month', season: { S: [], W: [] }, daily: '', gst: true, map: {}, folds: [], forBands: bands.join('|') };
     }
 
     /** A typed rate as a number, or null when blank / not a number / negative. */
@@ -3505,9 +3549,19 @@
       return isFinite(n) && n >= 0 ? n : null;
     }
 
+    /** The rate typed for month m in column c: the month's own row, or its season's row in "by season" mode. */
+    function bandRateAt(rt, m, c, W) {
+      if (rt.mode === 'season') return (rt.season[W[m] ? 'W' : 'S'] || [])[c];
+      return rt.grid[m][c];
+    }
     function bandRatesAny(rt) {
       if (!rt) return false;
-      for (var m = 0; m < 12; m++) for (var c = 0; c < rt.cols.length; c++) if (bandNum(rt.grid[m][c]) !== null) return true;
+      var c;
+      if (rt.mode === 'season') {
+        for (c = 0; c < rt.cols.length; c++) if (bandNum(rt.season.S[c]) !== null || bandNum(rt.season.W[c]) !== null) return true;
+        return false;
+      }
+      for (var m = 0; m < 12; m++) for (c = 0; c < rt.cols.length; c++) if (bandNum(rt.grid[m][c]) !== null) return true;
       return false;
     }
 
@@ -3575,7 +3629,7 @@
         if (col >= 0) {
           var num = 0, den = 0, plain = 0, plainN = 0;
           for (var m = 0; m < 12; m++) {
-            var r = bandNum(rt.grid[m][col]);
+            var r = bandNum(bandRateAt(rt, m, col, split.winter || BAND_WINTER_DEFAULT));
             if (r !== null) { plain += r; plainN++; }
             var k = split.kwh[band].months[m];
             if (!(k > 0)) continue;
@@ -3834,19 +3888,44 @@
       var model = wbIcpModel();
       var h = '';
       if (wbBandRegErr) h += '<p class="error">Band register could not be loaded: ' + esc(wbBandRegErr) + '</p>';
+      // Seasons: default from the Register, changeable for this session.
+      var Wn = bandWinterFor(bandRetailers()[0] || '');
+      h += '<div style="font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:4px"><span class="muted">Seasons:</span> <b>' +
+        esc(bandSeasonText(Wn)) + '</b><span class="muted">' + (wbSeasonOv ? '(changed for this session)' : '(default from the Register)') + '</span>' +
+        '<button class="linkbtn" onclick="wbSeasonEdit()">' + (wbSeasonEditOpen ? 'done' : 'change') + '</button>' +
+        (wbSeasonOv ? '<button class="linkbtn" onclick="wbSeasonReset()">back to the default</button>' : '') +
+        '<span style="margin-left:auto;display:flex;gap:10px"><button class="linkbtn" onclick="wbIcpOpenAll(true)">expand all</button>' +
+        '<button class="linkbtn" onclick="wbIcpOpenAll(false)">collapse all</button>' +
+        '<button class="linkbtn" onclick="wbIcpOpenProblems()">only ICPs with problems</button></span></div>';
+      if (wbSeasonEditOpen) {
+        h += '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px"><span class="muted">Click a month to move it between seasons:</span>';
+        for (var sm2 = 0; sm2 < 12; sm2++) {
+          h += '<button class="btn-sm" style="min-width:0;padding:2px 8px;' + (Wn[sm2] ? 'background:var(--tuc-accent);color:#fff' : '') + '" title="' +
+            (Wn[sm2] ? 'Winter' : 'Summer') + '" onclick="wbSeasonToggle(' + sm2 + ')">' + BAND_MONTHS[sm2] + '</button>';
+        }
+        h += '<span class="muted">dark = Winter. Everything below is recalculated at once.</span></div>';
+      }
       var anyCust = false;
       for (var bi = 0; bi < model.length; bi++) {
         var e = model[bi], st = wbMeterState(e.icp);
         if (e.custId) anyCust = true;
         var open = st.open !== null ? st.open : model.length <= 6;
+        var q = wbIcpQuality(e.icp);
         var total = 0;
         for (var m = 0; m < e.meters.length; m++) total += e.meters[m].monthly;
         h += '<details class="icpblk"' + (open ? ' open' : '') + ' ontoggle="wbMeterToggle(\'' + esc(e.icp) + '\', this.open)">' +
           '<summary><b class="mono">' + esc(e.icp) + '</b> <span class="muted" style="font-size:12px;font-weight:400">' +
           esc(e.info.network || 'network unknown') + ' · ' + esc(e.info.retailer || 'retailer unknown') + ' · ' +
           e.meters.length + ' meter(s) · ' + fmtNum(Math.round(total)) + ' kWh/month</span>' +
+          ' <span class="pill" style="font-weight:400">' + esc(q.gradeTxt) + '</span>' +
+          (q.flags ? ' <span class="pill flag" style="font-weight:400">' + q.flags + ' flag(s)</span>' : '') +
           (e.notes.length ? ' <span class="flag" style="font-size:12px">⚠</span>' : '') + '</summary>';
         h += '<div id="wbMt_' + bi + '">' + wbMeterTableHtml(e, bi) + '</div>';
+        // What the Calculations card used to show, per register of this ICP.
+        h += '<details class="subblk"' + ((st.calcOpen !== undefined ? st.calcOpen : (q.rank > 0 || q.flags > 0)) ? ' open' : '') + ' ontoggle="wbMeterCalcToggle(\'' + esc(e.icp) + '\', this.open)">' +
+          '<summary>Data and reliability <span class="muted" style="font-weight:400">(grade, coverage, monthly average, flags per register)</span></summary>' +
+          '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th>Fuel</th><th class="tL">File</th><th>Layer</th>' +
+          '<th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>' + q.html + '</tbody></table></div></details>';
         for (var d = 0; d < e.bands.length; d++) {
           var x = e.bands[d], res = wbBandResolve(x);
           h += '<details class="subblk"' + (res.st.detailOpen ? ' open' : '') + ' ontoggle="wbBandDetailToggle(' + x.i + ', this.open)">' +
@@ -3872,6 +3951,45 @@
       }
       box.innerHTML = h;
     }
+
+    var WB_GRADE_RANK = { GOOD: 0, CHECK: 1, UNRELIABLE: 2, NO_DATA: 3 };
+    /** Worst grade, flag count and the calculation rows of one ICP. */
+    function wbIcpQuality(icp) {
+      var rows = wbLastRows || [];
+      var out = { rank: -1, gradeTxt: '', flags: 0, html: '' };
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (r.icp !== icp) continue;
+        var a = r.analysis;
+        var rk = WB_GRADE_RANK[a.grade] === undefined ? 1 : WB_GRADE_RANK[a.grade];
+        if (rk > out.rank) { out.rank = rk; out.gradeTxt = ((a.gradeEmoji || '') + ' ' + (a.grade || '')).replace(/^ +| +$/g, ''); }
+        var unresolved = !r.lookup.customerId && /not found/i.test((r.lookup.flags || []).join(' '));
+        out.flags += ((wbProspect && unresolved) ? 0 : (r.lookup.flags || []).length) + (a.breaches || []).length + (a.flags || []).length;
+        out.html += wbCalcRow(r);
+      }
+      return out;
+    }
+    function wbMeterCalcToggle(icp, open) { wbMeterState(icp).calcOpen = !!open; }
+    function wbIcpOpenAll(on) {
+      var model = wbIcpModel();
+      for (var i = 0; i < model.length; i++) wbMeterState(model[i].icp).open = !!on;
+      wbBandsRender(true);
+    }
+    function wbIcpOpenProblems() {
+      var model = wbIcpModel();
+      for (var i = 0; i < model.length; i++) {
+        var q = wbIcpQuality(model[i].icp);
+        wbMeterState(model[i].icp).open = q.rank > 0 || q.flags > 0 || model[i].notes.length > 0;
+      }
+      wbBandsRender(true);
+    }
+    function wbSeasonEdit() { wbSeasonEditOpen = !wbSeasonEditOpen; wbBandsRender(true); }
+    function wbSeasonToggle(m) {
+      if (!wbSeasonOv) wbSeasonOv = bandWinterFor(bandRetailers()[0] || '').slice();
+      wbSeasonOv[m] = !wbSeasonOv[m];
+      wbBandsRender(true);
+    }
+    function wbSeasonReset() { wbSeasonOv = null; wbBandsRender(true); }
 
     function wbMeterRateTxt(icp, type) {
       var r = wbRates[icp];
@@ -3905,7 +4023,9 @@
           '<div id="wbMtMan_' + bi + '_' + ri + '" class="flag" style="font-size:11px">' +
           (row.manualMonthly ? 'manual' + (row.calcMonthly !== null && row.calcMonthly !== undefined ? ' · calculated ' + fmtNum(row.calcMonthly) : '') : '') + '</div></td>' +
           '<td class="tR muted" id="wbMtAnn_' + bi + '_' + ri + '">' + (row.monthly === null || row.monthly === undefined ? '—' : fmtNum(Math.round(row.monthly * 12))) + '</td>' +
-          '<td class="tR mono" style="font-size:12px">' + (rt || '<span class="muted">—</span>') + '</td>' +
+          '<td class="tR mono" style="font-size:12px">' + (rt || (row.rate !== null && row.rate !== undefined
+            ? '<span class="muted" title="Weighted average from the rate card typed in the time-band detail — not saved in Enter rates yet">' + bandRateTxt(row.rate) + '</span>'
+            : '<span class="muted">—</span>')) + '</td>' +
           '<td style="white-space:nowrap"><button class="linkbtn" title="Do not send this row to Betty" onclick="wbMeterRemove(' + bi + ', ' + ri + ', true)">remove</button></td></tr>';
       }
       h += '</tbody></table></div>';
@@ -4037,8 +4157,8 @@
       var split = c.split, days = split.days;
       var num = function (v) { return v === null ? '—' : copyableNum(Math.round(v)); };
       var h = '<div class="tblwrap"><table><thead><tr><th class="tL">Band</th>' +
-        '<th class="tR" title="Average monthly kWh used in this band during Oct–Mar. Summer + Winter = Avg monthly.">Summer</th>' +
-        '<th class="tR" title="Average monthly kWh used in this band during Apr–Sep. Summer + Winter = Avg monthly.">Winter</th>' +
+        '<th class="tR" title="Average monthly kWh used in this band during ' + bandMonthsText(split.winter, false) + '. Summer + Winter = Avg monthly.">Summer</th>' +
+        '<th class="tR" title="Average monthly kWh used in this band during ' + bandMonthsText(split.winter, true) + '. Summer + Winter = Avg monthly.">Winter</th>' +
         '<th class="tR">Avg monthly kWh</th><th class="tR">Annual kWh</th><th class="tR">Share</th>' +
         '<th class="tL">Rate column</th><th class="tR" title="Consumption-weighted average of the monthly rates, $/kWh excl GST">Weighted avg $/kWh</th></tr></thead><tbody>';
       var notes = [];
@@ -4070,7 +4190,7 @@
         '<td class="tR">' + num(bandMonthly(split.total, days)) + '</td>' +
         '<td class="tR">' + num(bandAnnual(split.total, days)) + '</td><td></td><td></td><td></td></tr>';
       h += '</tbody></table></div>';
-      h += '<div class="muted" style="font-size:11px">' + fmtNum(Math.round(days)) + ' days of half-hourly data · Summer = Oct–Mar, Winter = Apr–Sep · public holidays count as ordinary days · click a figure to copy it</div>';
+      h += '<div class="muted" style="font-size:11px">' + fmtNum(Math.round(days)) + ' days of half-hourly data · ' + bandSeasonText(split.winter) + ' · public holidays count as ordinary days · click a figure to copy it</div>';
       for (var n = 0; n < notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(notes[n]) + '</div>';
 
       // Betty's four slots.
@@ -4143,15 +4263,31 @@
       var inp = 'width:92px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right';
       var h = '<p class="muted" style="font-size:12px;margin:6px 0">Type the customer’s current rates in <b>c/kWh</b>, one column per rate on the retailer’s rate sheet. ' +
         'A block copied from a spreadsheet can be pasted into any cell. Each band above uses the column picked under “Rate column”.</p>';
-      h += '<div class="tblwrap"><table style="width:auto"><thead><tr><th class="tL">Month</th>';
+      h += '<div style="display:flex;gap:10px;align-items:center;font-size:12px;margin-bottom:6px"><span class="muted">The rate card is</span><div class="seg">' +
+        '<button class="' + (rt.mode !== 'season' ? 'active' : '') + '" onclick="wbBandSetMode(' + i + ', \'month\')">by month</button>' +
+        '<button class="' + (rt.mode === 'season' ? 'active' : '') + '" onclick="wbBandSetMode(' + i + ', \'season\')">by season (summer / winter)</button></div></div>';
+      h += '<div class="tblwrap"><table style="width:auto"><thead><tr><th class="tL">' + (rt.mode === 'season' ? 'Season' : 'Month') + '</th>';
       for (var c = 0; c < rt.cols.length; c++) {
         h += '<th><input type="text" value="' + esc(rt.cols[c]) + '" title="Rate name" onchange="wbBandSetCol(' + i + ', ' + c + ', this.value)"' +
           ' style="width:120px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:12px;font-weight:600">' +
-          '<div style="font-weight:400"><button class="linkbtn" title="Copy each typed rate down into the blank months after it" onclick="wbBandFill(' + i + ', ' + c + ')">fill blanks</button>' +
-          (rt.cols.length > 1 ? ' · <button class="linkbtn" title="Remove this rate column" onclick="wbBandDelCol(' + i + ', ' + c + ')">remove</button>' : '') + '</div></th>';
+          '<div style="font-weight:400">' + (rt.mode === 'season' ? '' : '<button class="linkbtn" title="Copy each typed rate down into the blank months after it" onclick="wbBandFill(' + i + ', ' + c + ')">fill blanks</button>') +
+          (rt.cols.length > 1 ? (rt.mode === 'season' ? '' : ' · ') + '<button class="linkbtn" title="Remove this rate column" onclick="wbBandDelCol(' + i + ', ' + c + ')">remove</button>' : '') + '</div></th>';
       }
       h += '<th><button class="btn-sm" onclick="wbBandAddCol(' + i + ')">+ rate</button></th></tr></thead><tbody>';
-      for (var m = 0; m < 12; m++) {
+      if (rt.mode === 'season') {
+        var Ws = bandWinterFor(res.sched.retailer);
+        var seas = [['S', 'Summer', false], ['W', 'Winter', true]];
+        for (var sx = 0; sx < 2; sx++) {
+          h += '<tr><td class="tL"><b>' + seas[sx][1] + '</b><div class="muted" style="font-size:11px">' + bandMonthsText(Ws, seas[sx][2]) + '</div></td>';
+          for (var c3 = 0; c3 < rt.cols.length; c3++) {
+            var sv = rt.season[seas[sx][0]][c3];
+            h += '<td><input type="text" inputmode="decimal" value="' + esc(sv === undefined ? '' : sv) + '"' +
+              ' onchange="wbBandSetSeasonRate(' + i + ', \'' + seas[sx][0] + '\', ' + c3 + ', this.value)" style="' + inp + '"></td>';
+          }
+          h += '<td></td></tr>';
+        }
+      }
+      for (var m = 0; m < 12 && rt.mode !== 'season'; m++) {
         h += '<tr><td class="tL">' + BAND_MONTHS[m] + '</td>';
         for (var c2 = 0; c2 < rt.cols.length; c2++) {
           var v = rt.grid[m][c2];
@@ -4213,6 +4349,17 @@
       rt.grid[m][c] = String(val).trim();
       wbBandRes(i);
     }
+    function wbBandSetSeasonRate(i, key, c, val) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.season[key][c] = String(val).trim();
+      wbBandRes(i);
+    }
+    /** Switching mode keeps both sets of typed rates; only the active one is used. */
+    function wbBandSetMode(i, mode) {
+      var rt = wbBandRt(i); if (!rt) return;
+      rt.mode = mode === 'season' ? 'season' : 'month';
+      wbBandsRender(true);
+    }
     function wbBandSetDaily(i, val) {
       var rt = wbBandRt(i); if (!rt) return;
       rt.daily = String(val).trim();
@@ -4250,6 +4397,7 @@
       if (has && !confirm('Remove the rate column “' + rt.cols[c] + '” and the rates typed in it?')) return;
       rt.cols.splice(c, 1);
       for (var m2 = 0; m2 < 12; m2++) rt.grid[m2].splice(c, 1);
+      rt.season.S.splice(c, 1); rt.season.W.splice(c, 1);
       // Column picks shift with the columns; a pick of the removed column is dropped.
       for (var band in rt.map) {
         if (!Object.prototype.hasOwnProperty.call(rt.map, band)) continue;
@@ -4341,7 +4489,7 @@
         R.push(['Weekdays', sched.weekday]);
         R.push(['Weekends', sched.weekend || 'same as weekdays']);
         R.push(['Schedule last checked', sched.lastChecked || 'never']);
-        R.push(['Basis', 'Summer = Oct-Mar, Winter = Apr-Sep; public holidays count as ordinary days; average monthly = kWh / days x 365.25 / 12']);
+        R.push(['Basis', bandSeasonText(split.winter).replace(/–/g, '-') + '; public holidays count as ordinary days; average monthly = kWh / days x 365.25 / 12']);
         R.push(['Days of half-hourly data', r2(days)]);
         R.push([]);
         bold.push(R.length);
@@ -4827,6 +4975,23 @@
       if (wbBandRegErr) h += '<p class="error">' + esc(wbBandRegErr) + '</p>';
       h += '<div id="regMsg"></div>';
       if (regEd) h += regEditorHtml();
+      // Seasons per retailer (v2.19): the default the Workbench starts from.
+      var rets = bandRetailers();
+      if (rets.length) {
+        h += '<div style="border:1px solid var(--tuc-line);border-radius:10px;padding:10px 14px;margin-bottom:14px"><b>Seasons by retailer</b>' +
+          '<span class="muted" style="font-size:12px"> — which months count as Winter (dark). The Workbench starts from this and the operator can change it for a session.</span>';
+        for (var ri = 0; ri < rets.length; ri++) {
+          var rk = bandNorm(rets[ri]);
+          var fl = regSeasonEd[rk] || wbBandSeasons[rk] || BAND_WINTER_DEFAULT;
+          h += '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px"><b style="min-width:110px">' + esc(rets[ri]) + '</b>';
+          for (var mm = 0; mm < 12; mm++) {
+            h += '<button class="btn-sm" style="min-width:0;padding:2px 8px;' + (fl[mm] ? 'background:var(--tuc-accent);color:#fff' : '') + '" onclick="regSeasonToggle(' + ri + ', ' + mm + ')">' + BAND_MONTHS[mm] + '</button>';
+          }
+          h += '<span class="muted" style="margin-left:6px">' + esc(bandSeasonText(fl)) + '</span>' +
+            (regSeasonEd[rk] ? ' <button class="btn-sm" onclick="regSeasonSave(' + ri + ')">save</button> <button class="linkbtn" onclick="regSeasonCancel(' + ri + ')">cancel</button>' : '') + '</div>';
+        }
+        h += '</div>';
+      }
       h += '<p class="muted">' + rows.length + ' schedule(s). Each band runs from its start time to the next one; the last runs to midnight.</p>';
       h += '<div class="tblwrap"><table><thead><tr><th class="tL">Retailer</th><th class="tL">Network</th><th class="tL">Weekdays</th>' +
         '<th class="tL">Weekends</th><th class="tL">Checked</th><th class="tL">Note</th><th></th></tr></thead><tbody>';
@@ -4906,6 +5071,33 @@
         '<p style="margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="regSaveBtn" onclick="regSave(this)" style="min-width:0;padding:0 18px">Save</button>' +
         '<button class="btn-sm" onclick="regEd=null;regRender()">cancel</button><span id="regEdMsg"></span></p></div>';
       return h;
+    }
+
+    var regSeasonEd = {}; // retailer (normalised) -> [12 x bool] being edited
+    function regSeasonToggle(ri, m) {
+      var name = bandRetailers()[ri]; if (!name) return;
+      var k = bandNorm(name);
+      if (!regSeasonEd[k]) regSeasonEd[k] = (wbBandSeasons[k] || BAND_WINTER_DEFAULT).slice();
+      regSeasonEd[k][m] = !regSeasonEd[k][m];
+      regRender();
+    }
+    function regSeasonCancel(ri) {
+      var name = bandRetailers()[ri]; if (!name) return;
+      delete regSeasonEd[bandNorm(name)];
+      regRender();
+    }
+    function regSeasonSave(ri) {
+      var name = bandRetailers()[ri]; if (!name) return;
+      var k = bandNorm(name), months = [];
+      for (var m = 0; m < 12; m++) if (regSeasonEd[k][m]) months.push(m + 1);
+      google.script.run
+        .withSuccessHandler(function (res) {
+          delete regSeasonEd[k];
+          wbBandSeasons = bandSeasonsFromServer(res.seasons);
+          regAfter(res, name + ': seasons saved.');
+        })
+        .withFailureHandler(regFail)
+        .apiBandSeasonSave(name, months);
     }
 
     function regSegList(which) { return which === 'we' ? regEd.we : regEd.wd; }

@@ -162,7 +162,68 @@ function bandRegisterLoad_() {
 
 /** Client: the whole register (it is small). */
 function apiBandRegister() {
-  return { rows: bandRegisterLoad_(), maxSegments: BAND_MAX_SEGMENTS };
+  return { rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_(), maxSegments: BAND_MAX_SEGMENTS };
+}
+
+// Seasons per retailer (v2.19): which months are Winter. Tab "Band
+// Seasons": retailer | winter months (1-12, comma separated) | updated
+// at | updated by. A retailer with no row uses April-September.
+const BAND_SEASONS_TAB = 'Band Seasons';
+const BAND_SEASONS_HEADERS = ['retailer', 'winter months', 'updated at', 'updated by'];
+
+function bandSeasonsSheet_() {
+  const ss = SpreadsheetApp.openById(getConfig_()._backingId);
+  let sheet = ss.getSheetByName(BAND_SEASONS_TAB);
+  if (!sheet) sheet = ss.insertSheet(BAND_SEASONS_TAB);
+  if (!sheet.getRange(1, 1).getValue()) {
+    sheet.getRange(1, 1, 1, BAND_SEASONS_HEADERS.length).setValues([BAND_SEASONS_HEADERS]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/** { retailer: "4,5,6,7,8,9" } - the last row for a retailer wins. */
+function bandSeasonsLoad_() {
+  const sheet = bandSeasonsSheet_();
+  const out = {};
+  const n = sheet.getLastRow() - 1;
+  if (n < 1) return out;
+  const vals = sheet.getRange(2, 1, n, 2).getValues();
+  for (const r of vals) {
+    const name = String(r[0] || '').trim();
+    if (name) out[name] = String(r[1] || '').trim();
+  }
+  return out;
+}
+
+/** Save a retailer's winter months (numbers 1-12). Both seasons must keep at least one month. */
+function apiBandSeasonSave(retailer, months) {
+  const name = String(retailer || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!name) throw new Error('Retailer is required.');
+  const seen = {};
+  for (const m of months || []) { const n = Number(m); if (n >= 1 && n <= 12 && n === Math.floor(n)) seen[n] = true; }
+  const list = Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+  if (!list.length || list.length === 12) throw new Error('Winter needs at least one month and at most eleven.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = bandSeasonsSheet_();
+    let operator = '';
+    try { operator = Session.getActiveUser().getEmail(); } catch (err) {}
+    const n = sheet.getLastRow() - 1;
+    let target = 0;
+    if (n >= 1) {
+      const vals = sheet.getRange(2, 1, n, 1).getValues();
+      for (let i = 0; i < n; i++) if (String(vals[i][0] || '').trim().toUpperCase() === name.toUpperCase()) target = i + 2;
+    }
+    const rowVals = [name, list.join(','), new Date(), operator];
+    if (target) sheet.getRange(target, 1, 1, 4).setValues([rowVals]);
+    else sheet.appendRow(rowVals);
+    SpreadsheetApp.flush();
+    return { ok: true, rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_() };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function bandKey_(retailer, network) {
@@ -218,7 +279,7 @@ function apiBandRegisterSave(entry, origKey) {
     if (target) sheet.getRange(target.row, 1, 1, rowVals.length).setValues([rowVals]);
     else sheet.appendRow(rowVals);
     SpreadsheetApp.flush();
-    return { ok: true, rows: bandRegisterLoad_() };
+    return { ok: true, rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_() };
   } finally {
     lock.releaseLock();
   }
@@ -239,7 +300,7 @@ function apiBandRegisterChecked(retailer, network) {
     const now = new Date();
     sheet.getRange(hit.row, 7, 1, 3).setValues([[now, now, operator]]);
     SpreadsheetApp.flush();
-    return { ok: true, rows: bandRegisterLoad_() };
+    return { ok: true, rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_() };
   } finally {
     lock.releaseLock();
   }
@@ -257,7 +318,7 @@ function apiBandRegisterDelete(retailer, network) {
     if (!hit) throw new Error('That row is no longer in the register.');
     sheet.deleteRows(hit.row, 1);
     SpreadsheetApp.flush();
-    return { ok: true, rows: bandRegisterLoad_() };
+    return { ok: true, rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_() };
   } finally {
     lock.releaseLock();
   }
