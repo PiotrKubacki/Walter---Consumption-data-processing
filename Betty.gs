@@ -83,14 +83,39 @@ function bettyMeterForBand_(band, vocab) {
 }
 
 /**
+ * v2.18: the Workbench now sends { "<icp>": [{ name, monthly, src,
+ * manual, grade }] } - the ICP's meters exactly as shown (and possibly
+ * edited) on screen; such an ICP is written from that list alone.
+ * Older shape, still honoured:
  * bandData (v2.16.1, optional): { "<icp>|<register>": { schedule,
  * slots: [{ name, monthly }] } } - the time bands shown on the
  * Workbench (after any fold). An ICP-register listed there is written
  * band by band; every other register is written whole, through the
  * Register Map, as before.
  */
-function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
+// Template columns the rates screen can fill (v2.17), besides Unit
+// Cost 1-4. key -> header text in the Bulk Analysis sheet.
+const BETTY_RATE_COLUMNS = {
+  daily: 'Daily Retailer Charge', dailyLevy: 'Daily Levy Retailer Charge', kwhLevy: 'Kwh Levy Retailer Charge',
+  capacity: 'Capacity Retailer Charge', demand: 'Demand Retailer Charge', distance: 'Distance Retailer Charge',
+  unmetered: 'Unmetered Retailer Charge', breakFee: 'Break Fee Retailer Charge', contractDays: 'Contract Length',
+  brokerage: 'Brokerage Fee', ppd: 'PPD', addPpd: 'Additional PPD', inflation: 'Inflation',
+  rebate: 'Annual Rebate', incentive: 'Incentive Credit',
+};
+
+function bettyKey_(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+
+/**
+ * rates (v2.17, optional): { "<icp>": { unit: { "<Betty meter name>":
+ * number }, fields: { daily, dailyLevy, ..., incentive } } } from the
+ * Enter rates screen. Every cost arrives ALREADY in $ excl GST (the
+ * browser converts whatever style the operator typed in); this
+ * function only writes numbers. Only keys that are present are
+ * written; everything else on the row is left alone.
+ */
+function apiBettyFill(base64Data, uploadName, fileIds, bandData, rates) {
   const bandMap = bandData || {};
+  const rateMap = rates || {};
   const cfg = getConfig_();
   const runRef = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyyMMdd-HHmmss');
 
@@ -109,7 +134,7 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
   const temp = Drive.Files.create({ name: 'CDP Betty fill ' + runRef, mimeType: MimeType.GOOGLE_SHEETS }, blob);
   const ss = SpreadsheetApp.openById(temp.id);
 
-  const summary = { updated: [], notUpdated: [], flagged: [], vocabularyGaps: [] };
+  const summary = { updated: [], notUpdated: [], flagged: [], vocabularyGaps: [], ratesRows: 0 };
   const flagsLog = [];
   try {
     const bulk = ss.getSheetByName('Bulk Analysis');
@@ -130,7 +155,8 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
     for (let n = 1; n <= 4; n++) {
       const m = headers.findIndex(h => new RegExp('^meter\\s*' + n + '$', 'i').test(h));
       const c = headers.findIndex(h => new RegExp('^monthly\\s*consumption\\s*' + n + '$', 'i').test(h));
-      if (m >= 0 && c >= 0) slots.push({ meterCol: m, consCol: c });
+      const u = headers.findIndex(h => new RegExp('^unit\\s*cost\\s*' + n + '$', 'i').test(h));
+      if (m >= 0 && c >= 0) slots.push({ meterCol: m, consCol: c, unitCol: u });
     }
     if (!slots.length) throw new Error('No Meter N / Monthly Consumption N column pairs found.');
 
@@ -161,41 +187,76 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
       }
 
       const rowUpdates = [];
+      const rowLines = []; // structured copy of rowUpdates for the report table (v2.17)
       const rowFlags = [];
       const writtenCols = {};
       let usedBands = false;
-      for (const g of groups) {
+      let cur = { gradeEmoji: '', grade: '' }; // grade shown beside what writeSlot writes
+      // Slot: existing slot with this name, else first empty slot.
+      const writeSlot = (label, bettyType, value) => {
+        let target = null;
+        for (const s of slots) {
+          if (String(row[s.meterCol] || '').trim().toLowerCase() === bettyType.toLowerCase()) { target = s; break; }
+        }
+        let writeName = false;
+        if (!target) {
+          for (const s of slots) {
+            if (!String(row[s.meterCol] || '').trim()) { target = s; writeName = true; break; }
+          }
+        }
+        if (!target) {
+          rowFlags.push(label + ': no free meter slot (all 4 used) \u2014 not written');
+          flagsLog.push([icp, label, 'NO_FREE_SLOT', '']);
+          return;
+        }
+        const sheetRow = i + 2;
+        // Two registers of one ICP landing on the SAME Betty meter in
+        // this run are added together (v2.16.2) - the second used to
+        // replace the first.
+        const added = !!writtenCols[target.meterCol];
+        if (added) value = (Number(row[target.consCol]) || 0) + value;
+        if (writeName) bulk.getRange(sheetRow, target.meterCol + 1).setValue(bettyType);
+        bulk.getRange(sheetRow, target.consCol + 1).setValue(value);
+        row[target.meterCol] = bettyType; // keep local copy current for multi-register ICPs
+        row[target.consCol] = value;
+        writtenCols[target.meterCol] = true;
+        rowUpdates.push(label + ' \u2192 ' + bettyType + ' = ' + value + (added ? ' (added to the same meter)' : '') +
+          ' (' + (cur.gradeEmoji + ' ' + cur.grade).trim() + ')');
+        rowLines.push({ src: label, meter: bettyType, kwh: value, grade: (cur.gradeEmoji + ' ' + cur.grade).trim(),
+          note: added ? 'added to the same meter' : '' });
+      };
+
+
+      // v2.18: the Workbench sent this ICP's meters exactly as shown there
+      // (types and figures possibly edited by the operator): write those
+      // and nothing else for this ICP.
+      const explicit = Array.isArray(bandMap[icp]) ? bandMap[icp] : null;
+      if (explicit) {
+        usedBands = true;
+        for (const m of explicit) {
+          const monthly = Number(m.monthly);
+          const label = String(m.src || m.name || '');
+          const name = String(m.name || '').trim();
+          if (!name || !isFinite(monthly) || monthly < 0) { rowFlags.push(label + ': no meter type or figure \u2014 not written'); continue; }
+          const known = vocab.length ? vocab.filter(v => bettyKey_(v) === bettyKey_(name))[0] : name;
+          if (!known) {
+            rowFlags.push(label + ': "' + name + '" is not a Betty meter type \u2014 not written');
+            flagsLog.push([icp, label, 'VOCABULARY_GAP', name]);
+            if (summary.vocabularyGaps.indexOf(name) === -1) summary.vocabularyGaps.push(name);
+            continue;
+          }
+          cur = { gradeEmoji: '', grade: m.manual ? 'manual' : String(m.grade || '').trim() };
+          writeSlot(label, known, Math.round(monthly));
+          if (m.manual) flagsLog.push([icp, label, 'MANUAL_FIGURE', known + ' = ' + Math.round(monthly)]);
+        }
+      }
+      for (const g of (explicit ? [] : groups)) {
         const a = g.analysis;
+        cur = { gradeEmoji: a.gradeEmoji, grade: a.grade };
         if (a.avm === null || a.grade === 'NO_DATA') {
           rowFlags.push(g.register + ': no AVM (' + a.grade + ')');
           continue;
         }
-        // Slot: existing slot with this name, else first empty slot.
-        const writeSlot = (label, bettyType, value) => {
-          let target = null;
-          for (const s of slots) {
-            if (String(row[s.meterCol] || '').trim().toLowerCase() === bettyType.toLowerCase()) { target = s; break; }
-          }
-          let writeName = false;
-          if (!target) {
-            for (const s of slots) {
-              if (!String(row[s.meterCol] || '').trim()) { target = s; writeName = true; break; }
-            }
-          }
-          if (!target) {
-            rowFlags.push(label + ': no free meter slot (all 4 used) \u2014 not written');
-            flagsLog.push([icp, label, 'NO_FREE_SLOT', '']);
-            return;
-          }
-          const sheetRow = i + 2;
-          if (writeName) bulk.getRange(sheetRow, target.meterCol + 1).setValue(bettyType);
-          bulk.getRange(sheetRow, target.consCol + 1).setValue(value);
-          row[target.meterCol] = bettyType; // keep local copy current for multi-register ICPs
-          row[target.consCol] = value;
-          writtenCols[target.meterCol] = true;
-          rowUpdates.push(label + ' \u2192 ' + bettyType + ' = ' + value + ' (' + a.gradeEmoji + ' ' + a.grade + ')');
-        };
-
         // Time bands shown on the Workbench: one Betty meter per band.
         const bandEntry = bandMap[icp + '|' + g.register];
         if (bandEntry && bandEntry.slots && bandEntry.slots.length) {
@@ -243,7 +304,48 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
           }
         }
       }
-      if (rowUpdates.length) summary.updated.push({ icp: icp, customer: groups[0].lookup.registeredName, detail: rowUpdates, flags: rowFlags });
+      // Rates typed on the Enter rates screen ($ excl GST).
+      const rt = rateMap[icp];
+      if (rt) {
+        const sheetRowR = i + 2;
+        let unitN = 0, fieldN = 0;
+        const unit = rt.unit || {};
+        const usedKeys = {};
+        for (const s of slots) {
+          const nm = String(row[s.meterCol] || '').trim();
+          if (!nm || s.unitCol < 0) continue;
+          for (const meterName in unit) {
+            if (bettyKey_(meterName) !== bettyKey_(nm)) continue;
+            const val = Number(unit[meterName]);
+            usedKeys[meterName] = true;
+            if (unit[meterName] === null || unit[meterName] === '' || !isFinite(val) || val < 0) continue;
+            bulk.getRange(sheetRowR, s.unitCol + 1).setValue(val);
+            row[s.unitCol] = val;
+            unitN++;
+          }
+        }
+        for (const meterName in unit) {
+          if (!usedKeys[meterName] && unit[meterName] !== null && unit[meterName] !== '') {
+            rowFlags.push('rate typed for "' + meterName + '" but the row has no such meter \u2014 not written');
+          }
+        }
+        const fields = rt.fields || {};
+        for (const key in BETTY_RATE_COLUMNS) {
+          if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
+          const val = Number(fields[key]);
+          if (fields[key] === null || fields[key] === '' || !isFinite(val)) continue;
+          const col = headers.findIndex(h => h.toLowerCase() === BETTY_RATE_COLUMNS[key].toLowerCase());
+          if (col < 0) { rowFlags.push(BETTY_RATE_COLUMNS[key] + ': column not in the template \u2014 not written'); continue; }
+          bulk.getRange(sheetRowR, col + 1).setValue(val);
+          fieldN++;
+        }
+        if (unitN || fieldN) {
+          rowUpdates.push('rates: ' + unitN + ' unit cost(s), ' + fieldN + ' other field(s)');
+          rowLines.push({ src: 'rates', meter: '', kwh: '', grade: '', note: unitN + ' unit cost(s), ' + fieldN + ' other field(s) written' });
+          summary.ratesRows++;
+        }
+      }
+      if (rowUpdates.length) summary.updated.push({ icp: icp, customer: groups[0].lookup.registeredName, detail: rowUpdates, lines: rowLines, flags: rowFlags });
       else summary.notUpdated.push({ icp: icp, reason: rowFlags.join('; ') || 'nothing writable' });
     }
 
@@ -253,9 +355,26 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
 
     SpreadsheetApp.flush();
 
-    // Export xlsx to the output folder
-    const outBlob = exportXlsx_(temp.id).setName('Betty filled ' + runRef + '.xlsx');
-    const outFile = DriveApp.getFolderById(requireConfig_('output_folder_id')).createFile(outBlob);
+    // Export xlsx to the Betty files folder (v2.17: NOT the CDF output
+    // folder - a filled template can hold the customer's rates, and
+    // CDFs go out to retailers).
+    const custIds = {}; let custName = '';
+    for (const u of summary.updated) {
+      const g0 = (byIcp[u.icp] || [])[0];
+      if (g0 && g0.lookup.customerId) { custIds[g0.lookup.customerId] = true; custName = custName || g0.lookup.registeredName || ''; }
+    }
+    const idList = Object.keys(custIds);
+    const betLabel = idList.length === 1 ? idList[0] + ' ' + custName : idList.length ? 'several customers' : 'no rows updated';
+    const outName = 'BET - ' + betLabel.replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' +
+      Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HHmm');
+    const outBlob = exportXlsx_(temp.id).setName(outName + '.xlsx');
+    const outFile = bettyFolder_().createFile(outBlob);
+    const share = bettyShare_(outFile);
+    let indexError = '';
+    try {
+      betIndexAdd_({ customerId: idList.length === 1 ? idList[0] : idList.join(', '), customer: idList.length === 1 ? custName : '',
+        icps: summary.updated.map(u => u.icp), hasRates: summary.ratesRows > 0, file: outFile });
+    } catch (e) { indexError = String(e.message || e); }
 
     // Logs
     writeRunLog_(runRef, batch, summary, outFile.getUrl());
@@ -270,6 +389,9 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData) {
       notUpdated: summary.notUpdated,
       flagged: summary.flagged,
       vocabularyGaps: summary.vocabularyGaps,
+      fileId: outFile.getId(),
+      ratesRows: summary.ratesRows,
+      sharedWith: share.sharedWith, shareError: share.shareError, indexError: indexError,
     };
   } finally {
     DriveApp.getFileById(temp.id).setTrashed(true);
@@ -351,4 +473,94 @@ function apiArchiveProcessedFiles() {
     moved.push(f.getName());
   }
   return { moved: moved };
+}
+
+// =====================================================
+// Betty files: own folder, own sharing, own index (v2.17)
+// -----------------------------------------------------
+// A filled Betty template can hold a customer's current
+// rates. It is therefore kept apart from the CDFs (which
+// can go to retailers with an RFP): its own folder, shared
+// with named people only (never "anyone with the link"),
+// and its own index for the Archive tab. Nothing in the
+// RFP queue ever links to a Betty file.
+// =====================================================
+
+const BET_INDEX_TAB = 'Betty Index';
+const BET_INDEX_HEADERS = ['date', 'customer id', 'registered name', 'icp count', 'icps', 'operator',
+  'file name', 'file id', 'url', 'size bytes', 'rates (Y/N)'];
+const BET_FOLDER_NAME = 'Betty files';
+
+/** Config key betty_output_folder_id if set, else a "Betty files" subfolder of the output folder (created on first use). */
+function bettyFolder_() {
+  const cfg = getConfig_();
+  if (cfg.betty_output_folder_id) return DriveApp.getFolderById(cfg.betty_output_folder_id);
+  const parent = DriveApp.getFolderById(requireConfig_('output_folder_id'));
+  const it = parent.getFoldersByName(BET_FOLDER_NAME);
+  return it.hasNext() ? it.next() : parent.createFolder(BET_FOLDER_NAME);
+}
+
+/**
+ * Share a Betty file with the people who do the job: the operator who
+ * made it and every address in Config key betty_file_viewers (comma
+ * or space separated - personal accounts go here). Never a public
+ * link. Returns who it was shared with and any failures.
+ */
+function bettyShare_(file) {
+  const emails = {};
+  try { const me = Session.getActiveUser().getEmail(); if (me) emails[me.toLowerCase()] = true; } catch (e) {}
+  const list = String(getConfig_().betty_file_viewers || '').split(/[\s,;]+/);
+  for (const x of list) { const a = x.trim().toLowerCase(); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)) emails[a] = true; }
+  const ok = [], bad = [];
+  for (const a of Object.keys(emails)) {
+    try { file.addViewer(a); ok.push(a); } catch (e) { bad.push(a); }
+  }
+  return { sharedWith: ok, shareError: bad.length ? 'could not share with ' + bad.join(', ') : '' };
+}
+
+function betIndexSheet_() {
+  const ss = SpreadsheetApp.openById(getConfig_()._backingId);
+  let sheet = ss.getSheetByName(BET_INDEX_TAB);
+  if (!sheet) sheet = ss.insertSheet(BET_INDEX_TAB);
+  if (!sheet.getRange(1, 1).getValue()) {
+    sheet.getRange(1, 1, 1, BET_INDEX_HEADERS.length).setValues([BET_INDEX_HEADERS]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function betIndexAdd_(info) {
+  let operator = '';
+  try { operator = Session.getActiveUser().getEmail(); } catch (e) {}
+  let size = '';
+  try { size = info.file.getSize(); } catch (e) {}
+  betIndexSheet_().appendRow([new Date(), String(info.customerId || ''), String(info.customer || ''),
+    info.icps.length, info.icps.join(', ').slice(0, 45000), operator,
+    info.file.getName(), info.file.getId(), info.file.getUrl(), size, info.hasRates ? 'Y' : '']);
+}
+
+/** Archive search over the Betty Index: customer id, name, file name or ICP. Newest first, capped at 50. */
+function apiBetSearch(q) {
+  const sheet = betIndexSheet_();
+  const out = { rows: [], total: 0, matched: 0, q: String(q || '').trim() };
+  if (sheet.getLastRow() < 2) return out;
+  const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, BET_INDEX_HEADERS.length).getValues();
+  const needle = out.q.toLowerCase();
+  for (let i = vals.length - 1; i >= 0; i--) {
+    const r = vals[i];
+    if (!String(r[7] || '').trim() && !String(r[6] || '').trim()) continue;
+    out.total++;
+    const icps = String(r[4] || '');
+    if (needle && [r[1], r[2], r[6], icps].join(' | ').toLowerCase().indexOf(needle) === -1) continue;
+    out.matched++;
+    if (out.rows.length >= 50) continue;
+    out.rows.push({
+      date: r[0] instanceof Date ? Utilities.formatDate(r[0], 'Pacific/Auckland', 'yyyy-MM-dd HH:mm') : String(r[0] || ''),
+      customerId: String(r[1] || ''), customer: String(r[2] || ''),
+      icpCount: Number(r[3]) || 0, operator: String(r[5] || ''),
+      fileName: String(r[6] || ''), fileId: String(r[7] || ''), url: String(r[8] || ''),
+      sizeBytes: Number(r[9]) || 0, hasRates: /^y/i.test(String(r[10] || '')),
+    });
+  }
+  return out;
 }

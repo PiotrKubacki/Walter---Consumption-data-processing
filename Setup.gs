@@ -23,6 +23,8 @@ const CDP_CONFIG_KEYS = [
   ['max_gap_share',            '0.1', 'Reliability threshold: max gap share of analysis window (0-1)'],
   ['near_zero_avm_kwh',        '10',  'Informational flag: AVM below this kWh/month => near-zero flag'],
   ['format_report_email',      'peter@theutilitycompany.net', 'Unknown-format files reported from the Workbench are emailed here'],
+  ['betty_output_folder_id',   '', 'Optional - Drive folder for filled Betty templates; blank => a "Betty files" subfolder of the output folder'],
+  ['betty_file_viewers',       '', 'Email addresses (comma separated) that every filled Betty template is shared with - add operators on personal accounts'],
   ['bulk_quote_email',         'peter@theutilitycompany.net', 'Bulk pricing export files are emailed here (interim, until sent to retailers directly)'],
 ];
 

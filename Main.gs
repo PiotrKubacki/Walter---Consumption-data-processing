@@ -151,6 +151,10 @@ function analyseFromCache_(fileIds) {
   const rows = [];
   const boundaries = loadTimeBoundaries_();
   const seasons = loadSeasons_();
+  // v2.16.2: the Betty meter type each register maps to (Register Map),
+  // so the Workbench knows a controlled register from an uncontrolled one.
+  let regMapForRows = [];
+  try { regMapForRows = loadRegisterMap_(); } catch (e) { regMapForRows = []; }
   for (const key of Object.keys(groups).sort()) {
     const recs = groups[key];
     const [icp, register] = key.split('|');
@@ -190,6 +194,7 @@ function analyseFromCache_(fileIds) {
       icp: icp, register: register,
       sources: sourceList,
       lookup: lookup,
+      bettyType: translateRegister_(register, lookup.fuel, regMapForRows) || '',
       bettyUrl: bettyUrl_(lookup.customerId),
       analysis: serialised,
     });

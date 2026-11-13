@@ -111,6 +111,14 @@
     button.btn-sm:hover { background: var(--tuc-warm-bg); }
     .card2 { background: #fff; border: 1px solid var(--tuc-line); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; }
     .cardhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    /* v2.18: every Workbench section collapses (arrow in its heading). */
+    .colbtn { border: 0; background: none; cursor: pointer; font-size: 13px; color: var(--tuc-accent-dark); padding: 0 2px; min-width: 0; height: auto; line-height: 1; }
+    .card2.collapsed > :not(.cardhead) { display: none !important; }
+    .card2.collapsed > .cardhead { margin-bottom: 0; }
+    details.icpblk { border-top: 1px solid var(--tuc-line); padding: 8px 0; }
+    details.icpblk > summary { cursor: pointer; font-size: 14px; padding: 2px 0; }
+    details.subblk { margin: 6px 0 2px 14px; border-left: 3px solid var(--tuc-line); padding-left: 10px; }
+    details.subblk > summary { cursor: pointer; font-size: 12px; font-weight: 600; }
     .cardhead h2 { margin: 0; font-size: 12px; letter-spacing: .03em; color: #5F7378; text-transform: uppercase; }
     .seg { display: flex; border: 1px solid var(--tuc-line); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
     .seg button { min-width: 0; height: 30px; padding: 0 12px; border-radius: 0; background: #fff; color: var(--tuc-ink); font-size: 12px; }
@@ -258,7 +266,7 @@
           <div id="wbCalcs" class="muted">Add files and analyse — reliability grade, AVM, annual kWh and flags per ICP-register appear here.</div>
         </div>
         <div class="card2" id="wbBandCard" style="display:none">
-          <div class="cardhead"><h2>🕑 Time bands</h2><span class="muted" style="font-size:11px">half-hourly consumption split into the retailer’s bands for the network · schedules live on the 📒 Register tab</span></div>
+          <div class="cardhead"><h2>🧾 ICP meters</h2><span class="muted" style="font-size:11px">one block per ICP, as on the bill and in Betty · half-hourly uncontrolled load is split into the retailer’s time bands, controlled load stays whole · every row can be edited</span></div>
           <div id="wbBands"></div>
         </div>
         <div class="card2" id="wbNotes" style="display:none">
@@ -307,7 +315,11 @@
           <p style="margin-top:8px"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
           <div id="wbBettyIdsArea"></div>
           <p class="muted" style="font-size:12px;margin:8px 0 0">Export the customer’s Bulk Import Template from Betty, choose it here and Walter returns it filled:
-            Meter and Monthly Consumption on the <b>Current</b> rows, matched by ICP. An ICP whose time bands are shown above gets one meter per band; every other register goes through the Register Map. Unit costs are not written.</p>
+            Meter and Monthly Consumption on the <b>Current</b> rows, matched by ICP. An ICP whose time bands are shown above gets one meter per band; every other register goes through the Register Map. Rates entered below are written too. The filled file is kept in the <b>Betty files</b> folder (🗄 Archive tab), apart from the consumption files.</p>
+          <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button onclick="wbRatesOpen()" style="min-width:0;padding:0 16px">✏️ Enter rates</button>
+            <span id="wbRatesState" class="muted" style="font-size:12px"></span>
+            <span class="muted" style="font-size:12px">optional — the customer’s current rates, typed off the bill, go into the filled template only</span></p>
           <p style="margin-top:10px">Betty template:
             <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
             <button onclick="document.getElementById('wbBettyFile').click()" style="min-width:0;padding:0 16px">📁 Choose template</button>
@@ -340,6 +352,11 @@
         <button class="btn-sm" onclick="document.getElementById('arcQ').value='';arcSearch()">show latest</button>
       </p>
       <div id="arcArea" class="muted">Loading…</div>
+    </div>
+    <div class="card" style="padding:18px 20px">
+      <h2>🗄 Betty files — filled templates</h2>
+      <p class="muted" style="font-size:12px">Kept apart from the consumption files because they can hold a customer’s rates: own folder, shared with named people only, never linked from the RFP queue. The search box above searches both lists.</p>
+      <div id="arcBetArea" class="muted">Loading…</div>
     </div>
   </div>
   <div id="tab-register" style="display:none">
@@ -384,6 +401,9 @@
     <div id="verifyArea"></div>
   </div>
   </main>
+  <div id="wbRatesModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(31,45,48,.5);z-index:60;overflow:auto">
+    <div id="wbRatesBox" class="card2" style="max-width:1000px;margin:36px auto;box-shadow:0 12px 40px rgba(0,0,0,.25)"></div>
+  </div>
   <div id="wToast"><img id="wToastIcon" alt=""><span id="wToastMsg"></span></div>
 
   <script>
@@ -884,15 +904,35 @@
       if (showArchive === undefined) showArchive = true;
       var h = '<p class="ok" style="font-weight:600">Filled template ready: <a href="' + esc(res.outputUrl) + '" target="_blank">' + esc(res.outputName) + '</a></p>' +
         '<p class="muted">Download it from Drive and import into Betty. Run ref ' + esc(res.runRef) + ' logged.</p>';
+      if (res.fileId) {
+        h += '<p class="muted" style="font-size:12px">Kept in the Betty files folder' +
+          (res.ratesRows ? ' · <b>contains rates for ' + res.ratesRows + ' ICP(s)</b> — internal only, do not send it out' : '') +
+          (res.sharedWith && res.sharedWith.length ? ' · shared with ' + res.sharedWith.map(esc).join(', ') : '') + '</p>';
+        if (res.shareError) h += '<p class="flag">⚠ ' + esc(res.shareError) + '</p>';
+        if (res.indexError) h += '<p class="flag">⚠ Not added to the Betty files list (' + esc(res.indexError) + ') — the file itself is fine.</p>';
+      }
       if (res.updated.length) {
-        h += '<p>Updated ' + res.updated.length + ' Current analysis row(s):</p><ul>';
+        // One line per meter written, in columns (13 Nov) - not one run-on line per ICP.
+        h += '<p>Updated ' + res.updated.length + ' Current analysis row(s):</p>' +
+          '<div class="tblwrap"><table><thead><tr><th class="tL">ICP</th><th class="tL">From</th><th class="tL">Betty meter</th>' +
+          '<th class="tR">Monthly kWh</th><th class="tL">Grade</th><th class="tL">Notes</th></tr></thead><tbody>';
         for (var i = 0; i < res.updated.length; i++) {
           var u = res.updated[i];
-          h += '<li><span class="mono">' + esc(u.icp) + '</span> ' + esc(u.customer || '') + ': ' + u.detail.map(esc).join('; ');
-          if (u.flags.length) h += ' <span class="flag">(' + u.flags.map(esc).join('; ') + ')</span>';
-          h += '</li>';
+          var lines = u.lines && u.lines.length ? u.lines : u.detail.map(function (d) { return { src: d, meter: '', kwh: '', grade: '', note: '' }; });
+          for (var li = 0; li < lines.length; li++) {
+            var ln = lines[li];
+            h += '<tr' + (li === 0 && i > 0 ? ' style="border-top:2px solid var(--tuc-line)"' : '') + '>' +
+              '<td class="tL mono">' + (li === 0 ? esc(u.icp) : '') + '</td>' +
+              '<td class="tL">' + esc(ln.src) + '</td><td class="tL"><b>' + esc(ln.meter) + '</b></td>' +
+              '<td class="tR">' + (ln.kwh === '' || ln.kwh === undefined ? '' : fmtNum(ln.kwh)) + '</td>' +
+              '<td class="tL muted" style="font-size:12px">' + esc(ln.grade || '') + '</td>' +
+              '<td class="tL muted" style="font-size:12px">' + esc(ln.note || '') + '</td></tr>';
+          }
+          for (var fi = 0; fi < u.flags.length; fi++) {
+            h += '<tr><td></td><td colspan="5" class="tL flag" style="font-size:12px">⚠ ' + esc(u.flags[fi]) + '</td></tr>';
+          }
         }
-        h += '</ul>';
+        h += '</tbody></table></div>';
       }
       if (res.flagged.length) {
         h += '<p class="error">Blocked (not written):</p><ul>';
@@ -1047,6 +1087,7 @@
         .withSuccessHandler(function (res) { arcLast = res; arcDelOpen = ''; arcRender(); })
         .withFailureHandler(function (e) { area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
         .apiCdfSearch(q);
+      arcBetSearch();
     }
 
     function arcRender() {
@@ -1762,9 +1803,14 @@
       reader.onload = function () {
         var b64 = reader.result.split(',')[1];
         google.script.run
-          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '📥 Fill template'; renderBettyResult(res, 'wbBettyFillArea', false); })
+          .withSuccessHandler(function (res) {
+            btn.disabled = false; btn.textContent = '📥 Fill template';
+            renderBettyResult(res, 'wbBettyFillArea', false);
+            if (res && res.ok) wbRatesDraftClear(); // the filled file is now the record of the rates
+            arcLoaded = false;
+          })
           .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
-          .apiBettyFill(b64, file.name, wbAnalysedIds, wbBandBettyData());
+          .apiBettyFill(b64, file.name, wbAnalysedIds, wbMeterBettyData(), wbRatesPayload());
       };
       reader.onerror = function () { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
       reader.readAsDataURL(file);
@@ -2589,8 +2635,13 @@
       document.getElementById('wbProsTrading').value = '';
       wbEa = {}; wbEaAsked = {}; wbEaGen++; wbEaErr = '';
       wbFuelOv = {};
+      wbMeters = {}; // meter edits belong to the finished session too
       wbBand = {}; // time-band picks and typed rates belong to the finished session
       wbBandsRender(true);
+      wbRates = {}; wbRatesEd = null; wbRatesDraftTried = false;
+      wbRatesStyle = { unit: 'c', chg: 'c', gst: true };
+      document.getElementById('wbRatesModal').style.display = 'none';
+      document.getElementById('wbRatesState').textContent = '';
       wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
       wbMergeStatus();
       wbRenderFiles();
@@ -3644,6 +3695,13 @@
       return { retailer: name || '', network: net || '', matched: matched };
     }
 
+    /** True when the Register Map sends this register to a Betty "Controlled" meter (or it is plainly a CN register). */
+    function wbBandIsControlled(r) {
+      var t = String(r.bettyType || '');
+      if (t) return /controlled/i.test(t);
+      return /^CN\d*$/i.test(String(r.register || '').trim());
+    }
+
     function wbBandState(key) {
       return wbBand[key] || (wbBand[key] = { show: null, sched: '', rates: null, ratesOpen: false });
     }
@@ -3659,17 +3717,109 @@
         if (!st.rates) st.rates = bandRatesFresh(bands);
         else if (st.rates.forBands !== bands.join('|') && !bandRatesAny(st.rates)) st.rates = bandRatesFresh(bands);
       }
-      var shown = st.show === true || (st.show === null && !!info.matched);
-      return { st: st, info: info, retailer: retailer, sched: sched, shown: shown };
+      // A controlled register is billed as ONE "Controlled" line at its
+      // own rate (Powershop invoice, 13 Nov), so it is not split into
+      // bands unless the operator asks for it.
+      var controlled = wbBandIsControlled(x.r);
+      // v2.18: there is no way to split a controlled register any more.
+      var shown = !controlled && (st.show === true || (st.show === null && !!info.matched));
+      return { st: st, info: info, retailer: retailer, sched: sched, shown: shown, controlled: controlled };
     }
 
     var wbBandsWaiting = false;
+
+    // ---- One view per ICP (v2.18, 13 Nov) ----
+    // The card shows ONE block per ICP, laid out like the bill and like
+    // Betty: one row per meter that goes to Betty - the uncontrolled
+    // register's time bands plus every other register whole (controlled
+    // load is billed as one Controlled line and is never split). Every
+    // row can be edited: the Betty meter type, the monthly kWh (an
+    // overtyped figure is marked "manual") and rows can be removed or
+    // added. The Enter rates screen and the Betty fill read the SAME
+    // rows (wbIcpModel), so there is one version of the truth.
+    var wbMeters = {}; // icp -> { ov: { rowKey: { type, monthly, removed } }, extra: [{ id, type, monthly }], open, seq }
+
+    function wbMeterState(icp) {
+      return wbMeters[icp] || (wbMeters[icp] = { ov: {}, extra: [], open: null, seq: 0 });
+    }
+
+    /**
+     * [{ icp, custId, info, rows, meters, notes, bands: [x], others: [x] }]
+     * rows   = what Walter worked out, with the operator's edits applied
+     * meters = rows merged by Betty meter type (what is sent to Betty)
+     */
+    function wbIcpModel() {
+      var out = [], byIcp = {};
+      var rows = wbLastRows || [];
+      var bandRows = wbBandReg === null ? [] : wbBandRows();
+      var bandByKey = {};
+      for (var b = 0; b < bandRows.length; b++) bandByKey[bandRows[b].key] = bandRows[b];
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var e = byIcp[r.icp];
+        if (!e) {
+          e = byIcp[r.icp] = { icp: r.icp, custId: (r.lookup && r.lookup.customerId) || '', info: wbBandInfo(r), rows: [], meters: [], notes: [], bands: [], others: [] };
+          out.push(e);
+        }
+        var grade = (r.analysis.gradeEmoji || '') + ' ' + (r.analysis.grade || '');
+        var x = bandByKey[r.icp + '|' + r.register];
+        var res = x ? wbBandResolve(x) : null;
+        if (x && res.shown && res.sched) {
+          e.bands.push(x);
+          var c = bandCompute(x.sm, res.sched, res.st.rates);
+          for (var s = 0; s < c.sl.slots.length; s++) {
+            var so = c.sl.slots[s];
+            var mon = bandMonthly(so.total, c.split.days);
+            e.rows.push({ key: r.register + '/' + so.name, src: r.register + ' · ' + so.name, calcType: bettyMeterName(so.name),
+              calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, grade: grade });
+          }
+        } else {
+          if (x && !res.controlled) e.others.push(x);
+          var avm = r.analysis.avm;
+          e.rows.push({ key: r.register, src: r.register, calcType: r.bettyType || '',
+            calcMonthly: avm === null || avm === undefined ? null : avm, rate: null, grade: grade });
+        }
+      }
+      for (var q = 0; q < out.length; q++) {
+        var en = out[q], st = wbMeterState(en.icp), k;
+        for (k = 0; k < st.extra.length; k++) {
+          en.rows.push({ key: 'x' + st.extra[k].id, src: 'added by hand', calcType: '', calcMonthly: null, rate: null, grade: 'manual', extra: true });
+        }
+        for (k = 0; k < en.rows.length; k++) {
+          var row = en.rows[k], ov = st.ov[row.key] || {};
+          row.type = ov.type !== undefined ? ov.type : row.calcType;
+          row.monthly = ov.monthly !== undefined ? ov.monthly : row.calcMonthly;
+          row.manualType = ov.type !== undefined && ov.type !== row.calcType;
+          row.manualMonthly = ov.monthly !== undefined && ov.monthly !== row.calcMonthly;
+          row.removed = !!ov.removed;
+          if (row.removed) continue;
+          if (!row.type) { en.notes.push(row.src + ': no Betty meter type picked — it will not be sent to Betty'); continue; }
+          if (row.monthly === null || row.monthly === undefined) { en.notes.push(row.src + ': no monthly figure'); continue; }
+          var hit = null;
+          for (var m = 0; m < en.meters.length; m++) if (en.meters[m].name === row.type) hit = en.meters[m];
+          if (hit) {
+            hit.monthly += row.monthly; hit.src += ' + ' + row.src; hit.manual = hit.manual || row.manualMonthly || row.manualType;
+            if (hit.rate === null) hit.rate = row.rate;
+          } else {
+            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade });
+          }
+        }
+        if (en.meters.length > 4) en.notes.push('More than four meters — Betty has four slots; the extra ones will not be written');
+      }
+      return out;
+    }
+
+    function wbIcpByIcp(icp) {
+      var model = wbIcpModel();
+      for (var i = 0; i < model.length; i++) if (model[i].icp === icp) return { e: model[i], bi: i };
+      return null;
+    }
+
     function wbBandsRender(force) {
       var card = document.getElementById('wbBandCard');
       var box = document.getElementById('wbBands');
       if (!card || !box) return;
-      var rows = wbBandRows();
-      if (!rows.length) { card.style.display = 'none'; box.innerHTML = ''; return; }
+      if (!wbLastRows || !wbLastRows.length) { card.style.display = 'none'; box.innerHTML = ''; return; }
       // A background refresh must not wipe a field being typed in.
       var ae = document.activeElement;
       if (!force && ae && box.contains && box.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')) {
@@ -3681,42 +3831,175 @@
       }
       card.style.display = '';
       if (wbBandReg === null) { box.innerHTML = '<span class="muted">Loading the band register…</span>'; return; }
+      var model = wbIcpModel();
       var h = '';
       if (wbBandRegErr) h += '<p class="error">Band register could not be loaded: ' + esc(wbBandRegErr) + '</p>';
-      var hidden = [];
-      var shownN = 0;
-      for (var i = 0; i < rows.length; i++) {
-        var res = wbBandResolve(rows[i]);
-        if (!res.shown) { hidden.push(rows[i]); continue; }
-        shownN++;
-        h += wbBandBlock(rows[i], res);
-      }
-      if (shownN && !wbProspect) {
-        h += '<p style="margin:10px 0 0;border-top:1px solid var(--tuc-line);padding-top:10px">' +
-          '<button onclick="wbBandGoBetty()" style="min-width:0;padding:0 16px">📥 Fill a Betty template with these bands</button> ' +
-          '<span class="muted" style="font-size:12px">consumption only: one Betty meter per band with its average monthly kWh — unit costs are not written</span></p>';
-      }
-      if (hidden.length) {
-        h += '<div class="muted" style="font-size:12px;margin-top:6px">' +
-          (shownN ? 'Half-hourly data, time bands not shown (current retailer has no schedules in the register): '
-                  : 'No ICP here is with a retailer that has time-band schedules in the register. Half-hourly data is available for: ');
-        for (var j = 0; j < hidden.length; j++) {
-          h += '<span class="pill mono">' + esc(hidden[j].r.icp) + ' · ' + esc(hidden[j].r.register) +
-            ' <button class="linkbtn" onclick="wbBandShow(' + hidden[j].i + ', true)">show</button></span>';
+      var anyCust = false;
+      for (var bi = 0; bi < model.length; bi++) {
+        var e = model[bi], st = wbMeterState(e.icp);
+        if (e.custId) anyCust = true;
+        var open = st.open !== null ? st.open : model.length <= 6;
+        var total = 0;
+        for (var m = 0; m < e.meters.length; m++) total += e.meters[m].monthly;
+        h += '<details class="icpblk"' + (open ? ' open' : '') + ' ontoggle="wbMeterToggle(\'' + esc(e.icp) + '\', this.open)">' +
+          '<summary><b class="mono">' + esc(e.icp) + '</b> <span class="muted" style="font-size:12px;font-weight:400">' +
+          esc(e.info.network || 'network unknown') + ' · ' + esc(e.info.retailer || 'retailer unknown') + ' · ' +
+          e.meters.length + ' meter(s) · ' + fmtNum(Math.round(total)) + ' kWh/month</span>' +
+          (e.notes.length ? ' <span class="flag" style="font-size:12px">⚠</span>' : '') + '</summary>';
+        h += '<div id="wbMt_' + bi + '">' + wbMeterTableHtml(e, bi) + '</div>';
+        for (var d = 0; d < e.bands.length; d++) {
+          var x = e.bands[d], res = wbBandResolve(x);
+          h += '<details class="subblk"' + (res.st.detailOpen ? ' open' : '') + ' ontoggle="wbBandDetailToggle(' + x.i + ', this.open)">' +
+            '<summary>Time-band detail — ' + esc(x.r.register) + ' <span class="muted" style="font-weight:400">(schedule, summer / winter, monthly rates)</span></summary>' +
+            wbBandBlock(x, res) + '</details>';
         }
-        h += '</div>';
+        for (var o = 0; o < e.others.length; o++) {
+          var ro = wbBandResolve(e.others[o]);
+          if (ro.shown) { // bands wanted, but no schedule for this network yet
+            h += '<details class="subblk" open><summary>Time bands — ' + esc(e.others[o].r.register) + '</summary>' + wbBandBlock(e.others[o], ro) + '</details>';
+            continue;
+          }
+          h += '<div class="muted" style="font-size:12px;margin-top:4px">' + esc(e.others[o].r.register) +
+            ' has half-hourly data but its retailer has no schedules in the register — sent whole. ' +
+            '<button class="linkbtn" onclick="wbBandShow(' + e.others[o].i + ', true)">split it into time bands anyway</button></div>';
+        }
+        h += '</details>';
+      }
+      if (anyCust && !wbProspect) {
+        h += '<p style="margin:10px 0 0;border-top:1px solid var(--tuc-line);padding-top:10px">' +
+          '<button onclick="wbBandGoBetty()" style="min-width:0;padding:0 16px">📥 Fill a Betty template with these meters</button> ' +
+          '<span class="muted" style="font-size:12px">exactly the rows above go to Betty — rates are added with “Enter rates”</span></p>';
       }
       box.innerHTML = h;
     }
 
+    function wbMeterRateTxt(icp, type) {
+      var r = wbRates[icp];
+      if (!r || r.unit[type] === undefined) return '';
+      var ex = wbRateEx(r.unit[type], r.style.unit, r.style.gst);
+      return ex === null ? '' : ex.toFixed(5);
+    }
+
+    function wbMeterTableHtml(e, bi) {
+      var inp = 'width:90px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:13px;text-align:right';
+      var st = wbMeterState(e.icp);
+      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">Meter type (Betty)</th><th class="tL">From</th>' +
+        '<th class="tR">Monthly kWh</th><th class="tR">Annual kWh</th><th class="tR" title="$ per kWh excl GST, from Enter rates">Unit cost $</th><th></th></tr></thead><tbody>';
+      var edited = st.extra.length > 0;
+      for (var ri = 0; ri < e.rows.length; ri++) {
+        var row = e.rows[ri];
+        if (st.ov[row.key]) edited = true;
+        if (row.removed) {
+          h += '<tr class="muted"><td class="tL" style="text-decoration:line-through">' + esc(row.type || row.src) + '</td><td class="tL">' + esc(row.src) +
+            '</td><td colspan="3" class="tL">removed — not sent to Betty</td><td><button class="linkbtn" onclick="wbMeterRemove(' + bi + ', ' + ri + ', false)">put back</button></td></tr>';
+          continue;
+        }
+        var opts = '<option value="">— not sent to Betty —</option>';
+        for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === row.type ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
+        var rt = row.type ? wbMeterRateTxt(e.icp, row.type) : '';
+        h += '<tr><td class="tL"><select onchange="wbMeterType(' + bi + ', ' + ri + ', this.value)" style="height:30px;border:1px solid ' +
+          (row.type ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:13px;font-weight:600;max-width:210px">' + opts + '</select></td>' +
+          '<td class="tL muted" style="font-size:12px">' + esc(row.src) + '</td>' +
+          '<td class="tR"><input type="text" inputmode="decimal" value="' + (row.monthly === null || row.monthly === undefined ? '' : row.monthly) + '"' +
+          ' onchange="wbMeterMonthly(' + bi + ', ' + ri + ', this.value)" style="' + inp + '">' +
+          '<div id="wbMtMan_' + bi + '_' + ri + '" class="flag" style="font-size:11px">' +
+          (row.manualMonthly ? 'manual' + (row.calcMonthly !== null && row.calcMonthly !== undefined ? ' · calculated ' + fmtNum(row.calcMonthly) : '') : '') + '</div></td>' +
+          '<td class="tR muted" id="wbMtAnn_' + bi + '_' + ri + '">' + (row.monthly === null || row.monthly === undefined ? '—' : fmtNum(Math.round(row.monthly * 12))) + '</td>' +
+          '<td class="tR mono" style="font-size:12px">' + (rt || '<span class="muted">—</span>') + '</td>' +
+          '<td style="white-space:nowrap"><button class="linkbtn" title="Do not send this row to Betty" onclick="wbMeterRemove(' + bi + ', ' + ri + ', true)">remove</button></td></tr>';
+      }
+      h += '</tbody></table></div>';
+      for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
+      h += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0 4px">' +
+        '<button class="linkbtn" onclick="wbMeterAdd(' + bi + ')">+ add a meter</button>' +
+        (edited ? '<button class="linkbtn" onclick="wbMeterReset(' + bi + ')">back to what Walter calculated</button>' : '') +
+        (e.custId && !wbProspect ? '<button class="linkbtn" onclick="wbRatesOpenFor(\'' + esc(e.icp) + '\')">✏️ rates for this ICP</button>' : '') + '</div>';
+      return h;
+    }
+
+    function wbMeterRow(bi, ri) {
+      var model = wbIcpModel();
+      var e = model[bi];
+      if (!e || !e.rows[ri]) return null;
+      return { e: e, row: e.rows[ri], st: wbMeterState(e.icp) };
+    }
+    function wbMeterOv(h) { return h.st.ov[h.row.key] || (h.st.ov[h.row.key] = {}); }
+    function wbMeterExtra(h) {
+      for (var k = 0; k < h.st.extra.length; k++) if ('x' + h.st.extra[k].id === h.row.key) return k;
+      return -1;
+    }
+    function wbMeterToggle(icp, open) { wbMeterState(icp).open = !!open; }
+    function wbBandDetailToggle(i, open) {
+      var x = wbBandX(i); if (!x) return;
+      wbBandState(x.key).detailOpen = !!open;
+    }
+    function wbMeterType(bi, ri, val) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      wbMeterOv(h).type = val;
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+    function wbMeterMonthly(bi, ri, val) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      var ov = wbMeterOv(h);
+      var n = bandNum(val);
+      if (n === null) delete ov.monthly; else ov.monthly = Math.round(n);
+      // Only this row's dependents are redrawn, so tabbing on to the next field keeps working.
+      var h2 = wbMeterRow(bi, ri);
+      var ann = document.getElementById('wbMtAnn_' + bi + '_' + ri);
+      var man = document.getElementById('wbMtMan_' + bi + '_' + ri);
+      var mo = h2.row.monthly;
+      if (ann) ann.textContent = mo === null || mo === undefined ? '—' : fmtNum(Math.round(mo * 12));
+      if (man) man.textContent = h2.row.manualMonthly ? 'manual' + (h2.row.calcMonthly !== null && h2.row.calcMonthly !== undefined ? ' · calculated ' + fmtNum(h2.row.calcMonthly) : '') : '';
+    }
+    function wbMeterRemove(bi, ri, on) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      var xi = wbMeterExtra(h);
+      if (xi !== -1) { h.st.extra.splice(xi, 1); delete h.st.ov[h.row.key]; }
+      else wbMeterOv(h).removed = !!on;
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+    function wbMeterAdd(bi) {
+      var e = wbIcpModel()[bi]; if (!e) return;
+      var st = wbMeterState(e.icp);
+      st.seq++;
+      st.extra.push({ id: st.seq });
+      st.ov['x' + st.seq] = { type: '', monthly: 0 };
+      wbBandsRender(true);
+    }
+    function wbMeterReset(bi) {
+      var e = wbIcpModel()[bi]; if (!e) return;
+      if (!confirm('Discard your changes to the meters of ' + e.icp + ' and go back to what Walter calculated?')) return;
+      var st = wbMeterState(e.icp);
+      st.ov = {}; st.extra = [];
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+
+    /** The meters of every Betty-customer ICP, exactly as shown, for the template fill. */
+    function wbMeterBettyData() {
+      var out = {};
+      if (wbBandReg === null) return out;
+      var model = wbIcpModel();
+      for (var i = 0; i < model.length; i++) {
+        var e = model[i];
+        if (!e.custId) continue;
+        var list = [];
+        for (var m = 0; m < e.meters.length; m++) {
+          list.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, src: e.meters[m].src, manual: !!e.meters[m].manual, grade: e.meters[m].grade || '' });
+        }
+        out[e.icp] = list;
+      }
+      return out;
+    }
+
     function wbBandBlock(x, res) {
       var st = res.st, info = res.info, sched = res.sched, i = x.i;
-      var h = '<div style="border-top:1px solid var(--tuc-line);padding:10px 0 12px">';
+      var h = '<div style="padding:6px 0 10px">';
       h += '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">' +
-        '<b class="mono">' + esc(x.r.icp) + '</b><span class="muted">' + esc(x.r.register) + '</span>' +
-        '<span class="muted" style="font-size:12px">network: ' + esc(info.network || 'unknown') +
-        ' · current retailer: ' + esc(info.retailer || 'unknown') + '</span>' +
-        '<button class="linkbtn" style="margin-left:auto" onclick="wbBandShow(' + i + ', false)">hide</button></div>';
+        '<span class="muted" style="font-size:12px">' + esc(x.r.register) + ' is split into time bands.</span>' +
+        '<button class="linkbtn" style="margin-left:auto" onclick="wbBandShow(' + i + ', false)">send this register whole instead</button></div>';
       // Schedule picker: automatic by network, or any register row.
       var opts = '<option value="">automatic (by network)</option>';
       var regRows = wbBandReg || [];
@@ -3901,6 +4184,10 @@
       var res = wbBandResolve(x);
       if (!res.sched) { wbBandsRender(true); return; }
       el.innerHTML = wbBandResHtml(x, res);
+      // A fold or a new weighted average changes the ICP's meter rows too.
+      var hit = wbIcpByIcp(x.r.icp);
+      var mt = hit ? document.getElementById('wbMt_' + hit.bi) : null;
+      if (mt) mt.innerHTML = wbMeterTableHtml(hit.e, hit.bi);
     }
 
     function wbBandShow(i, on) {
@@ -4021,31 +4308,6 @@
       wbBandRes(i);
     }
 
-    /**
-     * Time bands for the Betty template fill (v2.16.1): for every
-     * ICP-register whose bands are shown, the slots after any fold with
-     * their average monthly kWh. Consumption only - rates are typed
-     * into Betty by hand for now.
-     */
-    function wbBandBettyData() {
-      var out = {};
-      if (wbBandReg === null) return out;
-      var rows = wbBandRows();
-      for (var q = 0; q < rows.length; q++) {
-        var x = rows[q];
-        var res = wbBandResolve(x);
-        if (!res.shown || !res.sched) continue;
-        var c = bandCompute(x.sm, res.sched, res.st.rates);
-        var slots = [];
-        for (var s = 0; s < c.sl.slots.length; s++) {
-          var m = bandMonthly(c.sl.slots[s].total, c.split.days);
-          slots.push({ name: c.sl.slots[s].name, monthly: m === null ? null : Math.round(m) });
-        }
-        out[x.key] = { schedule: res.sched.retailer + ' · ' + res.sched.network, slots: slots };
-      }
-      return out;
-    }
-
     /** Open the Betty bulk update section and bring it into view. */
     function wbBandGoBetty() {
       var sec = document.getElementById('wbBettySec');
@@ -4054,7 +4316,12 @@
       if (sec.scrollIntoView) sec.scrollIntoView({ block: 'center' });
     }
 
-    /** Sections for the CDF "Analysis" tab: one per ICP-register whose time bands are shown. */
+    /**
+     * Sections for the CDF "Analysis" tab: one per ICP-register whose
+     * time bands are shown. CONSUMPTION ONLY (v2.16.2): a CDF can go to
+     * retailers with an RFP, so no rate, weighted average or cost is
+     * ever written here - those belong in the Betty file.
+     */
     function wbBandSections() {
       var out = [];
       if (wbBandReg === null) return out;
@@ -4078,54 +4345,443 @@
         R.push(['Days of half-hourly data', r2(days)]);
         R.push([]);
         bold.push(R.length);
-        R.push(['Band', 'Summer avg monthly kWh', 'Winter avg monthly kWh', 'Avg monthly kWh', 'Annual kWh', 'Share %', 'Rate column', 'Weighted avg $/kWh excl GST']);
+        R.push(['Band', 'Summer avg monthly kWh', 'Winter avg monthly kWh', 'Avg monthly kWh', 'Annual kWh', 'Share %']);
         for (var b = 0; b < split.bands.length; b++) {
-          var band = split.bands[b], k = split.kwh[band], wb = c.w.byBand[band];
+          var band = split.bands[b], k = split.kwh[band];
           R.push([band, r2(bandMonthly(k.summer, days)), r2(bandMonthly(k.winter, days)), r2(bandMonthly(k.total, days)),
-            bandInt(bandAnnual(k.total, days)), split.total > 0 ? Math.round(k.total / split.total * 1000) / 10 : '',
-            c.anyRate && wb.col >= 0 ? rt.cols[wb.col] : '',
-            wb.rate === null ? '' : Number(bandRateTxt(wb.rate))]);
-          if (c.anyRate && wb.missing.length) R.push(['', 'no rate typed for ' + wb.missing.join(', ') + ' - left out of the average']);
+            bandInt(bandAnnual(k.total, days)), split.total > 0 ? Math.round(k.total / split.total * 1000) / 10 : '']);
         }
         R.push(['Total', r2(bandMonthly(sumBand(split, 'summer'), days)), r2(bandMonthly(sumBand(split, 'winter'), days)),
           r2(bandMonthly(split.total, days)), bandInt(bandAnnual(split.total, days))]);
         if (c.sl.folds.length || c.sl.needRates) {
           R.push([]);
-          if (c.sl.needRates) R.push(['WARNING', c.sl.slots.length + ' bands but Betty has ' + BAND_MAX_SLOTS + ' rate slots - not folded (rates missing)']);
+          if (c.sl.needRates) R.push(['WARNING', c.sl.slots.length + ' bands but Betty has ' + BAND_MAX_SLOTS + ' meter slots - not combined']);
           for (var f = 0; f < c.sl.folds.length; f++) {
-            R.push(['WARNING - folded', c.sl.folds[f].from + ' into ' + c.sl.folds[f].to +
-              (c.sl.folds[f].auto ? ' (automatic: least consumption into the closest rate)' : ' (operator choice)')]);
+            R.push(['WARNING - bands combined', c.sl.folds[f].from + ' into ' + c.sl.folds[f].to +
+              (c.sl.folds[f].auto ? ' (automatic)' : ' (operator choice)')]);
           }
           if (c.sl.folds.length) {
             bold.push(R.length);
-            R.push(['For Betty - slot', 'Made of', 'Avg monthly kWh', 'Annual kWh', 'Rate $/kWh excl GST']);
+            R.push(['Combined to four meters', 'Made of', 'Avg monthly kWh', 'Annual kWh']);
             for (var s = 0; s < c.sl.slots.length; s++) {
               var so = c.sl.slots[s];
-              R.push([so.name, so.parts.join(' + '), r2(bandMonthly(so.total, days)), bandInt(bandAnnual(so.total, days)),
-                so.rate === null ? '' : Number(bandRateTxt(so.rate))]);
+              R.push([so.name, so.parts.join(' + '), r2(bandMonthly(so.total, days)), bandInt(bandAnnual(so.total, days))]);
             }
           }
-        }
-        if (c.anyRate || c.w.daily !== null) {
-          R.push([]);
-          bold.push(R.length);
-          R.push(['Current rates as typed (c/kWh, ' + (rt.gst ? 'incl' : 'excl') + ' GST)'].concat(rt.cols));
-          for (var m = 0; m < 12; m++) {
-            var line = [BAND_MONTHS[m]];
-            for (var cc = 0; cc < rt.cols.length; cc++) { var nv = bandNum(rt.grid[m][cc]); line.push(nv === null ? '' : nv); }
-            R.push(line);
-          }
-          var dn = bandNum(rt.daily);
-          R.push(['Daily charge c/day as typed', dn === null ? '' : dn]);
-          R.push(['Daily charge $/day excl GST', c.w.daily === null ? '' : Number(bandRateTxt(c.w.daily))]);
-          R.push(['Annual energy cost $ excl GST', Math.round(c.cost.energy)]);
-          R.push(['Annual daily charges $ excl GST', c.cost.daily === null ? '' : Math.round(c.cost.daily)]);
-          R.push(['Estimated annual cost $ excl GST', Math.round(c.cost.energy + (c.cost.daily || 0)),
-            c.cost.complete ? '' : 'INCOMPLETE - a rate or the daily charge is missing']);
         }
         out.push({ title: 'Time bands - ' + x.r.icp + ' ' + x.r.register, rows: R, boldRows: bold });
       }
       return out;
+    }
+
+
+    // ---------------- Enter rates (v2.17, 13 Nov) ----------------
+    // The customer's CURRENT rates, typed by hand off the bill, one ICP
+    // at a time, on a screen laid out like Betty's own Analysis input.
+    // They go ONLY into the filled Betty template - never into the CDF
+    // (a CDF can go to retailers with an RFP). The operator types in
+    // whatever style the bill uses (cents or dollars, GST incl or excl);
+    // the template always gets $ excl GST. Until the template is filled
+    // the typed rates are kept in this browser only.
+
+    // Betty's meter types (Bulk Import Template, Information sheet).
+    var BETTY_METERS = ['All Inclusive', 'All Weekend Off Peak', 'Anytime', 'Anytime Summer', 'Anytime Winter', 'Controlled',
+      'Controlled Summer', 'Controlled Winter', 'Cost', 'Day', 'Day Summer', 'Day Winter', 'Gas', 'Night', 'Night Boost',
+      'Night Summer', 'Night Winter', 'Off Peak', 'Peak', 'Peak Summer', 'Peak Winter', 'Priority Controlled', 'Shoulder', 'Solar Exported'];
+    // [key, label, typed-style applies]
+    var RATE_CHARGES = [['daily', 'Daily', true], ['dailyLevy', 'Daily Levy', true], ['kwhLevy', 'kWh levy', true],
+      ['capacity', 'Capacity', true], ['demand', 'Demand', true], ['distance', 'Distance', true],
+      ['unmetered', 'Unmetered', true], ['breakFee', 'Break fee', false]];
+    var RATE_OTHER = [['contractDays', 'Contract length (days)'], ['brokerage', 'Brokerage fee'], ['ppd', 'PPD'],
+      ['addPpd', 'Additional PPD'], ['inflation', 'Inflation'], ['rebate', 'Annual Rebate'], ['incentive', 'Incentive credit']];
+
+    var wbRates = {};      // icp -> saved record { style, unit: { meter: typed }, fields: { key: typed } }
+    var wbRatesStyle = { unit: 'c', chg: 'c', gst: true }; // how the operator is typing right now
+    var wbRatesEd = null;  // { icp, rec, prefilled: { meter: true }, msg }
+    var wbRatesDraftTried = false;
+
+    function bettyMeterName(band) {
+      var k = bandNameKey(band), i;
+      if (!k) return '';
+      for (i = 0; i < BETTY_METERS.length; i++) if (bandNameKey(BETTY_METERS[i]) === k) return BETTY_METERS[i];
+      for (i = 0; i < BETTY_METERS.length; i++) if (bandNameKey(BETTY_METERS[i]) === 'all' + k) return BETTY_METERS[i];
+      return '';
+    }
+
+    /**
+     * The ICPs and meters the Enter rates screen works on: the same
+     * rows as the ICP meters card (wbIcpModel), Betty customers only.
+     * [{ icp, meters: [{ name, monthly, rate }], notes: [] }]
+     */
+    function wbRatesModel() {
+      var out = [];
+      var model = wbIcpModel();
+      for (var i = 0; i < model.length; i++) if (model[i].custId) out.push({ icp: model[i].icp, meters: model[i].meters, notes: model[i].notes });
+      return out;
+    }
+
+    function wbRatesCustId() {
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) if (rows[i].lookup && rows[i].lookup.customerId) return rows[i].lookup.customerId;
+      return '';
+    }
+    function wbRatesDraftKey() { return 'walterRates:' + wbRatesCustId(); }
+    function wbRatesDraftSave() {
+      try { window.localStorage.setItem(wbRatesDraftKey(), JSON.stringify({ rates: wbRates, style: wbRatesStyle })); } catch (e) {}
+    }
+    function wbRatesDraftLoad() {
+      if (wbRatesDraftTried) return;
+      wbRatesDraftTried = true;
+      try {
+        var raw = window.localStorage.getItem(wbRatesDraftKey());
+        if (!raw) return;
+        var d = JSON.parse(raw);
+        if (d && d.rates && !Object.keys(wbRates).length) {
+          wbRates = d.rates;
+          if (d.style) wbRatesStyle = { unit: d.style.unit === '$' ? '$' : 'c', chg: d.style.chg === '$' ? '$' : 'c', gst: d.style.gst !== false };
+        }
+      } catch (e) {}
+    }
+    function wbRatesDraftClear() {
+      try { window.localStorage.removeItem(wbRatesDraftKey()); } catch (e) {}
+    }
+
+    /** Typed value -> $ excl GST (5 dp), or null when blank / not a number. */
+    function wbRateEx(v, unit, gst) {
+      var n = bandNum(v);
+      if (n === null) return null;
+      return Math.round(n / (unit === 'c' ? 100 : 1) / (gst ? BAND_GST : 1) * 100000) / 100000;
+    }
+    /** $ excl GST -> text in the current typing style (used for the prefill from the monthly grid). */
+    function wbRateTyped(ex, unit, gst) {
+      var n = ex * (unit === 'c' ? 100 : 1) * (gst ? BAND_GST : 1);
+      return String(Math.round(n * 100000) / 100000);
+    }
+
+    function wbRatesStatus() {
+      var el = document.getElementById('wbRatesState');
+      if (!el) return;
+      var model = wbRatesModel();
+      var n = 0;
+      for (var i = 0; i < model.length; i++) if (wbRates[model[i].icp]) n++;
+      el.textContent = model.length ? 'rates saved for ' + n + ' of ' + model.length + ' ICP(s)' : '';
+    }
+
+    function wbRatesOpen() {
+      if (!wbAnalysedIds || !wbAnalysedIds.length) { alert('Analyse the session first.'); return; }
+      var model = wbRatesModel();
+      if (!model.length) { alert('No ICP here belongs to a Betty customer, so there is no template row to put rates on.'); return; }
+      wbRatesDraftLoad();
+      var start = model[0].icp;
+      for (var i = 0; i < model.length; i++) if (!wbRates[model[i].icp]) { start = model[i].icp; break; }
+      wbRatesLoadIcp(start);
+      document.getElementById('wbRatesModal').style.display = '';
+    }
+
+    function wbRatesOpenFor(icp) {
+      if (!wbAnalysedIds || !wbAnalysedIds.length) return;
+      if (wbRatesFind(wbRatesModel(), icp) === -1) { alert('This ICP is not on a Betty customer, so there is no template row for its rates.'); return; }
+      wbRatesDraftLoad();
+      wbRatesLoadIcp(icp);
+      document.getElementById('wbRatesModal').style.display = '';
+    }
+
+    function wbRatesFind(model, icp) {
+      for (var i = 0; i < model.length; i++) if (model[i].icp === icp) return i;
+      return -1;
+    }
+
+    function wbRatesLoadIcp(icp) {
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, icp);
+      if (idx === -1) return;
+      var saved = wbRates[icp];
+      var rec = { unit: {}, fields: {} };
+      var prefilled = {};
+      var k;
+      if (saved) {
+        wbRatesStyle = { unit: saved.style.unit, chg: saved.style.chg, gst: saved.style.gst };
+        for (k in saved.unit) if (Object.prototype.hasOwnProperty.call(saved.unit, k)) rec.unit[k] = saved.unit[k];
+        for (k in saved.fields) if (Object.prototype.hasOwnProperty.call(saved.fields, k)) rec.fields[k] = saved.fields[k];
+      }
+      // Weighted averages from the monthly grid fill empty unit costs.
+      var meters = model[idx].meters;
+      for (var m = 0; m < meters.length; m++) {
+        var has = rec.unit[meters[m].name] !== undefined && String(rec.unit[meters[m].name]) !== '';
+        if (!has && meters[m].rate !== null && meters[m].rate !== undefined) {
+          rec.unit[meters[m].name] = wbRateTyped(meters[m].rate, wbRatesStyle.unit, wbRatesStyle.gst);
+          prefilled[meters[m].name] = true;
+        }
+      }
+      wbRatesEd = { icp: icp, rec: rec, prefilled: prefilled, msg: '' };
+      wbRatesRender();
+    }
+
+    function wbRatesRender() {
+      var box = document.getElementById('wbRatesBox');
+      var ed = wbRatesEd;
+      if (!box || !ed) return;
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, ed.icp);
+      if (idx === -1) { wbRatesCancel(); return; }
+      var e = model[idx], st = wbRatesStyle;
+      var inp = 'width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:6px 8px;font-size:13px;text-align:right';
+      var seg = function (key, val, label) {
+        return '<button class="' + (st[key] === val ? 'active' : '') + '" onclick="wbRatesStyleSet(\'' + key + '\', ' +
+          (typeof val === 'boolean' ? val : '\'' + val + '\'') + ')">' + label + '</button>';
+      };
+      var opts = '';
+      for (var i = 0; i < model.length; i++) {
+        opts += '<option value="' + esc(model[i].icp) + '"' + (model[i].icp === ed.icp ? ' selected' : '') + '>' +
+          (wbRates[model[i].icp] ? '✓ ' : '') + esc(model[i].icp) + '</option>';
+      }
+      var h = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+        '<h2 style="margin:0;font-family:\'Poppins\',sans-serif;font-size:16px;color:var(--tuc-accent-dark)">Enter rates</h2>' +
+        '<select onchange="wbRatesGo(this.value)" style="height:34px;border:1px solid var(--tuc-line);border-radius:6px;font-family:monospace;font-size:13px">' + opts + '</select>' +
+        '<span class="muted" style="font-size:12px">' + (idx + 1) + ' of ' + model.length + (wbRates[ed.icp] ? ' · saved' : ' · not saved yet') + '</span></div>';
+      h += '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:12px">' +
+        '<span class="muted">I am typing unit costs in</span><div class="seg">' + seg('unit', 'c', 'c/kWh') + seg('unit', '$', '$/kWh') + '</div>' +
+        '<span class="muted">charges in</span><div class="seg">' + seg('chg', 'c', 'cents') + seg('chg', '$', 'dollars') + '</div>' +
+        '<div class="seg">' + seg('gst', true, 'GST incl') + seg('gst', false, 'GST excl') + '</div>' +
+        '<span class="muted">→ the template always gets <b>$ excl GST</b></span></div>';
+      for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
+
+      h += '<div class="tblwrap"><table style="width:auto;margin-top:6px"><thead><tr><th></th><th class="tL">Meter type</th>' +
+        '<th class="tR">Monthly consumption</th><th class="tR">Annual consumption</th><th class="tR">Unit cost (' + (st.unit === 'c' ? 'c/kWh' : '$/kWh') + (st.gst ? ' incl' : ' excl') + ')</th>' +
+        '<th class="tR">→ $ excl GST</th></tr></thead><tbody>';
+      if (!e.meters.length) h += '<tr><td colspan="6" class="muted tL">No meter will be written for this ICP — charges can still be entered.</td></tr>';
+      for (var m = 0; m < e.meters.length && m < 4; m++) {
+        var mt = e.meters[m];
+        var v = ed.rec.unit[mt.name];
+        var ex = wbRateEx(v, st.unit, st.gst);
+        h += '<tr><td class="muted">' + (m + 1) + ':</td><td class="tL"><b>' + esc(mt.name) + '</b></td>' +
+          '<td class="tR">' + fmtNum(mt.monthly) + '</td><td class="tR muted">' + fmtNum(mt.monthly * 12) + '</td>' +
+          '<td class="tR"><input type="text" inputmode="decimal" id="wbRateU_' + m + '" value="' + esc(v === undefined ? '' : v) + '"' +
+          ' oninput="wbRatesSetUnit(' + m + ', this.value)" style="' + inp + '">' +
+          (ed.prefilled[mt.name] ? '<div class="muted" style="font-size:11px">weighted average from the monthly grid</div>' : '') + '</td>' +
+          '<td class="tR mono" id="wbRatePvU_' + m + '">' + (ex === null ? '—' : ex.toFixed(5)) + '</td></tr>';
+      }
+      h += '</tbody></table></div>';
+
+      h += '<div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:14px">';
+      h += '<div><div style="font-weight:600;font-size:13px;margin-bottom:4px">Retailer charge (' + (st.chg === 'c' ? 'cents' : 'dollars') + (st.gst ? ', GST incl' : ', GST excl') + ')</div><table style="width:auto">';
+      for (var c = 0; c < RATE_CHARGES.length; c++) {
+        var rc = RATE_CHARGES[c];
+        var cv = ed.rec.fields[rc[0]];
+        var cex = rc[2] ? wbRateEx(cv, st.chg, st.gst) : bandNum(cv);
+        h += '<tr><td class="tR" style="border:0;padding:3px 8px">' + rc[1] + ':</td><td style="border:0;padding:3px 0">' +
+          '<input type="text" inputmode="decimal" value="' + esc(cv === undefined ? '' : cv) + '" oninput="wbRatesSetField(\'' + rc[0] + '\', this.value)" style="' + inp + '"></td>' +
+          '<td class="tL mono muted" style="border:0;padding:3px 8px;font-size:12px" id="wbRatePvF_' + rc[0] + '">' +
+          (rc[2] ? (cex === null ? '' : '→ ' + cex.toFixed(5)) : '$ as typed') + '</td></tr>';
+      }
+      h += '</table></div>';
+      h += '<div><div style="font-weight:600;font-size:13px;margin-bottom:4px">Contract (written as typed)</div><table style="width:auto">';
+      for (var o = 0; o < RATE_OTHER.length; o++) {
+        var ro = RATE_OTHER[o];
+        var ov = ed.rec.fields[ro[0]];
+        h += '<tr><td class="tR" style="border:0;padding:3px 8px">' + ro[1] + ':</td><td style="border:0;padding:3px 0">' +
+          '<input type="text" inputmode="decimal" value="' + esc(ov === undefined ? '' : ov) + '" oninput="wbRatesSetField(\'' + ro[0] + '\', this.value)" style="' + inp + '"></td></tr>';
+      }
+      h += '</table></div></div>';
+
+      h += '<p class="muted" style="font-size:12px;margin:12px 0 6px">A blank field is left as it is in the template. Rates are kept in this browser until the template is filled; they are never written to the consumption file (CDF).</p>';
+      h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--tuc-line);padding-top:12px">' +
+        '<button class="btn-sm" onclick="wbRatesCopyPrev()" title="Fill this ICP from the last ICP you saved">copy from previous ICP</button>' +
+        '<button class="btn-sm" onclick="wbRatesApplyAll()" title="Save these rates on every ICP that has the same meters">apply to all ICPs with the same meters</button>' +
+        '<span id="wbRatesMsg" style="font-size:12px">' + (ed.msg || '') + '</span>' +
+        '<span style="margin-left:auto;display:flex;gap:8px">' +
+        '<button onclick="wbRatesSave(false)" style="min-width:0;padding:0 18px">Save</button>' +
+        '<button onclick="wbRatesSave(true)" style="min-width:0;padding:0 18px">Save and next</button>' +
+        '<button class="btn-sm" style="height:38px" onclick="wbRatesCancel()">Cancel</button></span></div>';
+      box.innerHTML = h;
+    }
+
+    function wbRatesSetUnit(m, val) {
+      var ed = wbRatesEd; if (!ed) return;
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, ed.icp);
+      if (idx === -1 || !model[idx].meters[m]) return;
+      var name = model[idx].meters[m].name;
+      ed.rec.unit[name] = String(val).trim();
+      delete ed.prefilled[name];
+      var pv = document.getElementById('wbRatePvU_' + m);
+      var ex = wbRateEx(val, wbRatesStyle.unit, wbRatesStyle.gst);
+      if (pv) pv.textContent = ex === null ? '—' : ex.toFixed(5);
+    }
+    function wbRatesSetField(key, val) {
+      var ed = wbRatesEd; if (!ed) return;
+      ed.rec.fields[key] = String(val).trim();
+      var styled = false;
+      for (var c = 0; c < RATE_CHARGES.length; c++) if (RATE_CHARGES[c][0] === key) styled = RATE_CHARGES[c][2];
+      if (!styled) return;
+      var pv = document.getElementById('wbRatePvF_' + key);
+      var ex = wbRateEx(val, wbRatesStyle.chg, wbRatesStyle.gst);
+      if (pv) pv.textContent = ex === null ? '' : '→ ' + ex.toFixed(5);
+    }
+    /** The typing style changes how the figures are READ; what was typed stays as typed. */
+    function wbRatesStyleSet(key, val) {
+      wbRatesStyle[key] = val;
+      if (wbRatesEd) wbRatesEd.msg = '';
+      wbRatesRender();
+    }
+
+    function wbRatesBad(rec) {
+      var k;
+      for (k in rec.unit) if (Object.prototype.hasOwnProperty.call(rec.unit, k) && String(rec.unit[k]) !== '' && bandNum(rec.unit[k]) === null) return 'Unit cost for ' + k + ' is not a number.';
+      for (k in rec.fields) if (Object.prototype.hasOwnProperty.call(rec.fields, k) && String(rec.fields[k]) !== '' && bandNum(rec.fields[k]) === null) return 'One of the charges is not a number (' + rec.fields[k] + ').';
+      return '';
+    }
+
+    function wbRatesCommit(icp, rec) {
+      var out = { style: { unit: wbRatesStyle.unit, chg: wbRatesStyle.chg, gst: wbRatesStyle.gst }, unit: {}, fields: {} };
+      var k;
+      for (k in rec.unit) if (Object.prototype.hasOwnProperty.call(rec.unit, k) && String(rec.unit[k]) !== '') out.unit[k] = rec.unit[k];
+      for (k in rec.fields) if (Object.prototype.hasOwnProperty.call(rec.fields, k) && String(rec.fields[k]) !== '') out.fields[k] = rec.fields[k];
+      wbRates[icp] = out;
+    }
+
+    function wbRatesSave(next) {
+      var ed = wbRatesEd; if (!ed) return;
+      var bad = wbRatesBad(ed.rec);
+      if (bad) { ed.msg = '<span class="error">' + esc(bad) + '</span>'; wbRatesRender(); return; }
+      wbRatesCommit(ed.icp, ed.rec);
+      wbRatesDraftSave();
+      wbRatesStatus();
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, ed.icp);
+      if (next) {
+        if (idx + 1 < model.length) { wbRatesLoadIcp(model[idx + 1].icp); return; }
+        wbRatesCancel();
+        wbToast('Rates saved for the last ICP');
+        return;
+      }
+      ed.msg = '<span class="ok">Saved ✓</span>';
+      wbRatesRender();
+    }
+
+    function wbRatesGo(icp) { wbRatesLoadIcp(icp); }
+
+    function wbRatesCancel() {
+      wbRatesEd = null;
+      var mod = document.getElementById('wbRatesModal');
+      if (mod) mod.style.display = 'none';
+      wbRatesStatus();
+      wbBandsRender(true); // the meters card shows the saved unit costs
+    }
+
+    function wbRatesCopyPrev() {
+      var ed = wbRatesEd; if (!ed) return;
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, ed.icp);
+      var src = null, i;
+      for (i = idx - 1; i >= 0 && !src; i--) if (wbRates[model[i].icp]) src = wbRates[model[i].icp];
+      for (i = model.length - 1; i > idx && !src; i--) if (wbRates[model[i].icp]) src = wbRates[model[i].icp];
+      if (!src) { ed.msg = '<span class="flag">No other ICP has saved rates yet.</span>'; wbRatesRender(); return; }
+      wbRatesStyle = { unit: src.style.unit, chg: src.style.chg, gst: src.style.gst };
+      var meters = model[idx].meters, n = 0, k;
+      for (var m = 0; m < meters.length; m++) {
+        if (src.unit[meters[m].name] !== undefined) { ed.rec.unit[meters[m].name] = src.unit[meters[m].name]; delete ed.prefilled[meters[m].name]; n++; }
+      }
+      for (k in src.fields) if (Object.prototype.hasOwnProperty.call(src.fields, k)) ed.rec.fields[k] = src.fields[k];
+      ed.msg = '<span class="ok">Copied (' + n + ' unit cost(s) matched this ICP’s meters) — not saved yet.</span>';
+      wbRatesRender();
+    }
+
+    function wbRatesMeterSig(e) {
+      var names = [];
+      for (var m = 0; m < e.meters.length && m < 4; m++) names.push(e.meters[m].name);
+      return names.sort().join('|');
+    }
+
+    function wbRatesApplyAll() {
+      var ed = wbRatesEd; if (!ed) return;
+      var bad = wbRatesBad(ed.rec);
+      if (bad) { ed.msg = '<span class="error">' + esc(bad) + '</span>'; wbRatesRender(); return; }
+      var model = wbRatesModel();
+      var idx = wbRatesFind(model, ed.icp);
+      var sig = wbRatesMeterSig(model[idx]);
+      var same = [], over = 0;
+      for (var i = 0; i < model.length; i++) {
+        if (i === idx || wbRatesMeterSig(model[i]) !== sig) continue;
+        same.push(model[i].icp);
+        if (wbRates[model[i].icp]) over++;
+      }
+      if (!same.length) { wbRatesCommit(ed.icp, ed.rec); wbRatesDraftSave(); ed.msg = '<span class="flag">Saved. No other ICP has the same meters.</span>'; wbRatesRender(); return; }
+      if (!confirm('Save these rates on this ICP and ' + same.length + ' other ICP(s) with the same meters?' +
+        (over ? '\n\n' + over + ' of them already have saved rates, which will be replaced.' : ''))) return;
+      wbRatesCommit(ed.icp, ed.rec);
+      // The daily charge is per ICP on the bill (it differs between ICPs
+      // on the same rate card), so it is NOT copied; an ICP keeps its own.
+      for (var j = 0; j < same.length; j++) {
+        var copy = { unit: ed.rec.unit, fields: {} }, fk;
+        for (fk in ed.rec.fields) if (Object.prototype.hasOwnProperty.call(ed.rec.fields, fk) && fk !== 'daily') copy.fields[fk] = ed.rec.fields[fk];
+        var old = wbRates[same[j]];
+        if (old && old.fields.daily !== undefined && old.style.chg === wbRatesStyle.chg && old.style.gst === wbRatesStyle.gst) copy.fields.daily = old.fields.daily;
+        wbRatesCommit(same[j], copy);
+      }
+      wbRatesDraftSave();
+      wbRatesStatus();
+      ed.msg = '<span class="ok">Saved on ' + (same.length + 1) + ' ICP(s) — unit costs and charges, but not the daily charge, which is per ICP. ' + (model.length - same.length - 1) + ' ICP(s) have different meters and were left alone.</span>';
+      wbRatesRender();
+    }
+
+    /** Saved rates for the Betty fill, already converted to $ excl GST. */
+    function wbRatesPayload() {
+      var out = {}, any = false;
+      for (var icp in wbRates) {
+        if (!Object.prototype.hasOwnProperty.call(wbRates, icp)) continue;
+        var r = wbRates[icp], o = { unit: {}, fields: {} }, k;
+        for (k in r.unit) {
+          if (!Object.prototype.hasOwnProperty.call(r.unit, k)) continue;
+          var ex = wbRateEx(r.unit[k], r.style.unit, r.style.gst);
+          if (ex !== null) o.unit[k] = ex;
+        }
+        for (var c = 0; c < RATE_CHARGES.length; c++) {
+          var key = RATE_CHARGES[c][0];
+          if (r.fields[key] === undefined) continue;
+          var v = RATE_CHARGES[c][2] ? wbRateEx(r.fields[key], r.style.chg, r.style.gst) : bandNum(r.fields[key]);
+          if (v !== null) o.fields[key] = v;
+        }
+        for (var q = 0; q < RATE_OTHER.length; q++) {
+          var k2 = RATE_OTHER[q][0];
+          if (r.fields[k2] === undefined) continue;
+          var v2 = bandNum(r.fields[k2]);
+          if (v2 !== null) o.fields[k2] = v2;
+        }
+        out[icp] = o; any = true;
+      }
+      return any ? out : null;
+    }
+
+    // ---- Archive: Betty files (v2.17) ----
+    function arcBetSearch() {
+      var area = document.getElementById('arcBetArea');
+      if (!area) return;
+      var q = document.getElementById('arcQ').value.trim();
+      area.innerHTML = '<span class="muted">Searching…</span>';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          var h = '<p class="muted">' + fmtNum(res.total) + ' file(s) in the index' +
+            (res.q ? ' · ' + fmtNum(res.matched) + ' match(es) for “' + esc(res.q) + '”' : ' · showing the ' + res.rows.length + ' most recent') + '</p>';
+          if (!res.rows.length) { area.innerHTML = h + '<p class="muted">' + (res.total ? 'Nothing matches.' : 'No Betty files yet — one is listed each time a template is filled.') + '</p>'; return; }
+          h += '<div class="tblwrap"><table><thead><tr><th class="tL">Filled</th><th class="tL">Customer</th><th class="tR">ICPs</th>' +
+            '<th class="tL">File</th><th>Rates</th><th class="tR">Size</th><th class="tL">Operator</th></tr></thead><tbody>';
+          for (var i = 0; i < res.rows.length; i++) {
+            var r = res.rows[i];
+            h += '<tr><td class="tL mono">' + esc(r.date) + '</td>' +
+              '<td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+              '<td class="tR">' + fmtNum(r.icpCount) + '</td>' +
+              '<td class="tL"><b>' + esc(r.fileName) + '</b><br>' +
+              (r.url ? '<a href="' + esc(r.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' : '') +
+              (r.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(r.fileId) + '">' + ICONS.download + ' download to PC</a>' : '') + '</td>' +
+              '<td>' + (r.hasRates ? '<span class="pill flag">has rates</span>' : '<span class="muted">—</span>') + '</td>' +
+              '<td class="tR">' + fmtSize(r.sizeBytes) + '</td>' +
+              '<td class="tL muted" style="font-size:12px">' + esc(r.operator) + '</td></tr>';
+          }
+          area.innerHTML = h + '</tbody></table></div>';
+        })
+        .withFailureHandler(function (e) { area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+        .apiBetSearch(q);
     }
 
     // ---------------- Register tab (v2.16) ----------------
@@ -4332,6 +4988,30 @@
         .withFailureHandler(regFail)
         .apiBandRegisterDelete(r.retailer, r.network);
     }
+
+    /** Give every Workbench section a collapse arrow, like the Betty section (v2.18). */
+    function initCollapsers() {
+      var cards = document.querySelectorAll ? document.querySelectorAll('#tab-workbench .card2') : [];
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        if (card.tagName === 'DETAILS') continue; // already collapses natively
+        var head = null;
+        for (var c = 0; c < card.children.length; c++) if (/(^| )cardhead( |$)/.test(card.children[c].className || '')) { head = card.children[c]; break; }
+        if (!head || head.getAttribute('data-col')) continue;
+        head.setAttribute('data-col', '1');
+        var btn = document.createElement('button');
+        btn.className = 'colbtn';
+        btn.title = 'Collapse / expand this section';
+        btn.textContent = '▾';
+        btn.onclick = (function (cd, b) { return function () {
+          var on = !/(^| )collapsed( |$)/.test(cd.className);
+          cd.className = on ? cd.className + ' collapsed' : cd.className.replace(/(^| )collapsed( |$)/g, ' ').replace(/\s+/g, ' ').replace(/^ | $/g, '');
+          b.textContent = on ? '▸' : '▾';
+        }; })(card, btn);
+        head.insertBefore(btn, head.firstChild);
+      }
+    }
+    try { initCollapsers(); } catch (e) {}
 
     cdfTotalsLoad(false); // header small print, loaded once the page is up
     bandRegLoad();        // band register, used by the Workbench time bands and the Register tab

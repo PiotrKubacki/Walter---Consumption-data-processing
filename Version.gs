@@ -10,7 +10,7 @@
  * "New version" deployment. The header version on /exec tells you
  * which release the operators have.
  */
-var APP_VERSION = 'v2.16.1';
+var APP_VERSION = 'v2.18.0';
 var APP_VERSION_DATE = '2026-11-13';
 
 // Build stamp shown in the header and used in cache keys.
