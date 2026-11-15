@@ -314,17 +314,21 @@
         <details id="wbBettySec" class="card2" style="display:none"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
           <p style="margin-top:8px"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
           <div id="wbBettyIdsArea"></div>
-          <p class="muted" style="font-size:12px;margin:8px 0 0">Export the customer’s Bulk Import Template from Betty, choose it here and Walter returns it filled:
-            Meter and Monthly Consumption on the <b>Current</b> rows, matched by ICP. An ICP whose time bands are shown above gets one meter per band; every other register goes through the Register Map. Rates entered below are written too. The filled file is kept in the <b>Betty files</b> folder (🗄 Archive tab), apart from the consumption files.</p>
-          <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <p class="muted" style="font-size:12px;margin:8px 0 0">Walter writes a <b>new</b> Betty import file with one <b>Current</b> row per ICP, built from the 🧾 ICP meters above and the rates entered here.
+            It never amends a file exported from Betty; nothing else in Betty is touched. The file is kept in the <b>Betty files</b> folder (🗄 Archive tab), apart from the consumption files.</p>
+          <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>1.</b>
+            <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
+            <button class="btn-sm" onclick="document.getElementById('wbBettyFile').click()">📁 Choose template</button>
+            <span id="wbBettyFileName" class="muted">no file chosen</span>
+            <button id="wbBettyLoadBtn" onclick="wbBettyLoadFile(this)" style="min-width:0;padding:0 16px">⬇ Load from Betty</button>
+            <span class="muted" style="font-size:12px">when the customer already has Current analyses: export the Bulk Import Template from Betty and load it, so Walter starts from Betty’s rates and updates those analyses. Skip this for a customer with none.</span></p>
+          <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>2.</b>
             <button onclick="wbRatesOpen()" style="min-width:0;padding:0 16px">✏️ Enter rates</button>
             <span id="wbRatesState" class="muted" style="font-size:12px"></span>
-            <span class="muted" style="font-size:12px">optional — the customer’s current rates, typed off the bill, go into the filled template only</span></p>
-          <p style="margin-top:10px">Betty template:
-            <input type="file" id="wbBettyFile" accept=".xlsx" style="display:none" onchange="document.getElementById('wbBettyFileName').textContent=(this.files&&this.files.length)?this.files[0].name:'no file chosen'">
-            <button onclick="document.getElementById('wbBettyFile').click()" style="min-width:0;padding:0 16px">📁 Choose template</button>
-            <span id="wbBettyFileName" class="muted">no file chosen</span>
-            <button id="wbBettyFillBtn" onclick="wbBettyFill(this)" style="min-width:0;padding:0 16px">📥 Fill template</button></p>
+            <span class="muted" style="font-size:12px">the customer’s current rates, typed off the bill, and the retailer</span></p>
+          <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>3.</b>
+            <button id="wbBettyWriteBtn" onclick="wbBettyWrite(this)" style="min-width:0;padding:0 16px">📤 Create Betty file</button>
+            <span class="muted" style="font-size:12px">then import it into Betty</span></p>
           <div id="wbBettyFillArea"></div>
         </details>
       </div>
@@ -1792,29 +1796,6 @@
         .apiBettyCustomerIds(wbAnalysedIds);
     }
 
-    function wbBettyFill(btn) {
-      if (!wbAnalysedIds || !wbAnalysedIds.length) { alert('Analyse the session first.'); return; }
-      var input = document.getElementById('wbBettyFile');
-      var area = document.getElementById('wbBettyFillArea');
-      if (!input.files || !input.files.length) { area.innerHTML = '<span class="error">Choose the Betty template file first.</span>'; return; }
-      var file = input.files[0];
-      btn.disabled = true; btn.textContent = 'Filling…';
-      var reader = new FileReader();
-      reader.onload = function () {
-        var b64 = reader.result.split(',')[1];
-        google.script.run
-          .withSuccessHandler(function (res) {
-            btn.disabled = false; btn.textContent = '📥 Fill template';
-            renderBettyResult(res, 'wbBettyFillArea', false);
-            if (res && res.ok) wbRatesDraftClear(); // the filled file is now the record of the rates
-            arcLoaded = false;
-          })
-          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
-          .apiBettyFill(b64, file.name, wbAnalysedIds, wbMeterBettyData(), wbRatesPayload());
-      };
-      reader.onerror = function () { btn.disabled = false; btn.textContent = '📥 Fill template'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
-      reader.readAsDataURL(file);
-    }
 
     // ---------------- Per-ICP pathway (queue preview) ----------------
     // Pathway is ONE mutually exclusive choice per ICP: STANDARD |
@@ -2640,7 +2621,8 @@
       wbBand = {}; // time-band picks and typed rates belong to the finished session
       wbBandsRender(true);
       wbRates = {}; wbRatesEd = null; wbRatesDraftTried = false;
-      wbRatesStyle = { unit: 'c', chg: 'c', gst: true };
+      wbRatesStyle = wbStyleAll('c', true);
+      wbBetty.loaded = {}; wbBetty.fileName = ''; wbBetty.retailer = {}; wbBetty.defRetailer = '';
       document.getElementById('wbRatesModal').style.display = 'none';
       document.getElementById('wbRatesState').textContent = '';
       wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
@@ -3946,8 +3928,8 @@
       }
       if (anyCust && !wbProspect) {
         h += '<p style="margin:10px 0 0;border-top:1px solid var(--tuc-line);padding-top:10px">' +
-          '<button onclick="wbBandGoBetty()" style="min-width:0;padding:0 16px">📥 Fill a Betty template with these meters</button> ' +
-          '<span class="muted" style="font-size:12px">exactly the rows above go to Betty — rates are added with “Enter rates”</span></p>';
+          '<button onclick="wbBandGoBetty()" style="min-width:0;padding:0 16px">📤 Send these meters to Betty</button> ' +
+          '<span class="muted" style="font-size:12px">exactly the rows above go into a new Betty file — rates and the retailer are added with “Enter rates”</span></p>';
       }
       box.innerHTML = h;
     }
@@ -4544,7 +4526,29 @@
       ['addPpd', 'Additional PPD'], ['inflation', 'Inflation'], ['rebate', 'Annual Rebate'], ['incentive', 'Incentive credit']];
 
     var wbRates = {};      // icp -> saved record { style, unit: { meter: typed }, fields: { key: typed } }
-    var wbRatesStyle = { unit: 'c', chg: 'c', gst: true }; // how the operator is typing right now
+    // How the operator is typing right now (v2.20): GST is ONE switch
+    // for everything; unit costs have one c/kWh | $/kWh switch; charges
+    // have a cents | dollars switch PER LINE (chgBy), and the global
+    // charges switch simply sets every line. Break fee and the contract
+    // fields are written as typed.
+    var RATE_CHG_KEYS = ['daily', 'dailyLevy', 'kwhLevy', 'capacity', 'demand', 'distance', 'unmetered'];
+    function wbStyleAll(unit, gst) {
+      var st = { unit: unit, chg: unit, gst: gst, chgBy: {} };
+      for (var i = 0; i < RATE_CHG_KEYS.length; i++) st.chgBy[RATE_CHG_KEYS[i]] = unit;
+      return st;
+    }
+    /** A clean copy of a style; records saved before v2.20 have no chgBy and fall back to their one charges unit. */
+    function wbStyleClone(src) {
+      var s0 = src || {};
+      var st = { unit: s0.unit === '$' ? '$' : 'c', chg: s0.chg === '$' ? '$' : 'c', gst: s0.gst !== false, chgBy: {} };
+      for (var i = 0; i < RATE_CHG_KEYS.length; i++) {
+        var v = s0.chgBy && s0.chgBy[RATE_CHG_KEYS[i]];
+        st.chgBy[RATE_CHG_KEYS[i]] = v === '$' || v === 'c' ? v : st.chg;
+      }
+      return st;
+    }
+    function wbChgUnit(style, key) { return (style.chgBy && style.chgBy[key]) || style.chg || 'c'; }
+    var wbRatesStyle = wbStyleAll('c', true);
     var wbRatesEd = null;  // { icp, rec, prefilled: { meter: true }, msg }
     var wbRatesDraftTried = false;
 
@@ -4586,7 +4590,7 @@
         var d = JSON.parse(raw);
         if (d && d.rates && !Object.keys(wbRates).length) {
           wbRates = d.rates;
-          if (d.style) wbRatesStyle = { unit: d.style.unit === '$' ? '$' : 'c', chg: d.style.chg === '$' ? '$' : 'c', gst: d.style.gst !== false };
+          if (d.style) wbRatesStyle = wbStyleClone(d.style);
         }
       } catch (e) {}
     }
@@ -4648,7 +4652,7 @@
       var prefilled = {};
       var k;
       if (saved) {
-        wbRatesStyle = { unit: saved.style.unit, chg: saved.style.chg, gst: saved.style.gst };
+        wbRatesStyle = wbStyleClone(saved.style);
         for (k in saved.unit) if (Object.prototype.hasOwnProperty.call(saved.unit, k)) rec.unit[k] = saved.unit[k];
         for (k in saved.fields) if (Object.prototype.hasOwnProperty.call(saved.fields, k)) rec.fields[k] = saved.fields[k];
       }
@@ -4686,12 +4690,34 @@
       var h = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
         '<h2 style="margin:0;font-family:\'Poppins\',sans-serif;font-size:16px;color:var(--tuc-accent-dark)">Enter rates</h2>' +
         '<select onchange="wbRatesGo(this.value)" style="height:34px;border:1px solid var(--tuc-line);border-radius:6px;font-family:monospace;font-size:13px">' + opts + '</select>' +
-        '<span class="muted" style="font-size:12px">' + (idx + 1) + ' of ' + model.length + (wbRates[ed.icp] ? ' · saved' : ' · not saved yet') + '</span></div>';
+        '<span class="muted" style="font-size:12px">' + (idx + 1) + ' of ' + model.length + (wbRates[ed.icp] ? ' · saved' : ' · not saved yet') + '</span>' +
+        // small calculator, top right like Betty's GST calculator
+        '<span style="margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;border:1px solid var(--tuc-line);border-radius:8px;padding:4px 8px">' +
+        '<span class="muted">Calculator</span><input type="text" inputmode="decimal" id="wbCalcIn" value="' + esc(wbCalcVal) + '" style="width:84px;border:1px solid var(--tuc-line);border-radius:6px;padding:3px 6px;font-size:12px;text-align:right">' +
+        '<button class="btn-sm" style="min-width:0;padding:2px 6px" onclick="wbCalcRun(\'addGst\')">+ GST</button>' +
+        '<button class="btn-sm" style="min-width:0;padding:2px 6px" onclick="wbCalcRun(\'subGst\')">− GST</button>' +
+        '<button class="btn-sm" style="min-width:0;padding:2px 6px" onclick="wbCalcRun(\'toDollar\')">c → $</button>' +
+        '<button class="btn-sm" style="min-width:0;padding:2px 6px" onclick="wbCalcRun(\'toCent\')">$ → c</button>' +
+        '<span id="wbCalcOut" class="mono" style="min-width:86px"></span></span></div>';
+      var allChg = function (u) { for (var q = 0; q < RATE_CHG_KEYS.length; q++) if (wbChgUnit(st, RATE_CHG_KEYS[q]) !== u) return false; return true; };
       h += '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:12px">' +
-        '<span class="muted">I am typing unit costs in</span><div class="seg">' + seg('unit', 'c', 'c/kWh') + seg('unit', '$', '$/kWh') + '</div>' +
-        '<span class="muted">charges in</span><div class="seg">' + seg('chg', 'c', 'cents') + seg('chg', '$', 'dollars') + '</div>' +
         '<div class="seg">' + seg('gst', true, 'GST incl') + seg('gst', false, 'GST excl') + '</div>' +
-        '<span class="muted">→ the template always gets <b>$ excl GST</b></span></div>';
+        '<span class="muted">unit costs in</span><div class="seg">' + seg('unit', 'c', 'c/kWh') + seg('unit', '$', '$/kWh') + '</div>' +
+        '<span class="muted">all charges in</span><div class="seg">' +
+        '<button class="' + (allChg('c') ? 'active' : '') + '" onclick="wbRatesStyleSet(\'chg\', \'c\')">cents</button>' +
+        '<button class="' + (allChg('$') ? 'active' : '') + '" onclick="wbRatesStyleSet(\'chg\', \'$\')">dollars</button></div>' +
+        '<span class="muted">→ the Betty file always gets <b>$ excl GST</b></span></div>';
+      // Betty: retailer for this ICP's Current row, and what Betty held before.
+      var ld = wbBetty.loaded[ed.icp] || null;
+      var curRet = wbBettyRetailerFor(ed.icp);
+      var ropts = '<option value="">— pick the retailer —</option>';
+      for (var rr = 0; rr < wbBetty.retailers.length; rr++) ropts += '<option' + (wbBetty.retailers[rr] === curRet ? ' selected' : '') + '>' + esc(wbBetty.retailers[rr]) + '</option>';
+      h += '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:6px"><span class="muted">Retailer in Betty</span>' +
+        '<select onchange="wbBettySetRetailer(\'' + esc(ed.icp) + '\', this.value)" style="height:30px;border:1px solid ' + (curRet ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:12px">' + ropts + '</select>' +
+        '<span class="muted">' + (ld ? 'Current analysis #' + esc(ld.analysisId) + ' loaded from Betty — it will be updated'
+          : (wbBetty.fileName ? 'no Current analysis in the loaded template — Betty will create one' : 'no template loaded — Betty will create a new Current analysis')) + '</span></div>';
+      if (ld) h += '<div class="muted" style="font-size:12px;margin-bottom:6px">Betty has: ' + esc(wbBettyMetersTxt(ld.meters) || 'no meters') +
+        (wbRates[ed.icp] && wbRates[ed.icp].fromBetty ? ' · the figures below were loaded from Betty ($ excl GST)' : '') + '</div>';
       for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
 
       h += '<div class="tblwrap"><table style="width:auto;margin-top:6px"><thead><tr><th></th><th class="tL">Meter type</th>' +
@@ -4712,13 +4738,17 @@
       h += '</tbody></table></div>';
 
       h += '<div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:14px">';
-      h += '<div><div style="font-weight:600;font-size:13px;margin-bottom:4px">Retailer charge (' + (st.chg === 'c' ? 'cents' : 'dollars') + (st.gst ? ', GST incl' : ', GST excl') + ')</div><table style="width:auto">';
+      h += '<div><div style="font-weight:600;font-size:13px;margin-bottom:4px">Retailer charge (' + (st.gst ? 'GST incl' : 'GST excl') + ', unit per line)</div><table style="width:auto">';
       for (var c = 0; c < RATE_CHARGES.length; c++) {
         var rc = RATE_CHARGES[c];
         var cv = ed.rec.fields[rc[0]];
-        var cex = rc[2] ? wbRateEx(cv, st.chg, st.gst) : bandNum(cv);
+        var cu = wbChgUnit(st, rc[0]);
+        var cex = rc[2] ? wbRateEx(cv, cu, st.gst) : bandNum(cv);
         h += '<tr><td class="tR" style="border:0;padding:3px 8px">' + rc[1] + ':</td><td style="border:0;padding:3px 0">' +
           '<input type="text" inputmode="decimal" value="' + esc(cv === undefined ? '' : cv) + '" oninput="wbRatesSetField(\'' + rc[0] + '\', this.value)" style="' + inp + '"></td>' +
+          '<td style="border:0;padding:3px 6px">' + (rc[2] ? '<div class="seg">' +
+            '<button class="' + (cu === 'c' ? 'active' : '') + '" style="padding:2px 9px" title="typed in cents" onclick="wbRatesChgUnit(\'' + rc[0] + '\', \'c\')">c</button>' +
+            '<button class="' + (cu === '$' ? 'active' : '') + '" style="padding:2px 9px" title="typed in dollars" onclick="wbRatesChgUnit(\'' + rc[0] + '\', \'$\')">$</button></div>' : '') + '</td>' +
           '<td class="tL mono muted" style="border:0;padding:3px 8px;font-size:12px" id="wbRatePvF_' + rc[0] + '">' +
           (rc[2] ? (cex === null ? '' : '→ ' + cex.toFixed(5)) : '$ as typed') + '</td></tr>';
       }
@@ -4728,11 +4758,13 @@
         var ro = RATE_OTHER[o];
         var ov = ed.rec.fields[ro[0]];
         h += '<tr><td class="tR" style="border:0;padding:3px 8px">' + ro[1] + ':</td><td style="border:0;padding:3px 0">' +
-          '<input type="text" inputmode="decimal" value="' + esc(ov === undefined ? '' : ov) + '" oninput="wbRatesSetField(\'' + ro[0] + '\', this.value)" style="' + inp + '"></td></tr>';
+          '<input type="text" inputmode="decimal" value="' + esc(ov === undefined ? '' : ov) + '"' +
+          (ro[0] === 'contractDays' ? ' placeholder="default ' + wbBetty.defaults.contractDays + '"' : ro[0] === 'brokerage' ? ' placeholder="default ' + wbBetty.defaults.brokerage + '"' : '') +
+          ' oninput="wbRatesSetField(\'' + ro[0] + '\', this.value)" style="' + inp + '"></td></tr>';
       }
       h += '</table></div></div>';
 
-      h += '<p class="muted" style="font-size:12px;margin:12px 0 6px">A blank field is left as it is in the template. Rates are kept in this browser until the template is filled; they are never written to the consumption file (CDF).</p>';
+      h += '<p class="muted" style="font-size:12px;margin:12px 0 6px">A blank field goes to Betty as 0, except Contract length and Brokerage fee, which take the default shown in grey. Rates are kept in this browser until the Betty file is created; they are never written to the consumption file (CDF).</p>';
       h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--tuc-line);padding-top:12px">' +
         '<button class="btn-sm" onclick="wbRatesCopyPrev()" title="Fill this ICP from the last ICP you saved">copy from previous ICP</button>' +
         '<button class="btn-sm" onclick="wbRatesApplyAll()" title="Save these rates on every ICP that has the same meters">apply to all ICPs with the same meters</button>' +
@@ -4763,12 +4795,21 @@
       for (var c = 0; c < RATE_CHARGES.length; c++) if (RATE_CHARGES[c][0] === key) styled = RATE_CHARGES[c][2];
       if (!styled) return;
       var pv = document.getElementById('wbRatePvF_' + key);
-      var ex = wbRateEx(val, wbRatesStyle.chg, wbRatesStyle.gst);
+      var ex = wbRateEx(val, wbChgUnit(wbRatesStyle, key), wbRatesStyle.gst);
       if (pv) pv.textContent = ex === null ? '' : '→ ' + ex.toFixed(5);
     }
     /** The typing style changes how the figures are READ; what was typed stays as typed. */
     function wbRatesStyleSet(key, val) {
       wbRatesStyle[key] = val;
+      // The global charges switch sets every charge line (Peter, 14 Nov);
+      // a line's own switch then overrides just that line.
+      if (key === 'chg') for (var i = 0; i < RATE_CHG_KEYS.length; i++) wbRatesStyle.chgBy[RATE_CHG_KEYS[i]] = val;
+      if (wbRatesEd) wbRatesEd.msg = '';
+      wbRatesRender();
+    }
+
+    function wbRatesChgUnit(key, val) {
+      wbRatesStyle.chgBy[key] = val === '$' ? '$' : 'c';
       if (wbRatesEd) wbRatesEd.msg = '';
       wbRatesRender();
     }
@@ -4781,7 +4822,7 @@
     }
 
     function wbRatesCommit(icp, rec) {
-      var out = { style: { unit: wbRatesStyle.unit, chg: wbRatesStyle.chg, gst: wbRatesStyle.gst }, unit: {}, fields: {} };
+      var out = { style: wbStyleClone(wbRatesStyle), unit: {}, fields: {} };
       var k;
       for (k in rec.unit) if (Object.prototype.hasOwnProperty.call(rec.unit, k) && String(rec.unit[k]) !== '') out.unit[k] = rec.unit[k];
       for (k in rec.fields) if (Object.prototype.hasOwnProperty.call(rec.fields, k) && String(rec.fields[k]) !== '') out.fields[k] = rec.fields[k];
@@ -4825,7 +4866,7 @@
       for (i = idx - 1; i >= 0 && !src; i--) if (wbRates[model[i].icp]) src = wbRates[model[i].icp];
       for (i = model.length - 1; i > idx && !src; i--) if (wbRates[model[i].icp]) src = wbRates[model[i].icp];
       if (!src) { ed.msg = '<span class="flag">No other ICP has saved rates yet.</span>'; wbRatesRender(); return; }
-      wbRatesStyle = { unit: src.style.unit, chg: src.style.chg, gst: src.style.gst };
+      wbRatesStyle = wbStyleClone(src.style);
       var meters = model[idx].meters, n = 0, k;
       for (var m = 0; m < meters.length; m++) {
         if (src.unit[meters[m].name] !== undefined) { ed.rec.unit[meters[m].name] = src.unit[meters[m].name]; delete ed.prefilled[meters[m].name]; n++; }
@@ -4864,7 +4905,7 @@
         var copy = { unit: ed.rec.unit, fields: {} }, fk;
         for (fk in ed.rec.fields) if (Object.prototype.hasOwnProperty.call(ed.rec.fields, fk) && fk !== 'daily') copy.fields[fk] = ed.rec.fields[fk];
         var old = wbRates[same[j]];
-        if (old && old.fields.daily !== undefined && old.style.chg === wbRatesStyle.chg && old.style.gst === wbRatesStyle.gst) copy.fields.daily = old.fields.daily;
+        if (old && old.fields.daily !== undefined && wbChgUnit(old.style, 'daily') === wbChgUnit(wbRatesStyle, 'daily') && old.style.gst === wbRatesStyle.gst) copy.fields.daily = old.fields.daily;
         wbRatesCommit(same[j], copy);
       }
       wbRatesDraftSave();
@@ -4887,7 +4928,7 @@
         for (var c = 0; c < RATE_CHARGES.length; c++) {
           var key = RATE_CHARGES[c][0];
           if (r.fields[key] === undefined) continue;
-          var v = RATE_CHARGES[c][2] ? wbRateEx(r.fields[key], r.style.chg, r.style.gst) : bandNum(r.fields[key]);
+          var v = RATE_CHARGES[c][2] ? wbRateEx(r.fields[key], wbChgUnit(r.style, key), r.style.gst) : bandNum(r.fields[key]);
           if (v !== null) o.fields[key] = v;
         }
         for (var q = 0; q < RATE_OTHER.length; q++) {
@@ -4899,6 +4940,234 @@
         out[icp] = o; any = true;
       }
       return any ? out : null;
+    }
+
+    // ---- Betty: load from a template, then re-create (v2.20, 14 Nov) ----
+    // Walter does not amend the file Betty exported. Choosing a template
+    // LOADS its Current rows (unit costs, charges, contract fields,
+    // retailer, analysis ID) into the Enter rates screen; "Create Betty
+    // file" then writes a NEW file with one Current row per ICP built
+    // entirely from what is on screen. A loaded analysis ID is carried
+    // (Betty updates that analysis); with none, Betty creates one.
+    var wbBetty = { loaded: {}, fileName: '', retailers: [], defaults: { contractDays: 1095, brokerage: 5.75 }, retailer: {}, defRetailer: '' };
+
+    function wbBettyListsLoad() {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (!res) return;
+          wbBetty.retailers = res.retailers || [];
+          if (res.meters && res.meters.length) BETTY_METERS = res.meters;
+          if (res.defaults) wbBetty.defaults = res.defaults;
+        })
+        .withFailureHandler(function () {})
+        .apiBettyLists();
+    }
+
+    /** Betty's spelling of a retailer name, or '' when it is not in Betty's list. */
+    function wbBettyRetailerMatch(name) {
+      var k = bandNorm(name);
+      if (!k) return '';
+      for (var i = 0; i < wbBetty.retailers.length; i++) if (bandNorm(wbBetty.retailers[i]) === k) return wbBetty.retailers[i];
+      return '';
+    }
+
+    /** The retailer an ICP's Current row will carry: the operator's pick, what Betty had, the session's pick, or a name match. */
+    function wbBettyRetailerFor(icp) {
+      if (wbBetty.retailer[icp]) return wbBetty.retailer[icp];
+      var ld = wbBetty.loaded[icp];
+      if (ld && ld.retailer) return ld.retailer;
+      if (wbBetty.defRetailer) return wbBetty.defRetailer;
+      var rows = wbLastRows || [];
+      for (var i = 0; i < rows.length; i++) if (rows[i].icp === icp) return wbBettyRetailerMatch(wbBandInfo(rows[i]).retailer);
+      return '';
+    }
+    function wbBettySetRetailer(icp, val) {
+      wbBetty.retailer[icp] = val;
+      if (val) wbBetty.defRetailer = val; // the next ICPs without one of their own follow
+    }
+
+    function wbBettyLoadFile(btn) {
+      var input = document.getElementById('wbBettyFile');
+      var area = document.getElementById('wbBettyFillArea');
+      if (!input.files || !input.files.length) { area.innerHTML = '<span class="error">Choose the Bulk Import Template exported from Betty first.</span>'; return; }
+      if (!wbAnalysedIds || !wbAnalysedIds.length) { area.innerHTML = '<span class="error">Analyse the session first.</span>'; return; }
+      var file = input.files[0];
+      var reader = new FileReader();
+      btn.disabled = true; btn.textContent = 'Loading…';
+      area.innerHTML = '<span class="muted">Reading the template…</span>';
+      reader.onload = function () {
+        var b64 = String(reader.result).split(',')[1] || '';
+        google.script.run
+          .withSuccessHandler(function (res) { btn.disabled = false; btn.textContent = '⬇ Load from Betty'; wbBettyLoaded(res); })
+          .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = '⬇ Load from Betty'; area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
+          .apiBettyLoad(b64, file.name);
+      };
+      reader.onerror = function () { btn.disabled = false; btn.textContent = '⬇ Load from Betty'; area.innerHTML = '<span class="error">Could not read the chosen file.</span>'; };
+      reader.readAsDataURL(file);
+    }
+
+    /** Preload what Betty holds into the rates of each ICP in the session - never over something already typed. */
+    function wbBettyLoaded(res) {
+      wbBetty.loaded = res.rows || {};
+      wbBetty.fileName = res.fileName || '';
+      if (res.retailers && res.retailers.length) wbBetty.retailers = res.retailers;
+      if (res.meters && res.meters.length) BETTY_METERS = res.meters;
+      if (res.defaults) wbBetty.defaults = res.defaults;
+      wbRatesDraftLoad();
+      var model = wbRatesModel();
+      var hit = 0, kept = 0, miss = [];
+      for (var i = 0; i < model.length; i++) {
+        var icp = model[i].icp, ld = wbBetty.loaded[icp];
+        if (!ld) { miss.push(icp); continue; }
+        hit++;
+        var k;
+        if (wbRates[icp]) {
+          // Something was typed already: it stays. Betty only fills the
+          // blanks, converted into the style that record was typed in.
+          kept++;
+          var old = wbRates[icp];
+          for (var m0 = 0; m0 < ld.meters.length; m0++) {
+            if (ld.meters[m0].unit > 0 && old.unit[ld.meters[m0].name] === undefined) old.unit[ld.meters[m0].name] = wbRateTyped(ld.meters[m0].unit, old.style.unit, old.style.gst);
+          }
+          for (k in ld.fields) {
+            if (!Object.prototype.hasOwnProperty.call(ld.fields, k) || !ld.fields[k] || old.fields[k] !== undefined) continue;
+            old.fields[k] = RATE_CHG_KEYS.indexOf(k) !== -1 ? wbRateTyped(ld.fields[k], wbChgUnit(old.style, k), old.style.gst) : String(ld.fields[k]);
+          }
+          continue;
+        }
+        var rec = { style: wbStyleAll('$', false), unit: {}, fields: {}, fromBetty: true };
+        for (var m = 0; m < ld.meters.length; m++) if (ld.meters[m].unit > 0) rec.unit[ld.meters[m].name] = String(ld.meters[m].unit);
+        for (k in ld.fields) if (Object.prototype.hasOwnProperty.call(ld.fields, k) && ld.fields[k]) rec.fields[k] = String(ld.fields[k]);
+        wbRates[icp] = rec;
+      }
+      wbRatesStatus();
+      wbBandsRender(true);
+      var h = '<p class="ok">Loaded ' + esc(wbBetty.fileName) + ': ' + hit + ' of ' + model.length + ' ICP(s) in this session have a Current analysis in Betty.</p>';
+      if (kept) h += '<p class="muted" style="font-size:12px">' + kept + ' ICP(s) already had rates typed here — what was typed was kept; Betty’s figures only filled the blanks.</p>';
+      if (miss.length) h += '<p class="flag">⚠ No Current analysis in the template for: <span class="mono">' + miss.map(esc).join(', ') +
+        '</span>. Their rows will go out with a blank analysis ID, so Betty will create a new Current analysis for each.</p>';
+      if (res.dupCurrent && res.dupCurrent.length) h += '<p class="error">The template has more than one Current row for: ' + res.dupCurrent.map(esc).join(', ') + ' — only the first was loaded.</p>';
+      h += '<p class="muted" style="font-size:12px">Loaded values are in $ excl GST and can be changed in Enter rates. Betty’s old meters are shown there for reference; the meters Walter worked out replace them.</p>';
+      document.getElementById('wbBettyFillArea').innerHTML = h;
+    }
+
+    /** One Current row per Betty-customer ICP, built entirely from the screen. */
+    function wbBettyRows() {
+      var model = wbIcpModel();
+      var pay = wbRatesPayload() || {};
+      var out = [], problems = [];
+      for (var i = 0; i < model.length; i++) {
+        var e = model[i];
+        if (!e.custId) continue;
+        var ld = wbBetty.loaded[e.icp] || null;
+        var p = pay[e.icp] || { unit: {}, fields: {} };
+        var meters = [];
+        for (var m = 0; m < e.meters.length; m++) {
+          var u = p.unit[e.meters[m].name];
+          meters.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, unit: u === undefined ? 0 : u, src: e.meters[m].src, manual: !!e.meters[m].manual });
+        }
+        var fields = {}, k;
+        for (k in p.fields) if (Object.prototype.hasOwnProperty.call(p.fields, k)) fields[k] = p.fields[k];
+        // Defaults apply only where nothing was loaded from Betty or typed.
+        if (fields.contractDays === undefined) fields.contractDays = wbBetty.defaults.contractDays;
+        if (fields.brokerage === undefined) fields.brokerage = wbBetty.defaults.brokerage;
+        var fuel = 'ELEC', name = '';
+        for (var r = 0; r < (wbLastRows || []).length; r++) {
+          if (wbLastRows[r].icp === e.icp) { fuel = wbLastRows[r].lookup.fuel || fuel; name = wbLastRows[r].lookup.registeredName || ''; break; }
+        }
+        var retailer = wbBettyRetailerFor(e.icp);
+        if (!meters.length) problems.push(e.icp + ': no meters to send');
+        if (meters.length > 4) problems.push(e.icp + ': more than four meters');
+        if (!retailer) problems.push(e.icp + ': no retailer picked');
+        out.push({ icp: e.icp, analysisId: ld ? ld.analysisId : '', customerId: e.custId, registeredName: ld && ld.registeredName ? ld.registeredName : name,
+          retailer: retailer, analysisType: /gas/i.test(fuel) ? 'GAS' : 'ELECTRICITY', comments: ld ? ld.comments : '', meters: meters, fields: fields });
+      }
+      return { rows: out, problems: problems };
+    }
+
+    function wbBettyWrite(btn) {
+      var area = document.getElementById('wbBettyFillArea');
+      if (!wbAnalysedIds || !wbAnalysedIds.length) { area.innerHTML = '<span class="error">Analyse the session first.</span>'; return; }
+      var built = wbBettyRows();
+      if (!built.rows.length) { area.innerHTML = '<span class="error">No ICP here belongs to a Betty customer.</span>'; return; }
+      if (built.problems.length) {
+        area.innerHTML = '<p class="error">Not written — fix these first (Betty rejects a whole file over one bad row):</p><ul>' +
+          built.problems.map(function (p) { return '<li class="error">' + esc(p) + '</li>'; }).join('') + '</ul>';
+        return;
+      }
+      var upd = 0, cre = 0;
+      for (var i = 0; i < built.rows.length; i++) { if (built.rows[i].analysisId) upd++; else cre++; }
+      if (!confirm('Create a new Betty file with ' + built.rows.length + ' Current row(s)?\n\n' + upd + ' will UPDATE an existing analysis (ID loaded from Betty).\n' +
+        cre + ' have no analysis ID — Betty will CREATE a new Current analysis for each' +
+        (cre ? ', and will reject the whole file if any of those ICPs already has one.' : '.'))) return;
+      btn.disabled = true; btn.textContent = 'Writing…';
+      area.innerHTML = '<span class="muted">Writing the file…</span>';
+      var done = function () { btn.disabled = false; btn.textContent = '📤 Create Betty file'; };
+      google.script.run
+        .withSuccessHandler(function (res) {
+          done();
+          area.innerHTML = wbBettyReport(res, built.rows);
+          wbRatesDraftClear(); // the file is now the record of the rates
+          arcLoaded = false;
+        })
+        .withFailureHandler(function (e) { done(); area.innerHTML = '<p class="error">' + esc(e.message || e) + '</p>'; })
+        .apiBettyWrite({ rows: built.rows });
+    }
+
+    function wbBettyMetersTxt(list) {
+      var parts = [];
+      for (var i = 0; i < list.length; i++) parts.push(list[i].name + ' ' + fmtNum(Math.round(list[i].monthly)) + (list[i].unit ? ' @ ' + list[i].unit : ''));
+      return parts.join(' · ');
+    }
+
+    /** What was written, with what Betty held before beside it. */
+    function wbBettyReport(res, rows) {
+      var h = '<p class="ok">Betty file created: <b>' + esc(res.outputName) + '</b> — ' + res.rowsWritten + ' Current row(s): ' +
+        res.updates + ' update an existing analysis, ' + res.creates + ' create a new one.</p>' +
+        '<p><a href="' + esc(res.outputUrl) + '" target="_blank">' + ICONS.open + ' open in new tab</a> · ' +
+        '<a href="https://drive.google.com/uc?export=download&amp;id=' + esc(res.fileId) + '">' + ICONS.download + ' download to PC</a></p>' +
+        '<p class="muted" style="font-size:12px">Kept in the Betty files folder' +
+        (res.ratesRows ? ' · <b>contains rates for ' + res.ratesRows + ' ICP(s)</b> — internal only, do not send it out' : '') +
+        (res.sharedWith && res.sharedWith.length ? ' · shared with ' + res.sharedWith.map(esc).join(', ') : '') + '</p>';
+      if (res.shareError) h += '<p class="flag">⚠ ' + esc(res.shareError) + '</p>';
+      if (res.indexError) h += '<p class="flag">⚠ Not added to the Betty files list (' + esc(res.indexError) + ') — the file itself is fine.</p>';
+      h += '<div class="tblwrap"><table><thead><tr><th class="tL">ICP</th><th class="tL">Analysis</th><th class="tL">Retailer</th>' +
+        '<th class="tL">Now in the file</th><th class="tL">Was in Betty</th><th class="tL">Other changes</th></tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i], ld = wbBetty.loaded[r.icp];
+        var ch = [];
+        if (ld) {
+          for (var c = 0; c < RATE_CHARGES.length + RATE_OTHER.length; c++) {
+            var def = c < RATE_CHARGES.length ? RATE_CHARGES[c] : RATE_OTHER[c - RATE_CHARGES.length];
+            var was = Number(ld.fields[def[0]]) || 0, now = Number(r.fields[def[0]]) || 0;
+            if (Math.abs(was - now) > 1e-9) ch.push(def[1] + ' ' + was + ' → ' + now);
+          }
+          if (ld.retailer && ld.retailer !== r.retailer) ch.push('retailer ' + ld.retailer + ' → ' + r.retailer);
+        }
+        var manual = false;
+        for (var m = 0; m < r.meters.length; m++) if (r.meters[m].manual) manual = true;
+        h += '<tr><td class="tL mono">' + esc(r.icp) + '</td>' +
+          '<td class="tL">' + (r.analysisId ? 'update #' + esc(r.analysisId) : '<span class="pill flag">new</span>') + '</td>' +
+          '<td class="tL">' + esc(r.retailer) + '</td>' +
+          '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + '</td>' +
+          '<td class="tL muted" style="font-size:12px">' + (ld ? esc(wbBettyMetersTxt(ld.meters) || 'no meters') : '—') + '</td>' +
+          '<td class="tL muted" style="font-size:12px">' + (ch.length ? esc(ch.join('; ')) : (ld ? 'none' : '')) + '</td></tr>';
+      }
+      return h + '</tbody></table></div>';
+    }
+
+    // ---- small calculator on the Enter rates screen (v2.20) ----
+    var wbCalcVal = '';
+    function wbCalcRun(op) {
+      var inp = document.getElementById('wbCalcIn');
+      var out = document.getElementById('wbCalcOut');
+      if (!inp || !out) return;
+      wbCalcVal = inp.value;
+      var n = bandNum(inp.value);
+      if (n === null) { out.innerHTML = '<span class="muted">type a number</span>'; return; }
+      var r = op === 'addGst' ? n * BAND_GST : op === 'subGst' ? n / BAND_GST : op === 'toDollar' ? n / 100 : n * 100;
+      var txt = String(Math.round(r * 100000) / 100000);
+      out.innerHTML = '= <span class="copynum" title="Click to copy" onclick="copyPlain(\'' + txt + '\', this)">' + txt + '</span>';
     }
 
     // ---- Archive: Betty files (v2.17) ----
@@ -5206,6 +5475,7 @@
     try { initCollapsers(); } catch (e) {}
 
     cdfTotalsLoad(false); // header small print, loaded once the page is up
+    wbBettyListsLoad();   // Betty's retailer / meter lists and the Enter rates defaults
     bandRegLoad();        // band register, used by the Workbench time bands and the Register tab
 
   </script>

@@ -476,6 +476,267 @@ function apiArchiveProcessedFiles() {
 }
 
 // =====================================================
+// Betty file: LOAD from a template, then RE-CREATE (v2.20)
+// -----------------------------------------------------
+// Decided 14 Nov: Walter does not amend the file Betty
+// exported. Choosing a template is a LOAD step - its
+// Current rows are read so the operator starts from what
+// Betty holds. On save Walter writes a NEW file in the
+// Bulk Import Template layout with ONE Current row per
+// ICP, built entirely from what is on screen:
+//   - analysis ID carried when one was loaded -> Betty
+//     updates that analysis;
+//   - analysis ID blank otherwise -> Betty creates it
+//     (and rejects the whole file if the ICP already has
+//     a Current analysis).
+// Only the rows Walter built are in the file; Betty
+// leaves every analysis that is absent from an import
+// alone. Walter writes Current rows only - Rita writes
+// the other statuses.
+// =====================================================
+
+const BETTY_HEADERS = [
+  "Customer Analysis ID", "Customer ID", "Registered Name", "ICP Identifier",
+  "Retailer", "Status (Analysis)", "Analysis Type", "Comments",
+  "Meter 1", "Monthly Consumption 1", "Unit Cost 1", "Meter 2",
+  "Monthly Consumption 2", "Unit Cost 2", "Meter 3", "Monthly Consumption 3",
+  "Unit Cost 3", "Meter 4", "Monthly Consumption 4", "Unit Cost 4",
+  "Daily Retailer Charge", "Daily Levy Retailer Charge", "Kwh Levy Retailer Charge", "Capacity Retailer Charge",
+  "Demand Retailer Charge", "Distance Retailer Charge", "Unmetered Retailer Charge", "Break Fee Retailer Charge",
+  "Contract Length", "Brokerage Fee", "PPD", "Additional PPD",
+  "Inflation", "Annual Rebate", "Incentive Credit",
+];
+const BETTY_STATUSES = ['Current', 'Proposed', 'Archived', 'Auditing'];
+const BETTY_ANALYSIS_TYPES = ['ELECTRICITY', 'GAS'];
+// Seeds for the "Betty Lists" tab (from Betty's template, 13 Nov 2026).
+// The tab is refreshed from every template that is loaded.
+const BETTY_SEED_RETAILERS = [
+  "2DEGREES", "ADONIS ENERGY", "BCPL", "COMMERCIAL UTILITIES", "CONTACT",
+  "ECOTRICITY", "ECOTRICITY (TOU)", "ELECTRIC KIWI", "ELECTRIC KIWI (TOU)", "EMP",
+  "ENERGY ONLINE", "FLICK", "FRANK ENERGY", "GENESIS", "GENESIS (SB)",
+  "GENESIS (TOU)", "INDEPENDENT ENERGY", "INTEGRATED ENERGY", "JUST ENERGY", "KAUMATUA ENERGY",
+  "KING COUNTRY ENERGY", "LODESTONE", "MANAGE MY BILLS", "MANAWA ENERGY", "MARU ENERGY",
+  "MEGATEL", "MERCURY", "MERCURY (TOU)", "MERIDIAN", "NOVA",
+  "OCTOPUS ENERGY", "ON GAS", "ORCON", "PAYLESS ENERGY", "PIONEER ENERGY",
+  "PLAINS POWER", "POWERBROKERS", "POWERSHOP", "PRIME ENERGY", "PULSE ENERGY",
+  "RELIANCE UTILITIES", "ROCKGAS", "SIMPLY ENERGY", "SIMPLY ENERGY (TOU)", "SUPERPOWER",
+  "SWITCH UTILITIES", "TINY MIGHTY POWER", "TOAST ELECTRIC", "TRUSTPOWER",
+];
+const BETTY_SEED_METERS = [
+  "All Inclusive", "All Weekend Off Peak", "Anytime", "Anytime Summer", "Anytime Winter", "Controlled",
+  "Controlled Summer", "Controlled Winter", "Cost", "Day", "Day Summer", "Day Winter",
+  "Gas", "Night", "Night Boost", "Night Summer", "Night Winter", "Off Peak",
+  "Peak", "Peak Summer", "Peak Winter", "Priority Controlled", "Shoulder", "Solar Exported",
+];
+const BETTY_LISTS_TAB = 'Betty Lists';
+const BETTY_DEFAULT_CONTRACT_DAYS = 1095;
+const BETTY_DEFAULT_BROKERAGE = 5.75;
+
+function bettyListsSheet_() {
+  const ss = SpreadsheetApp.openById(getConfig_()._backingId);
+  let sheet = ss.getSheetByName(BETTY_LISTS_TAB);
+  if (!sheet) sheet = ss.insertSheet(BETTY_LISTS_TAB);
+  if (!sheet.getRange(1, 1).getValue()) bettyListsWrite_(sheet, BETTY_SEED_RETAILERS, BETTY_SEED_METERS);
+  return sheet;
+}
+
+function bettyListsWrite_(sheet, retailers, meters) {
+  const n = Math.max(retailers.length, meters.length);
+  const vals = [['retailers', 'meter types']];
+  for (let i = 0; i < n; i++) vals.push([retailers[i] || '', meters[i] || '']);
+  const last = Math.max(sheet.getLastRow(), vals.length);
+  while (vals.length < last) vals.push(['', '']);
+  sheet.getRange(1, 1, vals.length, 2).setValues(vals);
+}
+
+/** { retailers: [], meters: [] } as Betty spells them. */
+function bettyLists_() {
+  const sheet = bettyListsSheet_();
+  const n = sheet.getLastRow() - 1;
+  const out = { retailers: [], meters: [] };
+  if (n < 1) return out;
+  for (const r of sheet.getRange(2, 1, n, 2).getValues()) {
+    const a = String(r[0] || '').trim(), b = String(r[1] || '').trim();
+    if (a) out.retailers.push(a);
+    if (b) out.meters.push(b);
+  }
+  return out;
+}
+
+function bettyDefaults_() {
+  const cfg = getConfig_();
+  const num = (v, d) => { const n = Number(v); return String(v === undefined || v === null ? '' : v).trim() !== '' && isFinite(n) && n >= 0 ? n : d; };
+  return { contractDays: num(cfg.rates_default_contract_days, BETTY_DEFAULT_CONTRACT_DAYS),
+    brokerage: num(cfg.rates_default_brokerage, BETTY_DEFAULT_BROKERAGE) };
+}
+
+/** Client: Betty's lists and the Enter rates defaults. */
+function apiBettyLists() {
+  const l = bettyLists_();
+  return { retailers: l.retailers, meters: l.meters, defaults: bettyDefaults_() };
+}
+
+/**
+ * Read a Bulk Import Template exported from Betty. Returns its
+ * Current rows by ICP ({ analysisId, customerId, registeredName,
+ * retailer, analysisType, comments, meters: [{ name, monthly, unit }],
+ * fields: { daily, ... } }) and refreshes the Betty Lists tab from its
+ * Information sheet. Nothing is written to the uploaded file.
+ */
+function apiBettyLoad(base64Data, uploadName) {
+  const runRef = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyyMMdd-HHmmss');
+  const blob = Utilities.newBlob(Utilities.base64Decode(base64Data),
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', uploadName || 'betty-template.xlsx');
+  const temp = Drive.Files.create({ name: 'Walter Betty load ' + runRef, mimeType: MimeType.GOOGLE_SHEETS }, blob);
+  try {
+    const ss = SpreadsheetApp.openById(temp.id);
+    const bulk = ss.getSheetByName('Bulk Analysis');
+    if (!bulk) throw new Error('This file has no "Bulk Analysis" sheet — it must be the Bulk Import Template from Betty, not an export snapshot.');
+    const lastRow = bulk.getLastRow(), lastCol = bulk.getLastColumn();
+    const headers = bulk.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h || '').trim());
+    const col = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+    const cIcp = col('ICP Identifier'), cStatus = col('Status (Analysis)');
+    if (cIcp < 0 || cStatus < 0) throw new Error('Template columns not recognised (ICP Identifier / Status (Analysis)).');
+    const get = (row, name) => { const c = col(name); return c < 0 ? '' : row[c]; };
+    const numOr = (v) => { const n = Number(v); return String(v === null || v === undefined ? '' : v).trim() !== '' && isFinite(n) ? n : 0; };
+    const out = { rows: {}, dupCurrent: [], otherRows: 0, fileName: String(uploadName || '') };
+    const vals = lastRow > 1 ? bulk.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+    for (const row of vals) {
+      const icp = String(row[cIcp] || '').trim().toUpperCase();
+      if (!icp) continue;
+      if (String(row[cStatus] || '').trim().toLowerCase() !== 'current') { out.otherRows++; continue; }
+      if (out.rows[icp]) { out.dupCurrent.push(icp); continue; }
+      const meters = [];
+      for (let n = 1; n <= 4; n++) {
+        const name = String(get(row, 'Meter ' + n) || '').trim();
+        if (name) meters.push({ name: name, monthly: numOr(get(row, 'Monthly Consumption ' + n)), unit: numOr(get(row, 'Unit Cost ' + n)) });
+      }
+      const fields = {};
+      for (const key in BETTY_RATE_COLUMNS) fields[key] = numOr(get(row, BETTY_RATE_COLUMNS[key]));
+      out.rows[icp] = { analysisId: String(get(row, 'Customer Analysis ID') || '').trim(), customerId: String(get(row, 'Customer ID') || '').trim(),
+        registeredName: String(get(row, 'Registered Name') || '').trim(), retailer: String(get(row, 'Retailer') || '').trim(),
+        analysisType: String(get(row, 'Analysis Type') || '').trim().toUpperCase(), comments: String(get(row, 'Comments') || ''),
+        meters: meters, fields: fields };
+    }
+    // Keep Walter's copy of Betty's lists current.
+    try {
+      const info = ss.getSheetByName('Information');
+      if (info && info.getLastRow() > 1) {
+        const iv = info.getRange(1, 1, info.getLastRow(), info.getLastColumn()).getValues();
+        const pick = (re) => { const c = iv[0].findIndex(h => re.test(String(h || ''))); return c < 0 ? [] : iv.slice(1).map(r => String(r[c] || '').trim()).filter(Boolean); };
+        const rets = pick(/retailer/i), mets = pick(/meter/i);
+        const cur = bettyLists_();
+        if (rets.length && mets.length && (rets.join('|') !== cur.retailers.join('|') || mets.join('|') !== cur.meters.join('|'))) {
+          bettyListsWrite_(bettyListsSheet_(), rets, mets);
+        }
+      }
+    } catch (e) {}
+    const lists = bettyLists_();
+    out.retailers = lists.retailers; out.meters = lists.meters; out.defaults = bettyDefaults_();
+    return out;
+  } finally {
+    try { DriveApp.getFileById(temp.id).setTrashed(true); } catch (e) {}
+  }
+}
+
+/**
+ * Write a NEW Betty import file: one Current row per entry of
+ * payload.rows ({ analysisId, customerId, registeredName, icp,
+ * retailer, analysisType, comments, meters: [{ name, monthly, unit }],
+ * fields: { daily, ... } }). Every cost is already $ excl GST.
+ * Betty rejects a whole file over one bad row, so this function does
+ * too: every row is checked first and nothing is written if any fails.
+ */
+function apiBettyWrite(payload) {
+  const rows = (payload && payload.rows) || [];
+  if (!rows.length) throw new Error('No rows to write.');
+  if (rows.length > 2000) throw new Error('Too many rows for one file (' + rows.length + ').');
+  const lists = bettyLists_();
+  const canon = (list, v) => { const k = bettyKey_(v); for (const x of list) if (bettyKey_(x) === k) return x; return ''; };
+  const errors = [], seen = {}, values = [];
+  let ratesRows = 0, updates = 0, creates = 0;
+  const custIds = {}; let custName = '';
+  const num = (v) => { const n = Number(v); return v === null || v === undefined || String(v).trim() === '' || !isFinite(n) ? 0 : n; };
+  for (const r of rows) {
+    const icp = String(r.icp || '').trim().toUpperCase();
+    const tag = icp || '(row without an ICP)';
+    if (!icp) { errors.push('a row has no ICP'); continue; }
+    if (seen[icp]) { errors.push(tag + ': listed twice (only one Current analysis per ICP)'); continue; }
+    seen[icp] = true;
+    const custId = String(r.customerId || '').trim();
+    if (!custId) errors.push(tag + ': no customer ID');
+    const retailer = canon(lists.retailers, r.retailer);
+    if (!retailer) errors.push(tag + ': retailer "' + String(r.retailer || '') + '" is not in Betty’s list');
+    const aType = String(r.analysisType || '').trim().toUpperCase();
+    if (BETTY_ANALYSIS_TYPES.indexOf(aType) === -1) errors.push(tag + ': analysis type "' + aType + '" is not ELECTRICITY or GAS');
+    const meters = r.meters || [];
+    if (!meters.length) errors.push(tag + ': no meters');
+    if (meters.length > 4) errors.push(tag + ': ' + meters.length + ' meters (Betty has four slots)');
+    const line = [String(r.analysisId || '').trim(), /^\d+$/.test(custId) ? Number(custId) : custId, String(r.registeredName || ''), icp,
+      retailer, 'Current', aType, String(r.comments || '')];
+    let anyRate = false;
+    for (let n = 0; n < 4; n++) {
+      const m = meters[n];
+      if (!m) { line.push('', 0, 0); continue; }
+      const name = canon(lists.meters, m.name);
+      if (!name) errors.push(tag + ': "' + String(m.name || '') + '" is not a Betty meter type');
+      const monthly = Number(m.monthly), unit = num(m.unit);
+      if (!isFinite(monthly) || monthly < 0) errors.push(tag + ': ' + String(m.name || '') + ' has no monthly figure');
+      if (unit < 0) errors.push(tag + ': ' + String(m.name || '') + ' has a negative unit cost');
+      if (unit > 0) anyRate = true;
+      line.push(name, Math.round(monthly), unit);
+    }
+    const fields = r.fields || {};
+    for (let c = 20; c < BETTY_HEADERS.length; c++) {
+      let key = '';
+      for (const k in BETTY_RATE_COLUMNS) if (BETTY_RATE_COLUMNS[k].toLowerCase() === BETTY_HEADERS[c].toLowerCase()) key = k;
+      const v = num(fields[key]);
+      if (v && key !== 'contractDays' && key !== 'brokerage') anyRate = true;
+      line.push(v);
+    }
+    values.push(line);
+    if (anyRate) ratesRows++;
+    if (line[0]) updates++; else creates++;
+    if (custId) { custIds[custId] = true; custName = custName || String(r.registeredName || ''); }
+  }
+  if (errors.length) {
+    throw new Error('Nothing was written — ' + errors.length + ' problem(s): ' + errors.slice(0, 6).join('; ') + (errors.length > 6 ? '; …' : ''));
+  }
+  const idList = Object.keys(custIds);
+  const label = idList.length === 1 ? idList[0] + ' ' + custName : 'several customers';
+  const outName = 'BET - ' + label.replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' +
+    Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HHmm');
+  const tmp = SpreadsheetApp.create('Walter Betty file ' + outName);
+  try {
+    const sheet = tmp.getSheets()[0];
+    sheet.setName('Bulk Analysis');
+    const W = BETTY_HEADERS.length;
+    if (sheet.getMaxColumns() < W) sheet.insertColumnsAfter(sheet.getMaxColumns(), W - sheet.getMaxColumns());
+    sheet.getRange(1, 1, values.length + 1, W).setValues([BETTY_HEADERS].concat(values));
+    sheet.getRange(2, 4, values.length, 1).setNumberFormat('@'); // ICPs stay text
+    if (sheet.getMaxRows() > values.length + 1) sheet.deleteRows(values.length + 2, sheet.getMaxRows() - values.length - 1);
+    const info = tmp.insertSheet('Information');
+    const iv = [['Retailers', '', 'Status (Analysis)', '', 'Analysis Type', '', 'Meter Types']];
+    const n = Math.max(lists.retailers.length, lists.meters.length, BETTY_STATUSES.length);
+    for (let i = 0; i < n; i++) iv.push([lists.retailers[i] || '', '', BETTY_STATUSES[i] || '', '', BETTY_ANALYSIS_TYPES[i] || '', '', lists.meters[i] || '']);
+    info.getRange(1, 1, iv.length, 7).setValues(iv);
+    SpreadsheetApp.flush();
+    const outFile = bettyFolder_().createFile(exportXlsx_(tmp.getId()).setName(outName + '.xlsx'));
+    const share = bettyShare_(outFile);
+    let indexError = '';
+    try {
+      betIndexAdd_({ customerId: idList.join(', '), customer: idList.length === 1 ? custName : '',
+        icps: values.map(v => v[3]), hasRates: ratesRows > 0, file: outFile });
+    } catch (e) { indexError = String(e.message || e); }
+    return { ok: true, outputUrl: outFile.getUrl(), outputName: outFile.getName(), fileId: outFile.getId(),
+      rowsWritten: values.length, updates: updates, creates: creates, ratesRows: ratesRows,
+      sharedWith: share.sharedWith, shareError: share.shareError, indexError: indexError };
+  } finally {
+    try { DriveApp.getFileById(tmp.getId()).setTrashed(true); } catch (e) {}
+  }
+}
+
+// =====================================================
 // Betty files: own folder, own sharing, own index (v2.17)
 // -----------------------------------------------------
 // A filled Betty template can hold a customer's current
