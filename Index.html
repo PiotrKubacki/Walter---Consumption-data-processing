@@ -40,8 +40,8 @@
       font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 600;
       padding: 12px 0; cursor: pointer; list-style: none;
     }
-    .card > details > summary::before { content: '▸ '; color: var(--tuc-accent); }
-    .card > details[open] > summary::before { content: '▾ '; }
+    .card > details > summary::before { content: '▶ '; color: var(--tuc-ink); font-size: 12px; }
+    .card > details[open] > summary::before { content: '▼ '; }
     h2 { font-family: 'Poppins', sans-serif; font-size: 16px; margin: 0 0 12px; }
     .tblwrap { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -78,12 +78,27 @@
     .mono  { font-family: monospace; font-size: 12px; }
     #status, #runStatus { margin: 10px 0; font-size: 13px; }
     progress { width: 240px; vertical-align: middle; }
-    nav.tabs { display: flex; gap: 4px; background: var(--tuc-accent); padding: 0 18px; }
-    nav.tabs button {
-      min-width: 150px; height: 36px; border-radius: 8px 8px 0 0;
+    nav.tabs { display: flex; gap: 4px; background: var(--tuc-accent); padding: 0 18px; align-items: flex-end; flex-wrap: wrap; }
+    nav.tabs > button {
+      min-width: 120px; height: 52px; border-radius: 8px 8px 0 0;
       background: rgba(255,255,255,.14); color: #fff; opacity: .85;
     }
-    nav.tabs button.active { background: var(--tuc-warm-bg); color: var(--tuc-ink); opacity: 1; }
+    nav.tabs > button.active { background: var(--tuc-warm-bg); color: var(--tuc-ink); opacity: 1; }
+    /* v2.21: the current customer and its buttons sit on the tab row (design option C). */
+    #wbSessionCard {
+      flex: 1 1 430px; min-width: 0; height: 52px; box-sizing: border-box; margin-left: 14px;
+      background: rgba(0,0,0,.22); border-radius: 8px 8px 0 0; padding: 0 8px 0 14px;
+      display: flex; align-items: center; gap: 10px; color: #fff;
+    }
+    nav.tabs.offwb #wbSessionCard { display: none !important; }
+    #wbSessionCard .sessid { flex: 1; min-width: 0; }
+    #wbSessName { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #wbSessionCard .sessline { font-size: 11px; color: #D6E6E8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #wbMergeState:not(:empty)::before { content: ' · '; }
+    #wbSessionCard button { min-width: 0; height: 38px; padding: 0 14px; font-size: 13px; flex-shrink: 0; }
+    #wbAnalyseBtn { background: #fff; color: var(--tuc-accent-dark); }
+    #wbSessionCard a.ghostbtn { background: transparent; color: #fff; border-color: rgba(255,255,255,.6); flex-shrink: 0; }
+    #wbSessionCard a.ghostbtn:hover { background: rgba(255,255,255,.12); color: #fff; }
     .wb-grid { display: grid; grid-template-columns: 44% 1fr; gap: 18px; align-items: start; }
     .dropzone {
       border: 2px dashed var(--tuc-accent); border-radius: 10px; padding: 18px;
@@ -112,9 +127,13 @@
     .card2 { background: #fff; border: 1px solid var(--tuc-line); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; }
     .cardhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
     /* v2.18: every Workbench section collapses (arrow in its heading). */
-    .colbtn { border: 0; background: none; cursor: pointer; font-size: 13px; color: var(--tuc-accent-dark); padding: 0 2px; min-width: 0; height: auto; line-height: 1; }
+    .colbtn { border: 0; background: none; cursor: pointer; font-size: 12px; color: var(--tuc-ink); padding: 0 2px; min-width: 0; height: auto; line-height: 1; }
     .card2.collapsed > :not(.cardhead) { display: none !important; }
     .card2.collapsed > .cardhead { margin-bottom: 0; }
+    button.cpy { background: none; border: 0; color: var(--tuc-accent); cursor: pointer; min-width: 0; height: auto; padding: 0 0 0 4px; font-size: 11px; }
+    table.mtbl th, table.mtbl td { padding: 6px 5px; }
+    table.mtbl th { white-space: normal; line-height: 1.2; font-size: 12px; }
+    .mtin { width: 62px; border: 1px solid var(--tuc-line); border-radius: 6px; padding: 4px 6px; font-size: 13px; text-align: right; }
     details.icpblk { border-top: 1px solid var(--tuc-line); padding: 8px 0; }
     details.icpblk > summary { cursor: pointer; font-size: 14px; padding: 2px 0; }
     details.subblk { margin: 6px 0 2px 14px; border-left: 3px solid var(--tuc-line); padding-left: 10px; }
@@ -147,30 +166,26 @@
     <h1><img src="data:image/png;base64,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" alt="Walter" style="height:26px;border-radius:5px"> <span>I'm Walter · I know what you <s style="opacity:.6">did</s> consumed last summer</span></h1>
     <span style="margin-left:auto;font-size:12px;opacity:.75;text-align:right;line-height:1.35">build <?= (typeof build === 'undefined' ? '?' : build) ?><br><span id="hdrCdfTotals" style="font-size:11px" title="Total storage used by CDF (consumption data) files in the output folder"></span></span>
   </header>
-  <nav class="tabs">
+  <nav class="tabs" id="mainTabs">
     <button id="tabBtnWb" class="active" onclick="showTab('wb')">🛠 Workbench</button>
     <button id="tabBtnBq" onclick="showTab('bq')">💰 RFP</button>
     <button id="tabBtnArc" onclick="showTab('arc')">🗄 Archive</button>
     <button id="tabBtnReg" onclick="showTab('reg')">📒 Register</button>
-    <button id="tabBtnBatch" onclick="showTab('batch')" style="margin-left:auto">⚡ Batch</button>
+    <button id="tabBtnBatch" onclick="showTab('batch')">⚡ Batch</button>
+    <div id="wbSessionCard" style="display:none">
+      <div class="sessid">
+        <div id="wbSessName">New session</div>
+        <div class="sessline"><span id="wbSessStatus"></span><span id="wbMergeState"></span></div>
+      </div>
+      <a id="wbBettyLink" class="ghostbtn" href="#" target="_blank" title="Open this customer in Betty">🔗 Betty</a>
+      <button id="wbAnalyseBtn" onclick="wbAnalyse(this)">⚡ Analyse session</button>
+      <button id="wbFinishBtn" onclick="wbFinish(this)" style="background:var(--good)">✅ <span>Finish customer</span></button>
+    </div>
   </nav>
   <main>
   <div id="tab-workbench">
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
       <div style="flex:1 1 420px;min-width:0">
-
-        <div class="card2" id="wbSessionCard" style="display:none">
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <div style="flex:1;min-width:160px">
-              <div id="wbSessName" style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px">New session</div>
-              <div id="wbSessStatus" class="muted" style="font-size:12px"></div>
-            </div>
-            <a id="wbBettyLink" class="ghostbtn" href="#" target="_blank" title="Open this customer in Betty">🔗 Betty</a>
-            <button id="wbAnalyseBtn" onclick="wbAnalyse(this)" style="min-width:0;padding:0 16px">⚡ Analyse session</button>
-            <button id="wbFinishBtn" onclick="wbFinish(this)" style="min-width:0;padding:0 16px;background:var(--good)">✅ <span>Finish customer</span></button>
-          </div>
-          <div style="margin-top:4px"><span id="wbMergeState" class="muted" style="font-size:12px"></span></div>
-        </div>
 
         <div class="card2" id="wbCurCard">
           <div class="cardhead"><h2>📂 Current customer</h2></div>
@@ -311,8 +326,8 @@
             <textarea id="wbNotesOutHEADER" readonly style="display:none;width:100%;height:220px;font-family:monospace;font-size:12px;white-space:pre"></textarea>
           </div>
         </div>
-        <details id="wbBettySec" class="card2" style="display:none"><summary style="font-weight:600;cursor:pointer">🔌 Betty bulk update</summary>
-          <p style="margin-top:8px"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
+        <div id="wbBettySec" class="card2" style="display:none"><div class="cardhead"><h2>🔌 Betty bulk update</h2></div>
+          <p style="margin-top:0"><button onclick="wbBettyIds(this)" style="min-width:0;padding:0 16px">📋 Show Customer ID list</button></p>
           <div id="wbBettyIdsArea"></div>
           <p class="muted" style="font-size:12px;margin:8px 0 0">Walter writes a <b>new</b> Betty import file with one <b>Current</b> row per ICP, built from the 🧾 ICP meters above and the rates entered here.
             It never amends a file exported from Betty; nothing else in Betty is touched. The file is kept in the <b>Betty files</b> folder (🗄 Archive tab), apart from the consumption files.</p>
@@ -330,7 +345,7 @@
             <button id="wbBettyWriteBtn" onclick="wbBettyWrite(this)" style="min-width:0;padding:0 16px">📤 Create Betty file</button>
             <span class="muted" style="font-size:12px">then import it into Betty</span></p>
           <div id="wbBettyFillArea"></div>
-        </details>
+        </div>
       </div>
     </div>
   </div>
@@ -1040,6 +1055,8 @@
     var rfpLoaded = false;
     function showTab(which) {
       document.getElementById('tab-workbench').style.display = which === 'wb' ? '' : 'none';
+      var nav = document.getElementById('mainTabs');
+      if (nav) nav.className = 'tabs' + (which === 'wb' ? '' : ' offwb'); // the customer block belongs to the Workbench
       document.getElementById('tab-batch').style.display = which === 'batch' ? '' : 'none';
       document.getElementById('tab-bulkquote').style.display = which === 'bq' ? '' : 'none';
       document.getElementById('tab-archive').style.display = which === 'arc' ? '' : 'none';
@@ -1295,22 +1312,55 @@
       fr.style.display = '';
     }
 
+    function wbElapsed(t0) {
+      var sec = Math.floor((Date.now() - t0) / 1000);
+      return Math.floor(sec / 60) + ':' + (sec % 60 < 10 ? '0' : '') + (sec % 60);
+    }
+    /**
+     * v2.21: files are read one at a time so the operator can see
+     * progress ("Reading 12/60", the file in hand, the clock); the
+     * analysis itself then runs from the prepared files in one call.
+     */
     function wbAnalyse(btn) {
-      btn.disabled = true; btn.textContent = 'Analysing…';
-      document.getElementById('wbWarn').innerHTML = '';
+      btn.disabled = true;
+      var warnEl = document.getElementById('wbWarn');
+      warnEl.innerHTML = '';
       var ids = wbSession.map(function (f) { return f.id; });
-      google.script.run
-        .withSuccessHandler(function (res) {
-          btn.disabled = false; btn.textContent = '⚡ Analyse session';
-          wbAnalysedIds = ids;
-          wbRenderCalcs(res);
-          wbStartBgMerge();
-        })
-        .withFailureHandler(function (e) {
-          btn.disabled = false; btn.textContent = '⚡ Analyse session';
-          wbError(e.message || e);
-        })
-        .apiWbAnalyse(ids);
+      var names = {};
+      for (var n = 0; n < wbSession.length; n++) names[wbSession[n].id] = wbSession[n].name;
+      var t0 = Date.now(), stepT0 = t0, k = 0, label = '', detail = '', over = false;
+      var paint = function () {
+        if (over) return;
+        btn.textContent = label + ' · ' + wbElapsed(t0);
+        warnEl.innerHTML = '<p class="muted">⏳ ' + esc(detail) + ' · ' + wbElapsed(t0) + ' so far' +
+          (Date.now() - stepT0 > 90000 ? ' — still working; a large file can take a few minutes' : '') + '</p>';
+      };
+      var tick = setInterval(paint, 1000);
+      var stop = function () { over = true; clearInterval(tick); btn.disabled = false; btn.textContent = '⚡ Analyse session'; };
+      var finish = function () {
+        label = 'Analysing'; detail = 'Analysing ' + ids.length + ' file(s)'; stepT0 = Date.now(); paint();
+        google.script.run
+          .withSuccessHandler(function (res) {
+            stop();
+            wbAnalysedIds = ids;
+            wbRenderCalcs(res);
+            wbStartBgMerge();
+          })
+          .withFailureHandler(function (e) {
+            stop();
+            wbError(e.message || e);
+          })
+          .apiWbAnalyse(ids);
+      };
+      var step = function () {
+        if (k >= ids.length) { finish(); return; }
+        label = 'Reading ' + (k + 1) + '/' + ids.length;
+        detail = 'Reading file ' + (k + 1) + ' of ' + ids.length + ': ' + (names[ids[k]] || '');
+        stepT0 = Date.now(); paint();
+        var next = function () { k++; step(); }; // a file that cannot be read is reported by the analysis itself
+        google.script.run.withSuccessHandler(next).withFailureHandler(next).apiPrepareFile(ids[k]);
+      };
+      if (ids.length > 1) step(); else finish();
     }
 
     var wbLastRows = null;
@@ -1324,6 +1374,8 @@
       if (!res.rows.length) {
         area.innerHTML = '<p class="error">No records found' +
           (res.skipped.length ? ' — skipped: ' + res.skipped.map(function (s) { return esc(s.name) + ' (' + esc(s.reason) + ')'; }).join('; ') : '') + '</p>';
+        document.getElementById('wbCalcCard').style.display = '';
+        wbCardCollapse(document.getElementById('wbCalcCard'), false);
         return;
       }
       // Customer resolution + multi-customer warning
@@ -1365,6 +1417,7 @@
       // (ICP meters card); this card only carries file notices now.
       area.innerHTML = h;
       document.getElementById('wbCalcCard').style.display = h ? '' : 'none';
+      if (h.indexOf('class="error"') !== -1) wbCardCollapse(document.getElementById('wbCalcCard'), false); // row errors must not hide in a closed section
 
       // Notes form: show + auto-fill (never overwrite operator-entered values)
       document.getElementById('wbNotes').style.display = '';
@@ -2281,7 +2334,8 @@
     var ICONS = {
       open: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M8 4h12v12"/><path d="M10 14 20 4"/><path d="M16 11v9H4V8h9"/></svg>',
       download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>',
-      trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+      trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+      copy: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>'
     };
 
     /** Queueing result: duplicate/re-queue notices with full detail (9 Nov). */
@@ -3776,8 +3830,37 @@
     var wbMeters = {}; // icp -> { ov: { rowKey: { type, monthly, removed } }, extra: [{ id, type, monthly }], open, seq }
 
     function wbMeterState(icp) {
-      return wbMeters[icp] || (wbMeters[icp] = { ov: {}, extra: [], open: null, seq: 0 });
+      var st = wbMeters[icp] || (wbMeters[icp] = { ov: {}, extra: [], open: null, seq: 0 });
+      if (!st.split) st.split = {};   // v2.21: rowKey -> [{ type, kwh }] typed off a bill
+      return st;
     }
+
+    // ---- seasons per meter row (v2.21) ----
+    function bandWinterCount(W) { var n = 0; for (var m = 0; m < 12; m++) if (W[m]) n++; return n; }
+    /** Winter / summer kWh of a whole register, straight from its slot matrix. */
+    function bandSeasonTotals(sm, W) {
+      var w = 0, su = 0;
+      for (var dt = 0; dt < 2; dt++) for (var m = 0; m < 12; m++) for (var sl = 0; sl < 48; sl++) {
+        var v = sm.m[dt * 576 + m * 48 + sl];
+        if (!v) continue;
+        if (W[m]) w += v; else su += v;
+      }
+      return { winter: w, summer: su, total: w + su };
+    }
+    /** Whole numbers that share "total" in the given proportions and add up to it exactly. */
+    function wbShare(total, weights) {
+      var sum = 0, i;
+      for (i = 0; i < weights.length; i++) sum += weights[i];
+      var out = [], fr = [], used = 0;
+      for (i = 0; i < weights.length; i++) {
+        var exact = sum > 0 ? total * weights[i] / sum : 0;
+        out.push(Math.floor(exact)); fr.push({ i: i, f: exact - Math.floor(exact) }); used += Math.floor(exact);
+      }
+      fr.sort(function (a, b) { return b.f - a.f || a.i - b.i; });
+      for (i = 0; i < fr.length && used < total; i++) { out[fr[i].i]++; used++; }
+      return out;
+    }
+    function wbNz(v) { return v !== null && v !== undefined; }
 
     /**
      * [{ icp, custId, info, rows, meters, notes, bands: [x], others: [x] }]
@@ -3806,38 +3889,87 @@
           for (var s = 0; s < c.sl.slots.length; s++) {
             var so = c.sl.slots[s];
             var mon = bandMonthly(so.total, c.split.days);
+            var nWb = bandWinterCount(c.split.winter);
+            var seasonal = nWb > 0 && nWb < 12 && c.split.days > 0;
+            var annB = bandAnnual(so.total, c.split.days);
             e.rows.push({ key: r.register + '/' + so.name, src: r.register + ' · ' + so.name, calcType: bettyMeterName(so.name),
-              calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, grade: grade });
+              calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, grade: grade, nW: nWb,
+              calcWinter: seasonal ? Math.round(bandAnnual(so.winter, c.split.days) / nWb) : null,
+              calcSummer: seasonal ? Math.round(bandAnnual(so.summer, c.split.days) / (12 - nWb)) : null,
+              calcAnnual: annB === null ? null : Math.round(annB) });
           }
         } else {
           if (x && !res.controlled) e.others.push(x);
           var avm = r.analysis.avm;
-          e.rows.push({ key: r.register, src: r.register, calcType: r.bettyType || '',
-            calcMonthly: avm === null || avm === undefined ? null : avm, rate: null, grade: grade });
+          var whole = { key: r.register, src: r.register, calcType: r.bettyType || '', whole: true,
+            calcMonthly: avm === null || avm === undefined ? null : avm, rate: null, grade: grade,
+            nW: 0, calcWinter: null, calcSummer: null,
+            calcAnnual: wbNz(r.analysis.annualKwh) ? r.analysis.annualKwh : (wbNz(avm) ? Math.round(avm * 12) : null) };
+          if (x && wbNz(whole.calcAnnual)) {
+            // seasons of a register that is sent whole: its own half-hourly data, scaled to its annual figure
+            var Ww = bandWinterFor(res.retailer), nWw = bandWinterCount(Ww), tot = bandSeasonTotals(x.sm, Ww);
+            if (nWw > 0 && nWw < 12) {
+              var wShare = tot.total > 0 ? tot.winter / tot.total : 0;
+              whole.nW = nWw;
+              whole.calcWinter = Math.round(whole.calcAnnual * wShare / nWw);
+              whole.calcSummer = Math.round(whole.calcAnnual * (1 - wShare) / (12 - nWw));
+            }
+          }
+          e.rows.push(whole);
         }
       }
       for (var q = 0; q < out.length; q++) {
         var en = out[q], st = wbMeterState(en.icp), k;
+        var nWd = bandWinterCount(bandWinterFor(en.info.matched || bandRetailers()[0] || ''));
+        // v2.21: a register split from a bill is replaced by one row per tariff on the bill
+        var expanded = [];
+        for (k = 0; k < en.rows.length; k++) {
+          var pr = en.rows[k], lines = pr.whole ? st.split[pr.key] : null;
+          var pov = st.ov[pr.key] || {};
+          var base = pov.monthly !== undefined ? pov.monthly : pr.calcMonthly;
+          if (!lines || !lines.length || !wbNz(base)) { expanded.push(pr); continue; }
+          var wts = [], li;
+          for (li = 0; li < lines.length; li++) wts.push(lines[li].kwh);
+          var pAnn = pov.annual !== undefined ? pov.annual : (pov.monthly !== undefined ? Math.round(base * 12) : (wbNz(pr.calcAnnual) ? pr.calcAnnual : Math.round(base * 12)));
+          var mo = wbShare(Math.round(base), wts), an = wbShare(Math.round(pAnn), wts);
+          var wi = wbNz(pr.calcWinter) ? wbShare(pr.calcWinter, wts) : null, su = wbNz(pr.calcSummer) ? wbShare(pr.calcSummer, wts) : null;
+          for (li = 0; li < lines.length; li++) {
+            expanded.push({ key: pr.key + '/~' + li, src: pr.src + ' · estimated from bill', calcType: lines[li].type, calcMonthly: mo[li],
+              calcWinter: wi ? wi[li] : null, calcSummer: su ? su[li] : null, calcAnnual: an[li], nW: pr.nW, rate: null,
+              grade: 'estimated from bill', est: true, splitOf: pr.key, splitFirst: li === 0 });
+          }
+        }
+        en.rows = expanded;
         for (k = 0; k < st.extra.length; k++) {
-          en.rows.push({ key: 'x' + st.extra[k].id, src: 'added by hand', calcType: '', calcMonthly: null, rate: null, grade: 'manual', extra: true });
+          en.rows.push({ key: 'x' + st.extra[k].id, src: 'added by hand', calcType: '', calcMonthly: null, rate: null, grade: 'manual', extra: true,
+            nW: 0, calcWinter: null, calcSummer: null, calcAnnual: null });
         }
         for (k = 0; k < en.rows.length; k++) {
           var row = en.rows[k], ov = st.ov[row.key] || {};
           row.type = ov.type !== undefined ? ov.type : row.calcType;
           row.monthly = ov.monthly !== undefined ? ov.monthly : row.calcMonthly;
+          row.winter = ov.winter !== undefined ? ov.winter : row.calcWinter;
+          row.summer = ov.summer !== undefined ? ov.summer : row.calcSummer;
+          row.annual = ov.annual !== undefined ? ov.annual : (ov.monthly !== undefined ? Math.round(ov.monthly * 12)
+            : (wbNz(row.calcAnnual) ? row.calcAnnual : (wbNz(row.calcMonthly) ? Math.round(row.calcMonthly * 12) : null)));
+          row.manualSeason = ov.winter !== undefined || ov.summer !== undefined;
+          if (!(row.nW > 0 && row.nW < 12)) row.nW = nWd; // hand-typed seasons use the ICP's season months
+          row.warn = wbMeterWarn(row);
           row.manualType = ov.type !== undefined && ov.type !== row.calcType;
           row.manualMonthly = ov.monthly !== undefined && ov.monthly !== row.calcMonthly;
           row.removed = !!ov.removed;
           if (row.removed) continue;
+          if (row.warn) en.notes.push(row.src + ': ' + row.warn);
           if (!row.type) { en.notes.push(row.src + ': no Betty meter type picked — it will not be sent to Betty'); continue; }
           if (row.monthly === null || row.monthly === undefined) { en.notes.push(row.src + ': no monthly figure'); continue; }
           var hit = null;
           for (var m = 0; m < en.meters.length; m++) if (en.meters[m].name === row.type) hit = en.meters[m];
           if (hit) {
             hit.monthly += row.monthly; hit.src += ' + ' + row.src; hit.manual = hit.manual || row.manualMonthly || row.manualType;
+            hit.est = hit.est || !!row.est;
             if (hit.rate === null) hit.rate = row.rate;
           } else {
-            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade });
+            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade, est: !!row.est });
           }
         }
         if (en.meters.length > 4) en.notes.push('More than four meters — Betty has four slots; the extra ones will not be written');
@@ -3980,43 +4112,161 @@
       return ex === null ? '' : ex.toFixed(5);
     }
 
+    /** '' when the row adds up, else what is out (winter and summer months against the annual total). */
+    function wbMeterWarn(row) {
+      if (!wbNz(row.winter) || !wbNz(row.summer) || !wbNz(row.annual) || !(row.nW > 0 && row.nW < 12)) return '';
+      var sum = row.winter * row.nW + row.summer * (12 - row.nW);
+      var d = Math.round(sum - row.annual);
+      if (Math.abs(d) <= 12) return '';
+      return 'winter × ' + row.nW + ' + summer × ' + (12 - row.nW) + ' = ' + fmtNum(Math.round(sum)) + ', but Total Annual is ' +
+        fmtNum(Math.round(row.annual)) + ' (out by ' + fmtNum(Math.abs(d)) + ')';
+    }
+    /** The short marker under Total Annual; the full sentence is its tooltip and a line under the table. */
+    function wbMeterWarnShort(row) {
+      if (!row.warn) return '';
+      var d = Math.round(row.winter * row.nW + row.summer * (12 - row.nW) - row.annual);
+      return '❗ out by ' + fmtNum(Math.abs(d));
+    }
+    function wbMeterManTxt(row) {
+      if (row.manualMonthly) return 'manual' + (wbNz(row.calcMonthly) ? ' · calc ' + fmtNum(row.calcMonthly) : '');
+      return row.manualSeason ? 'manual' : '';
+    }
+    function wbMeterVal(v) { return wbNz(v) ? v : ''; }
+
     function wbMeterTableHtml(e, bi) {
-      var inp = 'width:90px;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px;font-size:13px;text-align:right';
       var st = wbMeterState(e.icp);
-      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">Meter type (Betty)</th><th class="tL">From</th>' +
-        '<th class="tR">Monthly kWh</th><th class="tR">Annual kWh</th><th class="tR" title="$ per kWh excl GST, from Enter rates">Unit cost $</th><th></th></tr></thead><tbody>';
+      var W = bandWinterFor(e.info.matched || bandRetailers()[0] || '');
+      var h = '<div class="tblwrap"><table class="mtbl"><thead><tr><th class="tL">Meter type (Betty)</th>' +
+        '<th class="tR" title="Average month, all year — this is the figure sent to Betty">Monthly<br>kWh</th>' +
+        '<th class="tR" title="Average month in ' + esc(bandMonthsText(W, true)) + '">Monthly<br>Winter</th>' +
+        '<th class="tR" title="Average month in ' + esc(bandMonthsText(W, false)) + '">Monthly<br>Summer</th>' +
+        '<th class="tR">Total<br>Annual</th><th class="tR" title="$ per kWh excl GST, from Enter rates">Unit<br>cost $</th><th></th></tr></thead><tbody>';
       var edited = st.extra.length > 0;
+      for (var sk in st.split) if (Object.prototype.hasOwnProperty.call(st.split, sk)) edited = true;
       for (var ri = 0; ri < e.rows.length; ri++) {
         var row = e.rows[ri];
         if (st.ov[row.key]) edited = true;
         if (row.removed) {
-          h += '<tr class="muted"><td class="tL" style="text-decoration:line-through">' + esc(row.type || row.src) + '</td><td class="tL">' + esc(row.src) +
-            '</td><td colspan="3" class="tL">removed — not sent to Betty</td><td><button class="linkbtn" onclick="wbMeterRemove(' + bi + ', ' + ri + ', false)">put back</button></td></tr>';
+          h += '<tr class="muted"><td class="tL"><span style="text-decoration:line-through">' + esc(row.type || row.src) + '</span><div style="font-size:11px">' + esc(row.src) +
+            '</div></td><td colspan="5" class="tL">removed — not sent to Betty</td><td><button class="linkbtn" onclick="wbMeterRemove(' + bi + ', ' + ri + ', false)">put back</button></td></tr>';
           continue;
         }
         var opts = '<option value="">— not sent to Betty —</option>';
         for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === row.type ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
         var rt = row.type ? wbMeterRateTxt(e.icp, row.type) : '';
-        h += '<tr><td class="tL"><select onchange="wbMeterType(' + bi + ', ' + ri + ', this.value)" style="height:30px;border:1px solid ' +
-          (row.type ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:13px;font-weight:600;max-width:210px">' + opts + '</select></td>' +
-          '<td class="tL muted" style="font-size:12px">' + esc(row.src) + '</td>' +
-          '<td class="tR"><input type="text" inputmode="decimal" value="' + (row.monthly === null || row.monthly === undefined ? '' : row.monthly) + '"' +
-          ' onchange="wbMeterMonthly(' + bi + ', ' + ri + ', this.value)" style="' + inp + '">' +
-          '<div id="wbMtMan_' + bi + '_' + ri + '" class="flag" style="font-size:11px">' +
-          (row.manualMonthly ? 'manual' + (row.calcMonthly !== null && row.calcMonthly !== undefined ? ' · calculated ' + fmtNum(row.calcMonthly) : '') : '') + '</div></td>' +
-          '<td class="tR muted" id="wbMtAnn_' + bi + '_' + ri + '">' + (row.monthly === null || row.monthly === undefined ? '—' : fmtNum(Math.round(row.monthly * 12))) + '</td>' +
+        var id = bi + '_' + ri, args = bi + ', ' + ri;
+        var cell = function (pre, val, fn, copy) {
+          return '<td class="tR" style="white-space:nowrap"><input type="text" inputmode="decimal" class="mtin" id="' + pre + id + '" value="' + wbMeterVal(val) + '"' +
+            ' onchange="' + fn + '" autocomplete="off">' +
+            (copy ? '<button class="cpy" title="Copy this figure" onclick="wbMeterCopy(\'' + pre + id + '\', this)">' + ICONS.copy + '</button>' : '');
+        };
+        h += '<tr><td class="tL"><select onchange="wbMeterType(' + args + ', this.value)" style="height:30px;border:1px solid ' +
+          (row.type ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:13px;font-weight:600;max-width:170px">' + opts + '</select>' +
+          '<div class="muted" style="font-size:11px;margin-top:2px">from ' + esc(row.src) + '</div></td>' +
+          cell('wbMtMo_', row.monthly, 'wbMeterMonthly(' + args + ', this.value)', true) +
+          '<div id="wbMtMan_' + id + '" class="flag" style="font-size:11px;white-space:normal">' + esc(wbMeterManTxt(row)) + '</div></td>' +
+          cell('wbMtWi_', row.winter, 'wbMeterSeason(' + args + ', \'winter\', this.value)', false) + '</td>' +
+          cell('wbMtSu_', row.summer, 'wbMeterSeason(' + args + ', \'summer\', this.value)', false) + '</td>' +
+          cell('wbMtAn_', row.annual, 'wbMeterAnnual(' + args + ', this.value)', true) +
+          '<div id="wbMtWarn_' + id + '" class="error" style="font-size:11px" title="' + esc(row.warn || '') + '">' + esc(wbMeterWarnShort(row)) + '</div></td>' +
           '<td class="tR mono" style="font-size:12px">' + (rt || (row.rate !== null && row.rate !== undefined
             ? '<span class="muted" title="Weighted average from the rate card typed in the time-band detail — not saved in Enter rates yet">' + bandRateTxt(row.rate) + '</span>'
             : '<span class="muted">—</span>')) + '</td>' +
-          '<td style="white-space:nowrap"><button class="linkbtn" title="Do not send this row to Betty" onclick="wbMeterRemove(' + bi + ', ' + ri + ', true)">remove</button></td></tr>';
+          '<td style="white-space:nowrap;font-size:12px"><button class="linkbtn" title="Do not send this row to Betty" onclick="wbMeterRemove(' + args + ', true)">remove</button>' +
+          (row.whole && !row.extra ? '<br><button class="linkbtn" title="No half-hourly split? Share this register across the tariffs on a bill, pro rata" onclick="wbSplitOpen(' + args + ')">split from a bill</button>' : '') +
+          (row.splitFirst ? '<br><button class="linkbtn" onclick="wbSplitUndo(' + args + ')">undo bill split</button>' : '') + '</td></tr>';
       }
       h += '</tbody></table></div>';
+      if (st.splitEdit) h += wbSplitBoxHtml(e, bi, st);
       for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
       h += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0 4px">' +
         '<button class="linkbtn" onclick="wbMeterAdd(' + bi + ')">+ add a meter</button>' +
         (edited ? '<button class="linkbtn" onclick="wbMeterReset(' + bi + ')">back to what Walter calculated</button>' : '') +
         (e.custId && !wbProspect ? '<button class="linkbtn" onclick="wbRatesOpenFor(\'' + esc(e.icp) + '\')">✏️ rates for this ICP</button>' : '') + '</div>';
       return h;
+    }
+
+    // ---- split a register from a bill (v2.21) ----
+    // No half-hourly data but the bill has several tariffs: the operator
+    // types the kWh the bill shows per tariff and the register's figures
+    // are shared pro rata. The rows are labelled "estimated from bill".
+    function wbSplitBoxHtml(e, bi, st) {
+      var ed = st.splitEdit, reg = ed.key, base = null;
+      for (var r = 0; r < e.rows.length; r++) if (e.rows[r].key === reg || e.rows[r].splitOf === reg) base = (base || 0) + (e.rows[r].monthly || 0);
+      var h = '<div style="border:1px solid var(--tuc-line);border-radius:8px;padding:10px 12px;margin:6px 0;background:var(--tuc-warm-bg)">' +
+        '<div style="font-size:13px"><b>Split ' + esc(reg) + ' from a bill</b> <span class="muted" style="font-size:12px">— type the kWh the bill shows for each tariff. ' +
+        'Walter shares this register’s ' + (base === null ? '' : fmtNum(Math.round(base)) + ' kWh/month ') + 'in the same proportions. Several bills: add their kWh together per tariff.</span></div>';
+      for (var li = 0; li < ed.lines.length; li++) {
+        var opts = '<option value="">— tariff (Betty meter type) —</option>';
+        for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === ed.lines[li].type ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
+        h += '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><select onchange="wbSplitSet(' + bi + ', ' + li + ', \'type\', this.value)" ' +
+          'style="height:30px;border:1px solid var(--tuc-line);border-radius:6px;font-size:13px">' + opts + '</select>' +
+          '<input type="text" inputmode="decimal" class="mtin" style="width:100px" placeholder="kWh on bill" value="' + esc(ed.lines[li].kwh) + '" onchange="wbSplitSet(' + bi + ', ' + li + ', \'kwh\', this.value)">' +
+          (ed.lines.length > 2 ? '<button class="linkbtn" onclick="wbSplitDel(' + bi + ', ' + li + ')">remove</button>' : '') + '</div>';
+      }
+      return h + '<div style="display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px">' +
+        '<button class="linkbtn" onclick="wbSplitAddLine(' + bi + ')">+ add a tariff</button>' +
+        '<button class="btn-sm" onclick="wbSplitApply(' + bi + ')">Apply split</button>' +
+        '<button class="linkbtn" onclick="wbSplitCancel(' + bi + ')">cancel</button>' +
+        '<span class="error">' + esc(ed.msg || '') + '</span></div></div>';
+    }
+    function wbSplitSt(bi) { var e = wbIcpModel()[bi]; return e ? wbMeterState(e.icp) : null; }
+    function wbSplitOpen(bi, ri) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      h.st.splitEdit = { key: h.row.key, lines: [{ type: '', kwh: '' }, { type: '', kwh: '' }], msg: '' };
+      wbBandsRender(true);
+    }
+    function wbSplitSet(bi, li, field, val) {
+      var st = wbSplitSt(bi); if (!st || !st.splitEdit || !st.splitEdit.lines[li]) return;
+      st.splitEdit.lines[li][field] = val;
+    }
+    function wbSplitAddLine(bi) {
+      var st = wbSplitSt(bi); if (!st || !st.splitEdit) return;
+      st.splitEdit.lines.push({ type: '', kwh: '' });
+      wbBandsRender(true);
+    }
+    function wbSplitDel(bi, li) {
+      var st = wbSplitSt(bi); if (!st || !st.splitEdit) return;
+      st.splitEdit.lines.splice(li, 1);
+      wbBandsRender(true);
+    }
+    function wbSplitCancel(bi) {
+      var st = wbSplitSt(bi); if (!st) return;
+      st.splitEdit = null;
+      wbBandsRender(true);
+    }
+    function wbSplitClear(st, key) {
+      delete st.split[key];
+      for (var k in st.ov) if (Object.prototype.hasOwnProperty.call(st.ov, k) && k.indexOf(key + '/~') === 0) delete st.ov[k];
+    }
+    function wbSplitApply(bi) {
+      var st = wbSplitSt(bi); if (!st || !st.splitEdit) return;
+      var ed = st.splitEdit, byType = {}, order = [];
+      for (var i = 0; i < ed.lines.length; i++) {
+        var n = bandNum(ed.lines[i].kwh), ty = ed.lines[i].type;
+        if (!ty && n === null) continue;
+        if (!ty || n === null || !(n > 0)) { ed.msg = 'Each line needs a tariff and a kWh figure above zero.'; wbBandsRender(true); return; }
+        if (byType[ty] === undefined) { byType[ty] = 0; order.push(ty); }
+        byType[ty] += n;
+      }
+      if (order.length < 2) { ed.msg = 'Type at least two different tariffs — one tariff is no split.'; wbBandsRender(true); return; }
+      wbSplitClear(st, ed.key);
+      var lines = [];
+      for (var o = 0; o < order.length; o++) lines.push({ type: order[o], kwh: byType[order[o]] });
+      st.split[ed.key] = lines;
+      st.splitEdit = null;
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+    function wbSplitUndo(bi, ri) {
+      var h = wbMeterRow(bi, ri); if (!h || !h.row.splitOf) return;
+      wbSplitClear(h.st, h.row.splitOf);
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+    function wbMeterCopy(id, el) {
+      var inp = document.getElementById(id);
+      if (inp) copyPlain(inp.value, el);
     }
 
     function wbMeterRow(bi, ri) {
@@ -4041,18 +4291,52 @@
       wbBandsRender(true);
       wbRatesStatus();
     }
+    /** Redraws one row's figures in place, so tabbing on to the next field keeps working. */
+    function wbMeterRowRefresh(bi, ri) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      var id = bi + '_' + ri, row = h.row;
+      var set = function (pre, v) { var el = document.getElementById(pre + id); if (el) el.value = wbMeterVal(v); };
+      set('wbMtMo_', row.monthly); set('wbMtWi_', row.winter); set('wbMtSu_', row.summer); set('wbMtAn_', row.annual);
+      var man = document.getElementById('wbMtMan_' + id);
+      if (man) man.textContent = wbMeterManTxt(row);
+      var warn = document.getElementById('wbMtWarn_' + id);
+      if (warn) { warn.textContent = wbMeterWarnShort(row); warn.title = row.warn || ''; }
+    }
+    /** Monthly kWh typed: Total Annual follows it (x 12). */
     function wbMeterMonthly(bi, ri, val) {
       var h = wbMeterRow(bi, ri); if (!h) return;
       var ov = wbMeterOv(h);
       var n = bandNum(val);
+      delete ov.annual;
       if (n === null) delete ov.monthly; else ov.monthly = Math.round(n);
-      // Only this row's dependents are redrawn, so tabbing on to the next field keeps working.
-      var h2 = wbMeterRow(bi, ri);
-      var ann = document.getElementById('wbMtAnn_' + bi + '_' + ri);
-      var man = document.getElementById('wbMtMan_' + bi + '_' + ri);
-      var mo = h2.row.monthly;
-      if (ann) ann.textContent = mo === null || mo === undefined ? '—' : fmtNum(Math.round(mo * 12));
-      if (man) man.textContent = h2.row.manualMonthly ? 'manual' + (h2.row.calcMonthly !== null && h2.row.calcMonthly !== undefined ? ' · calculated ' + fmtNum(h2.row.calcMonthly) : '') : '';
+      wbMeterRowRefresh(bi, ri);
+    }
+    /** Total Annual typed: Monthly kWh follows it (/ 12). */
+    function wbMeterAnnual(bi, ri, val) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      var ov = wbMeterOv(h);
+      var n = bandNum(val);
+      if (n === null) { delete ov.annual; delete ov.monthly; }
+      else { ov.annual = Math.round(n); ov.monthly = Math.round(n / 12); }
+      wbMeterRowRefresh(bi, ri);
+    }
+    /** Monthly Winter / Summer typed: Monthly kWh and Total Annual are recalculated from the two seasons. */
+    function wbMeterSeason(bi, ri, which, val) {
+      var h = wbMeterRow(bi, ri); if (!h) return;
+      var ov = wbMeterOv(h);
+      var n = bandNum(val);
+      if (n === null) delete ov[which]; else ov[which] = Math.round(n);
+      if (ov.winter === undefined && ov.summer === undefined) { delete ov.annual; delete ov.monthly; }
+      else {
+        var w = ov.winter !== undefined ? ov.winter : h.row.calcWinter;
+        var su = ov.summer !== undefined ? ov.summer : h.row.calcSummer;
+        var nW = h.row.nW > 0 && h.row.nW < 12 ? h.row.nW : bandWinterCount(bandWinterFor(h.e.info.matched || bandRetailers()[0] || ''));
+        if (wbNz(w) && wbNz(su) && nW > 0 && nW < 12) {
+          ov.annual = Math.round(w * nW + su * (12 - nW));
+          ov.monthly = Math.round(ov.annual / 12);
+        }
+      }
+      wbMeterRowRefresh(bi, ri);
     }
     function wbMeterRemove(bi, ri, on) {
       var h = wbMeterRow(bi, ri); if (!h) return;
@@ -4074,7 +4358,7 @@
       var e = wbIcpModel()[bi]; if (!e) return;
       if (!confirm('Discard your changes to the meters of ' + e.icp + ' and go back to what Walter calculated?')) return;
       var st = wbMeterState(e.icp);
-      st.ov = {}; st.extra = [];
+      st.ov = {}; st.extra = []; st.split = {}; st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
     }
@@ -4089,7 +4373,7 @@
         if (!e.custId) continue;
         var list = [];
         for (var m = 0; m < e.meters.length; m++) {
-          list.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, src: e.meters[m].src, manual: !!e.meters[m].manual, grade: e.meters[m].grade || '' });
+          list.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est, grade: e.meters[m].grade || '' });
         }
         out[e.icp] = list;
       }
@@ -4442,7 +4726,7 @@
     function wbBandGoBetty() {
       var sec = document.getElementById('wbBettySec');
       if (!sec) return;
-      sec.open = true;
+      wbCardCollapse(sec, false);
       if (sec.scrollIntoView) sec.scrollIntoView({ block: 'center' });
     }
 
@@ -5064,7 +5348,7 @@
         var meters = [];
         for (var m = 0; m < e.meters.length; m++) {
           var u = p.unit[e.meters[m].name];
-          meters.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, unit: u === undefined ? 0 : u, src: e.meters[m].src, manual: !!e.meters[m].manual });
+          meters.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, unit: u === undefined ? 0 : u, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est });
         }
         var fields = {}, k;
         for (k in p.fields) if (Object.prototype.hasOwnProperty.call(p.fields, k)) fields[k] = p.fields[k];
@@ -5144,12 +5428,12 @@
           }
           if (ld.retailer && ld.retailer !== r.retailer) ch.push('retailer ' + ld.retailer + ' → ' + r.retailer);
         }
-        var manual = false;
-        for (var m = 0; m < r.meters.length; m++) if (r.meters[m].manual) manual = true;
+        var manual = false, est = false;
+        for (var m = 0; m < r.meters.length; m++) { if (r.meters[m].manual) manual = true; if (r.meters[m].est) est = true; }
         h += '<tr><td class="tL mono">' + esc(r.icp) + '</td>' +
           '<td class="tL">' + (r.analysisId ? 'update #' + esc(r.analysisId) : '<span class="pill flag">new</span>') + '</td>' +
           '<td class="tL">' + esc(r.retailer) + '</td>' +
-          '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + '</td>' +
+          '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + (est ? ' <span class="flag">(estimated from bill)</span>' : '') + '</td>' +
           '<td class="tL muted" style="font-size:12px">' + (ld ? esc(wbBettyMetersTxt(ld.meters) || 'no meters') : '—') + '</td>' +
           '<td class="tL muted" style="font-size:12px">' + (ch.length ? esc(ch.join('; ')) : (ld ? 'none' : '')) + '</td></tr>';
       }
@@ -5182,9 +5466,16 @@
             (res.q ? ' · ' + fmtNum(res.matched) + ' match(es) for “' + esc(res.q) + '”' : ' · showing the ' + res.rows.length + ' most recent') + '</p>';
           if (!res.rows.length) { area.innerHTML = h + '<p class="muted">' + (res.total ? 'Nothing matches.' : 'No Betty files yet — one is listed each time a template is filled.') + '</p>'; return; }
           h += '<div class="tblwrap"><table><thead><tr><th class="tL">Filled</th><th class="tL">Customer</th><th class="tR">ICPs</th>' +
-            '<th class="tL">File</th><th>Rates</th><th class="tR">Size</th><th class="tL">Operator</th></tr></thead><tbody>';
+            '<th class="tL">File</th><th>Rates</th><th class="tR">Size</th><th class="tL">Operator</th><th></th></tr></thead><tbody>';
+          arcBetLast = res;
           for (var i = 0; i < res.rows.length; i++) {
             var r = res.rows[i];
+            if (r.deletedAt) {
+              h += '<tr class="muted"><td class="tL mono">' + esc(r.date) + '</td><td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+                '<td class="tR">' + fmtNum(r.icpCount) + '</td><td class="tL" colspan="5"><span style="text-decoration:line-through">' + esc(r.fileName) + '</span><br>' +
+                'deleted ' + esc(r.deletedAt) + ' by ' + esc(r.deletedBy) + ' — ' + esc(r.deleteReason) + '</td></tr>';
+              continue;
+            }
             h += '<tr><td class="tL mono">' + esc(r.date) + '</td>' +
               '<td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
               '<td class="tR">' + fmtNum(r.icpCount) + '</td>' +
@@ -5193,12 +5484,34 @@
               (r.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(r.fileId) + '">' + ICONS.download + ' download to PC</a>' : '') + '</td>' +
               '<td>' + (r.hasRates ? '<span class="pill flag">has rates</span>' : '<span class="muted">—</span>') + '</td>' +
               '<td class="tR">' + fmtSize(r.sizeBytes) + '</td>' +
-              '<td class="tL muted" style="font-size:12px">' + esc(r.operator) + '</td></tr>';
+              '<td class="tL muted" style="font-size:12px">' + esc(r.operator) + '</td>' +
+              '<td><button class="icon" title="Delete this Betty file (it goes to the Drive bin)" onclick="arcBetDelete(' + i + ', this)">' + ICONS.trash + '</button></td></tr>';
           }
-          area.innerHTML = h + '</tbody></table></div>';
+          area.innerHTML = h + '</tbody></table></div><div id="arcBetMsg"></div>';
         })
         .withFailureHandler(function (e) { area.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>'; })
         .apiBetSearch(q);
+    }
+
+    var arcBetLast = null;
+    /** v2.21: delete a Betty file - to the Drive bin, with a reason, the row stays in the list marked deleted. */
+    function arcBetDelete(i, btn) {
+      if (!arcBetLast || !arcBetLast.rows[i]) return;
+      var r = arcBetLast.rows[i];
+      var reason = prompt('Delete "' + r.fileName + '"?\n\nIt goes to the Drive bin and stays in this list marked as deleted.\nReason (required):', '');
+      if (reason === null) return;
+      reason = String(reason).trim();
+      var msg = document.getElementById('arcBetMsg');
+      if (!reason) { if (msg) msg.innerHTML = '<span class="error">A reason is required — nothing was deleted.</span>'; return; }
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function () { arcBetSearch(); })
+        .withFailureHandler(function (e) {
+          if (btn) btn.disabled = false;
+          var m = document.getElementById('arcBetMsg');
+          if (m) m.innerHTML = '<span class="error">' + esc(e.message || e) + '</span>';
+        })
+        .apiBetDelete(r.fileId, reason);
     }
 
     // ---------------- Register tab (v2.16) ----------------
@@ -5451,11 +5764,20 @@
     }
 
     /** Give every Workbench section a collapse arrow, like the Betty section (v2.18). */
+    // v2.21: one arrow for every section (the same dark triangle the
+    // ICP blocks use), and only ICP meters and Current customer start open.
+    var WB_OPEN_BY_DEFAULT = { wbBandCard: true, wbCurCard: true };
+    function wbCardCollapse(card, on) {
+      if (!card) return;
+      var cls = String(card.className || '').replace(/(^| )collapsed( |$)/g, ' ').replace(/\s+/g, ' ').replace(/^ | $/g, '');
+      card.className = on ? cls + ' collapsed' : cls;
+      var b = card.querySelector ? card.querySelector('.colbtn') : null;
+      if (b) b.textContent = on ? '▶' : '▼';
+    }
     function initCollapsers() {
       var cards = document.querySelectorAll ? document.querySelectorAll('#tab-workbench .card2') : [];
       for (var i = 0; i < cards.length; i++) {
         var card = cards[i];
-        if (card.tagName === 'DETAILS') continue; // already collapses natively
         var head = null;
         for (var c = 0; c < card.children.length; c++) if (/(^| )cardhead( |$)/.test(card.children[c].className || '')) { head = card.children[c]; break; }
         if (!head || head.getAttribute('data-col')) continue;
@@ -5463,13 +5785,11 @@
         var btn = document.createElement('button');
         btn.className = 'colbtn';
         btn.title = 'Collapse / expand this section';
-        btn.textContent = '▾';
-        btn.onclick = (function (cd, b) { return function () {
-          var on = !/(^| )collapsed( |$)/.test(cd.className);
-          cd.className = on ? cd.className + ' collapsed' : cd.className.replace(/(^| )collapsed( |$)/g, ' ').replace(/\s+/g, ' ').replace(/^ | $/g, '');
-          b.textContent = on ? '▸' : '▾';
-        }; })(card, btn);
+        btn.onclick = (function (cd) { return function () {
+          wbCardCollapse(cd, !/(^| )collapsed( |$)/.test(cd.className));
+        }; })(card);
         head.insertBefore(btn, head.firstChild);
+        wbCardCollapse(card, !WB_OPEN_BY_DEFAULT[card.id]);
       }
     }
     try { initCollapsers(); } catch (e) {}

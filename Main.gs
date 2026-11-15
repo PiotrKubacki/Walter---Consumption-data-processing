@@ -200,7 +200,30 @@ function analyseFromCache_(fileIds) {
     });
   }
 
+  nearZeroByIcp_(rows, cfg);
   return { files: fileSummaries, skipped: skipped, rows: rows };
+}
+
+/**
+ * v2.21: "possible vacant site" is a statement about the ICP, not about
+ * one register. A register with no usage (typically controlled load)
+ * on an ICP whose other register is in normal use is not a vacant
+ * site, so its flag is reworded.
+ */
+function nearZeroByIcp_(rows, cfg) {
+  const limit = Number(cfg && cfg.near_zero_avm_kwh);
+  const inUse = {};
+  for (const r of rows) {
+    const avm = r.analysis && r.analysis.avm;
+    if (avm !== null && avm !== undefined && !(Number(avm) < limit)) inUse[r.icp] = true;
+  }
+  for (const r of rows) {
+    if (!inUse[r.icp] || !r.analysis || !r.analysis.flags) continue;
+    r.analysis.flags = r.analysis.flags.map(function (f) {
+      const m = /^Near-zero usage \((-?\d+) kWh\/month\)/.exec(String(f));
+      return m ? 'No usage on this register (' + m[1] + ' kWh/month) \u2014 the ICP\'s other register(s) are in use, so not a vacant site; informational only' : f;
+    });
+  }
 }
 
 // ---------------- File management ----------------

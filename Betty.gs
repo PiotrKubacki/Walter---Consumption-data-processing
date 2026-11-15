@@ -749,7 +749,7 @@ function apiBettyWrite(payload) {
 
 const BET_INDEX_TAB = 'Betty Index';
 const BET_INDEX_HEADERS = ['date', 'customer id', 'registered name', 'icp count', 'icps', 'operator',
-  'file name', 'file id', 'url', 'size bytes', 'rates (Y/N)'];
+  'file name', 'file id', 'url', 'size bytes', 'rates (Y/N)', 'deleted at', 'deleted by', 'delete reason'];
 const BET_FOLDER_NAME = 'Betty files';
 
 /** Config key betty_output_folder_id if set, else a "Betty files" subfolder of the output folder (created on first use). */
@@ -787,7 +787,58 @@ function betIndexSheet_() {
     sheet.getRange(1, 1, 1, BET_INDEX_HEADERS.length).setValues([BET_INDEX_HEADERS]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
+  // v2.21: delete columns, added to a tab made by an earlier build.
+  if (!sheet.getRange(1, 12).getValue()) {
+    sheet.getRange(1, 12, 1, 3).setValues([BET_INDEX_HEADERS.slice(11, 14)]).setFontWeight('bold');
+  }
   return sheet;
+}
+
+/**
+ * Delete a Betty file from the Archive (v2.21) - same rules as a CDF
+ * (apiCdfDelete): the Drive file goes to the BIN, never a permanent
+ * delete; any operator may do it; the index row is kept and marked
+ * with when, who and the reason typed (required).
+ */
+function apiBetDelete(fileId, reason) {
+  fileId = String(fileId || '').trim();
+  reason = String(reason || '').trim().slice(0, 500);
+  if (!fileId) throw new Error('No file given.');
+  if (!reason) throw new Error('A reason is required to delete a file.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = betIndexSheet_();
+    const n = sheet.getLastRow() - 1;
+    if (n < 1) throw new Error('That file is not in the Betty Index.');
+    const vals = sheet.getRange(2, 1, n, BET_INDEX_HEADERS.length).getValues();
+    const hits = [];
+    let already = false;
+    for (let i = 0; i < n; i++) {
+      if (String(vals[i][7]).trim() !== fileId) continue;
+      if (String(vals[i][11] || '').trim() !== '') { already = true; continue; }
+      hits.push(i);
+    }
+    if (!hits.length) throw new Error(already ? 'That file is already marked as deleted.' : 'That file is not in the Betty Index.');
+    let name = String(vals[hits[0]][6] || '');
+    let fileNote = '';
+    let file = null;
+    try { file = DriveApp.getFileById(fileId); } catch (e) { fileNote = ' [file was already missing from Drive]'; }
+    if (file) {
+      name = file.getName();
+      if (name.indexOf('BET - ') !== 0) throw new Error('Not a Betty file: ' + name);
+      if (file.isTrashed()) fileNote = ' [file was already in the bin]';
+      else file.setTrashed(true);
+    }
+    let operator = '';
+    try { operator = Session.getActiveUser().getEmail(); } catch (e) {}
+    const now = new Date();
+    for (const i of hits) sheet.getRange(i + 2, 12, 1, 3).setValues([[now, operator, reason + fileNote]]);
+    SpreadsheetApp.flush();
+    return { ok: true, name: name, note: fileNote };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function betIndexAdd_(info) {
@@ -821,6 +872,8 @@ function apiBetSearch(q) {
       icpCount: Number(r[3]) || 0, operator: String(r[5] || ''),
       fileName: String(r[6] || ''), fileId: String(r[7] || ''), url: String(r[8] || ''),
       sizeBytes: Number(r[9]) || 0, hasRates: /^y/i.test(String(r[10] || '')),
+      deletedAt: r[11] instanceof Date ? Utilities.formatDate(r[11], 'Pacific/Auckland', 'yyyy-MM-dd HH:mm') : String(r[11] || ''),
+      deletedBy: String(r[12] || ''), deleteReason: String(r[13] || ''),
     });
   }
   return out;
