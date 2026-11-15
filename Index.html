@@ -78,15 +78,23 @@
     .mono  { font-family: monospace; font-size: 12px; }
     #status, #runStatus { margin: 10px 0; font-size: 13px; }
     progress { width: 240px; vertical-align: middle; }
-    nav.tabs { display: flex; gap: 4px; background: var(--tuc-accent); padding: 0 18px; align-items: flex-end; flex-wrap: wrap; }
-    nav.tabs > button {
-      min-width: 120px; height: 52px; border-radius: 8px 8px 0 0;
+    /* v2.23: the tab row mirrors the two Workbench columns - five equal tabs
+       over the left one, the customer block over the right one (same flex
+       values and gap as the columns in #tab-workbench). */
+    nav.tabs { display: flex; gap: 18px; background: var(--tuc-accent); padding: 0 18px; align-items: flex-end; flex-wrap: wrap; }
+    nav.tabs .tabgroup { flex: 1 1 420px; min-width: 0; display: flex; gap: 4px; }
+    nav.tabs .tabgroup > button {
+      flex: 1 1 0; min-width: 0; padding: 0 6px; height: 52px; border-radius: 8px 8px 0 0;
       background: rgba(255,255,255,.14); color: #fff; opacity: .85;
+      white-space: nowrap; overflow: hidden;
     }
-    nav.tabs > button.active { background: var(--tuc-warm-bg); color: var(--tuc-ink); opacity: 1; }
+    nav.tabs .tabgroup > button.active { background: var(--tuc-warm-bg); color: var(--tuc-ink); opacity: 1; }
+    nav.tabs .sesshold { flex: 2 1 560px; min-width: 0; }
+    @media (max-width: 1500px) { nav.tabs .tabgroup > button { font-size: 13px; padding: 0 3px; gap: 4px; } }
+    @media (max-width: 1250px) { nav.tabs .tabgroup > button .tabico { display: none; } }
     /* v2.21: the current customer and its buttons sit on the tab row (design option C). */
     #wbSessionCard {
-      flex: 1 1 430px; min-width: 0; height: 52px; box-sizing: border-box; margin-left: 14px;
+      width: 100%; min-width: 0; height: 52px; box-sizing: border-box;
       background: rgba(0,0,0,.22); border-radius: 8px 8px 0 0; padding: 0 8px 0 14px;
       display: flex; align-items: center; gap: 10px; color: #fff;
     }
@@ -129,7 +137,9 @@
     /* v2.18: every Workbench section collapses (arrow in its heading). */
     .colbtn { border: 0; background: none; cursor: pointer; font-size: 12px; color: var(--tuc-ink); padding: 0 2px; min-width: 0; height: auto; line-height: 1; }
     .card2.collapsed > :not(.cardhead) { display: none !important; }
-    .card2.collapsed > .cardhead { margin-bottom: 0; }
+    .card2.collapsed > .cardhead { margin-bottom: 0; min-height: 30px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+    .cardhead > .colbtn, .cardhead > h2 { flex-shrink: 0; }
+    .card2.collapsed > .cardhead > .seg { display: none; } /* v2.23: every collapsed section is the same height */
     button.cpy { background: none; border: 0; color: var(--tuc-accent); cursor: pointer; min-width: 0; height: auto; padding: 0 0 0 4px; font-size: 11px; }
     table.mtbl th, table.mtbl td { padding: 6px 5px; }
     table.mtbl th { white-space: normal; line-height: 1.2; font-size: 12px; }
@@ -167,11 +177,14 @@
     <span style="margin-left:auto;font-size:12px;opacity:.75;text-align:right;line-height:1.35">build <?= (typeof build === 'undefined' ? '?' : build) ?><br><span id="hdrCdfTotals" style="font-size:11px" title="Total storage used by CDF (consumption data) files in the output folder"></span></span>
   </header>
   <nav class="tabs" id="mainTabs">
-    <button id="tabBtnWb" class="active" onclick="showTab('wb')">🛠 Workbench</button>
-    <button id="tabBtnBq" onclick="showTab('bq')">💰 RFP</button>
-    <button id="tabBtnArc" onclick="showTab('arc')">🗄 Archive</button>
-    <button id="tabBtnReg" onclick="showTab('reg')">📒 Register</button>
-    <button id="tabBtnBatch" onclick="showTab('batch')">⚡ Batch</button>
+    <div class="tabgroup">
+      <button id="tabBtnWb" class="active" onclick="showTab('wb')"><span class="tabico">🛠</span> Workbench</button>
+      <button id="tabBtnBq" onclick="showTab('bq')"><span class="tabico">💰</span> RFP</button>
+      <button id="tabBtnArc" onclick="showTab('arc')"><span class="tabico">🗄</span> Archive</button>
+      <button id="tabBtnReg" onclick="showTab('reg')"><span class="tabico">📒</span> Register</button>
+      <button id="tabBtnBatch" onclick="showTab('batch')"><span class="tabico">⚡</span> Batch</button>
+    </div>
+    <div class="sesshold">
     <div id="wbSessionCard" style="display:none">
       <div class="sessid">
         <div id="wbSessName">New session</div>
@@ -180,6 +193,7 @@
       <a id="wbBettyLink" class="ghostbtn" href="#" target="_blank" title="Open this customer in Betty">🔗 Betty</a>
       <button id="wbAnalyseBtn" onclick="wbAnalyse(this)">⚡ Analyse session</button>
       <button id="wbFinishBtn" onclick="wbFinish(this)" style="background:var(--good)">✅ <span>Finish customer</span></button>
+    </div>
     </div>
   </nav>
   <main>
