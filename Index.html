@@ -1223,7 +1223,7 @@
       try { link = dt ? (dt.getData('text/uri-list') || dt.getData('text/plain') || '') : ''; } catch (e) {}
       link = String(link).split('\n')[0].trim();
       if (/drive\.google\.com|docs\.google\.com/.test(link) && /[-\w]{25,}/.test(link)) {
-        wbBusy++;
+        wbBusy++; wbUpTotal++;
         wbRenderFiles();
         google.script.run
           .withSuccessHandler(function (info) { wbBusy--; wbAddInfo(info); })
@@ -1242,9 +1242,10 @@
       input.value = '';
     }
 
+    var wbUpTotal = 0; // files in the lot being uploaded (v2.22)
     function wbSendFiles(fileList) {
       for (var i = 0; i < fileList.length; i++) (function (f) {
-        wbBusy++;
+        wbBusy++; wbUpTotal++;
         wbRenderFiles();
         var reader = new FileReader();
         reader.onload = function () {
@@ -1295,7 +1296,8 @@
           '<button class="icon" style="color:var(--bad)" title="Remove this file from the session" onclick="event.stopPropagation();wbRemoveFile(\'' + f.id + '\')">✕</button>' +
           '</div>';
       }
-      if (wbBusy) h += '<div class="muted" style="padding:4px 6px">uploading ' + wbBusy + ' file(s)…</div>';
+      if (!wbBusy) wbUpTotal = 0; // the lot is finished
+      else h += '<div class="muted" style="padding:4px 6px">⏳ uploading ' + wbUpTotal + ' file(s) — ' + (wbUpTotal - wbBusy) + ' of ' + wbUpTotal + ' done…</div>';
       box.innerHTML = h;
       wbRenderSession();
     }
@@ -2335,7 +2337,8 @@
       open: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M8 4h12v12"/><path d="M10 14 20 4"/><path d="M16 11v9H4V8h9"/></svg>',
       download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>',
       trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
-      copy: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>'
+      copy: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>',
+      x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>'
     };
 
     /** Queueing result: duplicate/re-queue notices with full detail (9 Nov). */
@@ -3831,7 +3834,6 @@
 
     function wbMeterState(icp) {
       var st = wbMeters[icp] || (wbMeters[icp] = { ov: {}, extra: [], open: null, seq: 0 });
-      if (!st.split) st.split = {};   // v2.21: rowKey -> [{ type, kwh }] typed off a bill
       return st;
     }
 
@@ -3877,7 +3879,7 @@
         var r = rows[i];
         var e = byIcp[r.icp];
         if (!e) {
-          e = byIcp[r.icp] = { icp: r.icp, custId: (r.lookup && r.lookup.customerId) || '', info: wbBandInfo(r), rows: [], meters: [], notes: [], bands: [], others: [] };
+          e = byIcp[r.icp] = { calcTotal: null, billSplit: false, icp: r.icp, custId: (r.lookup && r.lookup.customerId) || '', info: wbBandInfo(r), rows: [], meters: [], notes: [], bands: [], others: [] };
           out.push(e);
         }
         var grade = (r.analysis.gradeEmoji || '') + ' ' + (r.analysis.grade || '');
@@ -3921,25 +3923,34 @@
       for (var q = 0; q < out.length; q++) {
         var en = out[q], st = wbMeterState(en.icp), k;
         var nWd = bandWinterCount(bandWinterFor(en.info.matched || bandRetailers()[0] || ''));
-        // v2.21: a register split from a bill is replaced by one row per tariff on the bill
-        var expanded = [];
+        // v2.22: "split from a bill" works on the whole ICP - its total consumption
+        // (all registers) is shared across the tariffs typed off the bill and
+        // those rows replace what Walter calculated.
+        var tm = 0, ta = 0, tw = 0, ts = 0, anyRow = false, seasonAll = true, nWp = 0;
         for (k = 0; k < en.rows.length; k++) {
-          var pr = en.rows[k], lines = pr.whole ? st.split[pr.key] : null;
-          var pov = st.ov[pr.key] || {};
-          var base = pov.monthly !== undefined ? pov.monthly : pr.calcMonthly;
-          if (!lines || !lines.length || !wbNz(base)) { expanded.push(pr); continue; }
-          var wts = [], li;
-          for (li = 0; li < lines.length; li++) wts.push(lines[li].kwh);
-          var pAnn = pov.annual !== undefined ? pov.annual : (pov.monthly !== undefined ? Math.round(base * 12) : (wbNz(pr.calcAnnual) ? pr.calcAnnual : Math.round(base * 12)));
-          var mo = wbShare(Math.round(base), wts), an = wbShare(Math.round(pAnn), wts);
-          var wi = wbNz(pr.calcWinter) ? wbShare(pr.calcWinter, wts) : null, su = wbNz(pr.calcSummer) ? wbShare(pr.calcSummer, wts) : null;
-          for (li = 0; li < lines.length; li++) {
-            expanded.push({ key: pr.key + '/~' + li, src: pr.src + ' · estimated from bill', calcType: lines[li].type, calcMonthly: mo[li],
-              calcWinter: wi ? wi[li] : null, calcSummer: su ? su[li] : null, calcAnnual: an[li], nW: pr.nW, rate: null,
-              grade: 'estimated from bill', est: true, splitOf: pr.key, splitFirst: li === 0 });
-          }
+          var pr = en.rows[k];
+          if (!wbNz(pr.calcMonthly)) continue;
+          anyRow = true;
+          tm += pr.calcMonthly;
+          ta += wbNz(pr.calcAnnual) ? pr.calcAnnual : Math.round(pr.calcMonthly * 12);
+          if (wbNz(pr.calcWinter) && wbNz(pr.calcSummer)) { tw += pr.calcWinter; ts += pr.calcSummer; nWp = pr.nW; }
+          else seasonAll = false;
         }
-        en.rows = expanded;
+        en.calcTotal = anyRow ? Math.round(tm) : null;
+        if (st.bill && st.bill.length && anyRow) {
+          var wts = [], li;
+          for (li = 0; li < st.bill.length; li++) wts.push(st.bill[li].kwh);
+          var mo = wbShare(Math.round(tm), wts), an = wbShare(Math.round(ta), wts);
+          var wi = seasonAll ? wbShare(Math.round(tw), wts) : null, su = seasonAll ? wbShare(Math.round(ts), wts) : null;
+          var billRows = [];
+          for (li = 0; li < st.bill.length; li++) {
+            billRows.push({ key: 'bill/~' + li, src: 'estimated from bill', calcType: st.bill[li].type, calcMonthly: mo[li],
+              calcWinter: wi ? wi[li] : null, calcSummer: su ? su[li] : null, calcAnnual: an[li], nW: seasonAll ? nWp : 0, rate: null,
+              grade: 'estimated from bill', est: true });
+          }
+          en.rows = billRows;
+          en.billSplit = true;
+        }
         for (k = 0; k < st.extra.length; k++) {
           en.rows.push({ key: 'x' + st.extra[k].id, src: 'added by hand', calcType: '', calcMonthly: null, rate: null, grade: 'manual', extra: true,
             nW: 0, calcWinter: null, calcSummer: null, calcAnnual: null });
@@ -4027,7 +4038,7 @@
         var q = wbIcpQuality(e.icp);
         var total = 0;
         for (var m = 0; m < e.meters.length; m++) total += e.meters[m].monthly;
-        h += '<details class="icpblk"' + (open ? ' open' : '') + ' ontoggle="wbMeterToggle(\'' + esc(e.icp) + '\', this.open)">' +
+        h += '<details class="icpblk"' + (open ? ' open' : '') + ' ontoggle="wbMeterToggle(\'' + esc(e.icp) + '\', this.open, this)">' +
           '<summary><b class="mono">' + esc(e.icp) + '</b> <span class="muted" style="font-size:12px;font-weight:400">' +
           esc(e.info.network || 'network unknown') + ' · ' + esc(e.info.retailer || 'retailer unknown') + ' · ' +
           e.meters.length + ' meter(s) · ' + fmtNum(Math.round(total)) + ' kWh/month</span>' +
@@ -4036,7 +4047,7 @@
           (e.notes.length ? ' <span class="flag" style="font-size:12px">⚠</span>' : '') + '</summary>';
         h += '<div id="wbMt_' + bi + '">' + wbMeterTableHtml(e, bi) + '</div>';
         // What the Calculations card used to show, per register of this ICP.
-        h += '<details class="subblk"' + ((st.calcOpen !== undefined ? st.calcOpen : (q.rank > 0 || q.flags > 0)) ? ' open' : '') + ' ontoggle="wbMeterCalcToggle(\'' + esc(e.icp) + '\', this.open)">' +
+        h += '<details class="subblk"' + (st.calcOpen === true ? ' open' : '') + ' ontoggle="wbMeterCalcToggle(\'' + esc(e.icp) + '\', this.open)">' +
           '<summary>Data and reliability <span class="muted" style="font-weight:400">(grade, coverage, monthly average, flags per register)</span></summary>' +
           '<div class="tblwrap"><table><thead><tr><th>Grade</th><th class="tL">ICP · Register</th><th>Fuel</th><th class="tL">File</th><th>Layer</th>' +
           '<th class="tR">Coverage</th><th class="tR">AVM kWh/mo</th><th class="tR">Annual kWh</th><th class="tL">Flags</th></tr></thead><tbody>' + q.html + '</tbody></table></div></details>';
@@ -4049,7 +4060,7 @@
         for (var o = 0; o < e.others.length; o++) {
           var ro = wbBandResolve(e.others[o]);
           if (ro.shown) { // bands wanted, but no schedule for this network yet
-            h += '<details class="subblk" open><summary>Time bands — ' + esc(e.others[o].r.register) + '</summary>' + wbBandBlock(e.others[o], ro) + '</details>';
+            h += '<details class="subblk" data-keep="1" open><summary>Time bands — ' + esc(e.others[o].r.register) + '</summary>' + wbBandBlock(e.others[o], ro) + '</details>';
             continue;
           }
           h += '<div class="muted" style="font-size:12px;margin-top:4px">' + esc(e.others[o].r.register) +
@@ -4142,7 +4153,7 @@
         '<th class="tR" title="Average month in ' + esc(bandMonthsText(W, false)) + '">Monthly<br>Summer</th>' +
         '<th class="tR">Total<br>Annual</th><th class="tR" title="$ per kWh excl GST, from Enter rates">Unit<br>cost $</th><th></th></tr></thead><tbody>';
       var edited = st.extra.length > 0;
-      for (var sk in st.split) if (Object.prototype.hasOwnProperty.call(st.split, sk)) edited = true;
+      if (st.bill) edited = true;
       for (var ri = 0; ri < e.rows.length; ri++) {
         var row = e.rows[ri];
         if (st.ov[row.key]) edited = true;
@@ -4165,44 +4176,48 @@
           '<div class="muted" style="font-size:11px;margin-top:2px">from ' + esc(row.src) + '</div></td>' +
           cell('wbMtMo_', row.monthly, 'wbMeterMonthly(' + args + ', this.value)', true) +
           '<div id="wbMtMan_' + id + '" class="flag" style="font-size:11px;white-space:normal">' + esc(wbMeterManTxt(row)) + '</div></td>' +
-          cell('wbMtWi_', row.winter, 'wbMeterSeason(' + args + ', \'winter\', this.value)', false) + '</td>' +
-          cell('wbMtSu_', row.summer, 'wbMeterSeason(' + args + ', \'summer\', this.value)', false) + '</td>' +
+          cell('wbMtWi_', row.winter, 'wbMeterSeason(' + args + ', \'winter\', this.value)', true) + '</td>' +
+          cell('wbMtSu_', row.summer, 'wbMeterSeason(' + args + ', \'summer\', this.value)', true) + '</td>' +
           cell('wbMtAn_', row.annual, 'wbMeterAnnual(' + args + ', this.value)', true) +
           '<div id="wbMtWarn_' + id + '" class="error" style="font-size:11px" title="' + esc(row.warn || '') + '">' + esc(wbMeterWarnShort(row)) + '</div></td>' +
-          '<td class="tR mono" style="font-size:12px">' + (rt || (row.rate !== null && row.rate !== undefined
+          '<td class="tR mono" style="font-size:12px;white-space:nowrap">' + (rt || (row.rate !== null && row.rate !== undefined
             ? '<span class="muted" title="Weighted average from the rate card typed in the time-band detail — not saved in Enter rates yet">' + bandRateTxt(row.rate) + '</span>'
-            : '<span class="muted">—</span>')) + '</td>' +
-          '<td style="white-space:nowrap;font-size:12px"><button class="linkbtn" title="Do not send this row to Betty" onclick="wbMeterRemove(' + args + ', true)">remove</button>' +
-          (row.whole && !row.extra ? '<br><button class="linkbtn" title="No half-hourly split? Share this register across the tariffs on a bill, pro rata" onclick="wbSplitOpen(' + args + ')">split from a bill</button>' : '') +
-          (row.splitFirst ? '<br><button class="linkbtn" onclick="wbSplitUndo(' + args + ')">undo bill split</button>' : '') + '</td></tr>';
+            : '<span class="muted">—</span>')) +
+          (rt || (row.rate !== null && row.rate !== undefined)
+            ? '<button class="cpy" title="Copy this unit cost" onclick="copyPlain(\'' + (rt || bandRateTxt(row.rate)) + '\', this)">' + ICONS.copy + '</button>' : '') + '</td>' +
+          '<td><button class="cpy" style="color:var(--bad, #B3261E);padding:0" title="Remove this row — it is not sent to Betty" aria-label="Remove this row" onclick="wbMeterRemove(' + args + ', true)">' + ICONS.x + '</button></td></tr>';
       }
       h += '</tbody></table></div>';
       if (st.splitEdit) h += wbSplitBoxHtml(e, bi, st);
       for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
       h += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0 4px">' +
         '<button class="linkbtn" onclick="wbMeterAdd(' + bi + ')">+ add a meter</button>' +
+        '<button class="linkbtn" title="No half-hourly split? Share this ICP’s total consumption across the tariffs on a bill, pro rata" onclick="wbSplitOpen(' + bi + ')">' +
+        (st.bill ? 'change the bill split' : 'split from a bill') + '</button>' +
+        (st.bill ? '<button class="linkbtn" onclick="wbSplitUndo(' + bi + ')">undo bill split</button>' : '') +
         (edited ? '<button class="linkbtn" onclick="wbMeterReset(' + bi + ')">back to what Walter calculated</button>' : '') +
         (e.custId && !wbProspect ? '<button class="linkbtn" onclick="wbRatesOpenFor(\'' + esc(e.icp) + '\')">✏️ rates for this ICP</button>' : '') + '</div>';
       return h;
     }
 
-    // ---- split a register from a bill (v2.21) ----
+    // ---- split an ICP from a bill (v2.21, ICP-level since v2.22) ----
     // No half-hourly data but the bill has several tariffs: the operator
-    // types the kWh the bill shows per tariff and the register's figures
-    // are shared pro rata. The rows are labelled "estimated from bill".
+    // types the kWh the bill shows per tariff and the ICP's TOTAL
+    // consumption (all registers) is shared pro rata into a new set of
+    // rows, labelled "estimated from bill".
     function wbSplitBoxHtml(e, bi, st) {
-      var ed = st.splitEdit, reg = ed.key, base = null;
-      for (var r = 0; r < e.rows.length; r++) if (e.rows[r].key === reg || e.rows[r].splitOf === reg) base = (base || 0) + (e.rows[r].monthly || 0);
+      var ed = st.splitEdit;
       var h = '<div style="border:1px solid var(--tuc-line);border-radius:8px;padding:10px 12px;margin:6px 0;background:var(--tuc-warm-bg)">' +
-        '<div style="font-size:13px"><b>Split ' + esc(reg) + ' from a bill</b> <span class="muted" style="font-size:12px">— type the kWh the bill shows for each tariff. ' +
-        'Walter shares this register’s ' + (base === null ? '' : fmtNum(Math.round(base)) + ' kWh/month ') + 'in the same proportions. Several bills: add their kWh together per tariff.</span></div>';
+        '<div style="font-size:13px"><b>Split this ICP from a bill</b> <span class="muted" style="font-size:12px">— type the kWh the bill shows for each tariff. ' +
+        'Walter shares the ICP’s total ' + (e.calcTotal === null ? '' : fmtNum(e.calcTotal) + ' kWh/month ') + '(all registers) in the same proportions and replaces the rows above. ' +
+        'Several bills: add their kWh together per tariff.</span></div>';
       for (var li = 0; li < ed.lines.length; li++) {
         var opts = '<option value="">— tariff (Betty meter type) —</option>';
         for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === ed.lines[li].type ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
         h += '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><select onchange="wbSplitSet(' + bi + ', ' + li + ', \'type\', this.value)" ' +
           'style="height:30px;border:1px solid var(--tuc-line);border-radius:6px;font-size:13px">' + opts + '</select>' +
           '<input type="text" inputmode="decimal" class="mtin" style="width:100px" placeholder="kWh on bill" value="' + esc(ed.lines[li].kwh) + '" onchange="wbSplitSet(' + bi + ', ' + li + ', \'kwh\', this.value)">' +
-          (ed.lines.length > 2 ? '<button class="linkbtn" onclick="wbSplitDel(' + bi + ', ' + li + ')">remove</button>' : '') + '</div>';
+          (ed.lines.length > 2 ? '<button class="cpy" style="color:var(--bad, #B3261E)" title="Remove this line" aria-label="Remove this line" onclick="wbSplitDel(' + bi + ', ' + li + ')">' + ICONS.x + '</button>' : '') + '</div>';
       }
       return h + '<div style="display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px">' +
         '<button class="linkbtn" onclick="wbSplitAddLine(' + bi + ')">+ add a tariff</button>' +
@@ -4211,9 +4226,12 @@
         '<span class="error">' + esc(ed.msg || '') + '</span></div></div>';
     }
     function wbSplitSt(bi) { var e = wbIcpModel()[bi]; return e ? wbMeterState(e.icp) : null; }
-    function wbSplitOpen(bi, ri) {
-      var h = wbMeterRow(bi, ri); if (!h) return;
-      h.st.splitEdit = { key: h.row.key, lines: [{ type: '', kwh: '' }, { type: '', kwh: '' }], msg: '' };
+    function wbSplitOpen(bi) {
+      var st = wbSplitSt(bi); if (!st) return;
+      var lines = [];
+      if (st.bill) for (var i = 0; i < st.bill.length; i++) lines.push({ type: st.bill[i].type, kwh: String(st.bill[i].kwh) });
+      while (lines.length < 2) lines.push({ type: '', kwh: '' });
+      st.splitEdit = { lines: lines, msg: '' };
       wbBandsRender(true);
     }
     function wbSplitSet(bi, li, field, val) {
@@ -4235,9 +4253,9 @@
       st.splitEdit = null;
       wbBandsRender(true);
     }
-    function wbSplitClear(st, key) {
-      delete st.split[key];
-      for (var k in st.ov) if (Object.prototype.hasOwnProperty.call(st.ov, k) && k.indexOf(key + '/~') === 0) delete st.ov[k];
+    function wbSplitClear(st) {
+      st.bill = null;
+      for (var k in st.ov) if (Object.prototype.hasOwnProperty.call(st.ov, k) && k.indexOf('bill/~') === 0) delete st.ov[k];
     }
     function wbSplitApply(bi) {
       var st = wbSplitSt(bi); if (!st || !st.splitEdit) return;
@@ -4250,17 +4268,18 @@
         byType[ty] += n;
       }
       if (order.length < 2) { ed.msg = 'Type at least two different tariffs — one tariff is no split.'; wbBandsRender(true); return; }
-      wbSplitClear(st, ed.key);
+      wbSplitClear(st);
       var lines = [];
       for (var o = 0; o < order.length; o++) lines.push({ type: order[o], kwh: byType[order[o]] });
-      st.split[ed.key] = lines;
+      st.bill = lines;
       st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
     }
-    function wbSplitUndo(bi, ri) {
-      var h = wbMeterRow(bi, ri); if (!h || !h.row.splitOf) return;
-      wbSplitClear(h.st, h.row.splitOf);
+    function wbSplitUndo(bi) {
+      var st = wbSplitSt(bi); if (!st) return;
+      wbSplitClear(st);
+      st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
     }
@@ -4280,7 +4299,18 @@
       for (var k = 0; k < h.st.extra.length; k++) if ('x' + h.st.extra[k].id === h.row.key) return k;
       return -1;
     }
-    function wbMeterToggle(icp, open) { wbMeterState(icp).open = !!open; }
+    /** v2.22: opening an ICP block always starts with "Data and reliability" and "Time-band detail" closed. */
+    function wbMeterToggle(icp, open, el) {
+      var st = wbMeterState(icp);
+      if (open && st.open !== true) {
+        st.calcOpen = false;
+        var subs = el && el.querySelectorAll ? el.querySelectorAll('details.subblk') : [];
+        for (var i = 0; i < subs.length; i++) if (subs[i].getAttribute('data-keep') !== '1') subs[i].open = false;
+        var e = wbIcpByIcp(icp);
+        if (e) for (var b = 0; b < e.e.bands.length; b++) wbBandState(e.e.bands[b].key).detailOpen = false;
+      }
+      st.open = !!open;
+    }
     function wbBandDetailToggle(i, open) {
       var x = wbBandX(i); if (!x) return;
       wbBandState(x.key).detailOpen = !!open;
@@ -4358,7 +4388,7 @@
       var e = wbIcpModel()[bi]; if (!e) return;
       if (!confirm('Discard your changes to the meters of ' + e.icp + ' and go back to what Walter calculated?')) return;
       var st = wbMeterState(e.icp);
-      st.ov = {}; st.extra = []; st.split = {}; st.splitEdit = null;
+      st.ov = {}; st.extra = []; st.bill = null; st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
     }
