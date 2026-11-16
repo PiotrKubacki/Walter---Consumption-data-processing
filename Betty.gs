@@ -529,8 +529,10 @@ const BETTY_SEED_METERS = [
   "Peak", "Peak Summer", "Peak Winter", "Priority Controlled", "Shoulder", "Solar Exported",
 ];
 const BETTY_LISTS_TAB = 'Betty Lists';
-const BETTY_DEFAULT_CONTRACT_DAYS = 1095;
-const BETTY_DEFAULT_BROKERAGE = 5.75;
+// v2.24 (Peter, 16 Nov): contract length 730 days; brokerage has NO default -
+// the cell stays blank unless typed or loaded from Betty.
+const BETTY_DEFAULT_CONTRACT_DAYS = 730;
+const BETTY_DEFAULT_BROKERAGE = null;
 
 function bettyListsSheet_() {
   const ss = SpreadsheetApp.openById(getConfig_()._backingId);
@@ -690,7 +692,10 @@ function apiBettyWrite(payload) {
     for (let c = 20; c < BETTY_HEADERS.length; c++) {
       let key = '';
       for (const k in BETTY_RATE_COLUMNS) if (BETTY_RATE_COLUMNS[k].toLowerCase() === BETTY_HEADERS[c].toLowerCase()) key = k;
-      const v = num(fields[key]);
+      const raw = fields[key];
+      const blank = raw === undefined || raw === null || String(raw).trim() === '';
+      // A brokerage fee nobody typed stays an empty cell; every other charge is 0.
+      const v = blank ? (key === 'brokerage' ? '' : 0) : num(raw);
       if (v && key !== 'contractDays' && key !== 'brokerage') anyRate = true;
       line.push(v);
     }

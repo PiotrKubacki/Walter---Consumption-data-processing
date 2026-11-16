@@ -355,6 +355,8 @@
             <button onclick="wbRatesOpen()" style="min-width:0;padding:0 16px">✏️ Enter rates</button>
             <span id="wbRatesState" class="muted" style="font-size:12px"></span>
             <span class="muted" style="font-size:12px">the customer’s current rates, typed off the bill, and the retailer</span></p>
+          <div id="wbBettyPlan" style="margin-top:10px"></div>
+          <label id="wbBettyNewRow" style="display:none;font-size:13px;margin:4px 0;cursor:pointer"><input type="checkbox" id="wbBettyNewOk"> <span id="wbBettyNewTxt"></span></label>
           <p style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>3.</b>
             <button id="wbBettyWriteBtn" onclick="wbBettyWrite(this)" style="min-width:0;padding:0 16px">📤 Create Betty file</button>
             <span class="muted" style="font-size:12px">then import it into Betty</span></p>
@@ -1438,6 +1440,7 @@
       // Notes form: show + auto-fill (never overwrite operator-entered values)
       document.getElementById('wbNotes').style.display = '';
       document.getElementById('wbBettySec').style.display = wbProspect ? 'none' : '';
+      wbBettyPlanRender();
       document.getElementById('wbQueueBtn').style.display = '';
       var fill = function (id, val) {
         var el = document.getElementById(id);
@@ -2097,8 +2100,9 @@
         var flags = d.flags || [];
         for (var i = 0; i < flags.length && i < 2; i++) fl += '<div class="flag" style="font-size:11px">' + esc(flags[i]) + '</div>';
         if (flags.length > 2) fl += '<div class="flag" style="font-size:11px" title="' + esc(flags.slice(2).join(' | ')) + '">+' + (flags.length - 2) + ' more</div>';
-        return '<span class="pill" title="EA registry: ' + esc(d.touDetail || '') + '">' + esc(d.tou || '?') + '</span>' +
-          '<span class="muted" style="font-size:11px">' + esc(d.trader || '') + '</span>' + fl;
+        // v2.24: the TOU / NHH pill is hidden until TOU can be told with
+        // certainty (Peter, 16 Nov); the verdict is still in d.tou for later.
+        return '<span class="muted" style="font-size:11px">' + esc(d.trader || '') + '</span>' + fl;
       }
       if (d.kind === 'not_found') {
         return c.fuel === 'GAS' && !c.assumedGas
@@ -2693,7 +2697,9 @@
       wbBandsRender(true);
       wbRates = {}; wbRatesEd = null; wbRatesDraftTried = false;
       wbRatesStyle = wbStyleAll('c', true);
-      wbBetty.loaded = {}; wbBetty.fileName = ''; wbBetty.retailer = {}; wbBetty.defRetailer = '';
+      wbBetty.loaded = {}; wbBetty.fileName = ''; wbBetty.loadedAt = ''; wbBetty.restored = false; wbBetty.retailer = {}; wbBetty.defRetailer = '';
+      wbBettyPlanRender();
+      wbCardCollapse(document.getElementById('wbCurCard'), false); // a new session starts at the drop zone
       document.getElementById('wbRatesModal').style.display = 'none';
       document.getElementById('wbRatesState').textContent = '';
       wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
@@ -4907,7 +4913,12 @@
     }
     function wbRatesDraftKey() { return 'walterRates:' + wbRatesCustId(); }
     function wbRatesDraftSave() {
-      try { window.localStorage.setItem(wbRatesDraftKey(), JSON.stringify({ rates: wbRates, style: wbRatesStyle })); } catch (e) {}
+      // v2.24: what was loaded from Betty (analysis IDs above all) and the
+      // retailer picks are saved with the rates, so a reload between
+      // "Load from Betty" and "Create Betty file" no longer sends the
+      // rows out with blank IDs.
+      try { window.localStorage.setItem(wbRatesDraftKey(), JSON.stringify({ rates: wbRates, style: wbRatesStyle,
+        betty: { loaded: wbBetty.loaded, fileName: wbBetty.fileName, loadedAt: wbBetty.loadedAt, retailer: wbBetty.retailer, defRetailer: wbBetty.defRetailer } })); } catch (e) {}
     }
     function wbRatesDraftLoad() {
       if (wbRatesDraftTried) return;
@@ -4919,6 +4930,16 @@
         if (d && d.rates && !Object.keys(wbRates).length) {
           wbRates = d.rates;
           if (d.style) wbRatesStyle = wbStyleClone(d.style);
+        }
+        if (d && d.betty && d.betty.loaded && !Object.keys(wbBetty.loaded).length) {
+          wbBetty.loaded = d.betty.loaded;
+          wbBetty.fileName = d.betty.fileName || '';
+          wbBetty.loadedAt = d.betty.loadedAt || '';
+          wbBetty.restored = true;
+        }
+        if (d && d.betty && d.betty.retailer && !Object.keys(wbBetty.retailer).length) {
+          wbBetty.retailer = d.betty.retailer;
+          if (!wbBetty.defRetailer) wbBetty.defRetailer = d.betty.defRetailer || '';
         }
       } catch (e) {}
     }
@@ -4945,6 +4966,7 @@
       var n = 0;
       for (var i = 0; i < model.length; i++) if (wbRates[model[i].icp]) n++;
       el.textContent = model.length ? 'rates saved for ' + n + ' of ' + model.length + ' ICP(s)' : '';
+      wbBettyPlanRender();
     }
 
     function wbRatesOpen() {
@@ -5036,7 +5058,7 @@
         '<button class="' + (allChg('$') ? 'active' : '') + '" onclick="wbRatesStyleSet(\'chg\', \'$\')">dollars</button></div>' +
         '<span class="muted">→ the Betty file always gets <b>$ excl GST</b></span></div>';
       // Betty: retailer for this ICP's Current row, and what Betty held before.
-      var ld = wbBetty.loaded[ed.icp] || null;
+      var ld = wbBettyLd(ed.icp);
       var curRet = wbBettyRetailerFor(ed.icp);
       var ropts = '<option value="">— pick the retailer —</option>';
       for (var rr = 0; rr < wbBetty.retailers.length; rr++) ropts += '<option' + (wbBetty.retailers[rr] === curRet ? ' selected' : '') + '>' + esc(wbBetty.retailers[rr]) + '</option>';
@@ -5087,7 +5109,7 @@
         var ov = ed.rec.fields[ro[0]];
         h += '<tr><td class="tR" style="border:0;padding:3px 8px">' + ro[1] + ':</td><td style="border:0;padding:3px 0">' +
           '<input type="text" inputmode="decimal" value="' + esc(ov === undefined ? '' : ov) + '"' +
-          (ro[0] === 'contractDays' ? ' placeholder="default ' + wbBetty.defaults.contractDays + '"' : ro[0] === 'brokerage' ? ' placeholder="default ' + wbBetty.defaults.brokerage + '"' : '') +
+          (ro[0] === 'contractDays' ? ' placeholder="' + (wbNz(wbBetty.defaults.contractDays) ? 'default ' + wbBetty.defaults.contractDays : 'blank = none') + '"' : ro[0] === 'brokerage' ? ' placeholder="' + (wbNz(wbBetty.defaults.brokerage) ? 'default ' + wbBetty.defaults.brokerage : 'blank = none') + '"' : '') +
           ' oninput="wbRatesSetField(\'' + ro[0] + '\', this.value)" style="' + inp + '"></td></tr>';
       }
       h += '</table></div></div>';
@@ -5277,7 +5299,12 @@
     // file" then writes a NEW file with one Current row per ICP built
     // entirely from what is on screen. A loaded analysis ID is carried
     // (Betty updates that analysis); with none, Betty creates one.
-    var wbBetty = { loaded: {}, fileName: '', retailers: [], defaults: { contractDays: 1095, brokerage: 5.75 }, retailer: {}, defRetailer: '' };
+    var wbBetty = { loaded: {}, fileName: '', loadedAt: '', restored: false, retailers: [], defaults: { contractDays: 730, brokerage: null }, retailer: {}, defRetailer: '' };
+    /** What Betty holds for an ICP (loaded in step 1), whatever the ICP's spelling. */
+    function wbBettyLd(icp) {
+      var k = String(icp || '').trim().toUpperCase();
+      return wbBetty.loaded[k] || wbBetty.loaded[icp] || null;
+    }
 
     function wbBettyListsLoad() {
       google.script.run
@@ -5302,7 +5329,7 @@
     /** The retailer an ICP's Current row will carry: the operator's pick, what Betty had, the session's pick, or a name match. */
     function wbBettyRetailerFor(icp) {
       if (wbBetty.retailer[icp]) return wbBetty.retailer[icp];
-      var ld = wbBetty.loaded[icp];
+      var ld = wbBettyLd(icp);
       if (ld && ld.retailer) return ld.retailer;
       if (wbBetty.defRetailer) return wbBetty.defRetailer;
       var rows = wbLastRows || [];
@@ -5312,6 +5339,8 @@
     function wbBettySetRetailer(icp, val) {
       wbBetty.retailer[icp] = val;
       if (val) wbBetty.defRetailer = val; // the next ICPs without one of their own follow
+      wbRatesDraftSave();
+      wbBettyPlanRender();
     }
 
     function wbBettyLoadFile(btn) {
@@ -5336,8 +5365,11 @@
 
     /** Preload what Betty holds into the rates of each ICP in the session - never over something already typed. */
     function wbBettyLoaded(res) {
-      wbBetty.loaded = res.rows || {};
+      wbBetty.loaded = {};
+      for (var lk in (res.rows || {})) if (Object.prototype.hasOwnProperty.call(res.rows, lk)) wbBetty.loaded[String(lk).trim().toUpperCase()] = res.rows[lk];
       wbBetty.fileName = res.fileName || '';
+      wbBetty.loadedAt = new Date().toLocaleString();
+      wbBetty.restored = false;
       if (res.retailers && res.retailers.length) wbBetty.retailers = res.retailers;
       if (res.meters && res.meters.length) BETTY_METERS = res.meters;
       if (res.defaults) wbBetty.defaults = res.defaults;
@@ -5345,7 +5377,7 @@
       var model = wbRatesModel();
       var hit = 0, kept = 0, miss = [];
       for (var i = 0; i < model.length; i++) {
-        var icp = model[i].icp, ld = wbBetty.loaded[icp];
+        var icp = model[i].icp, ld = wbBettyLd(icp);
         if (!ld) { miss.push(icp); continue; }
         hit++;
         var k;
@@ -5368,6 +5400,7 @@
         for (k in ld.fields) if (Object.prototype.hasOwnProperty.call(ld.fields, k) && ld.fields[k]) rec.fields[k] = String(ld.fields[k]);
         wbRates[icp] = rec;
       }
+      wbRatesDraftSave();
       wbRatesStatus();
       wbBandsRender(true);
       var h = '<p class="ok">Loaded ' + esc(wbBetty.fileName) + ': ' + hit + ' of ' + model.length + ' ICP(s) in this session have a Current analysis in Betty.</p>';
@@ -5379,6 +5412,51 @@
       document.getElementById('wbBettyFillArea').innerHTML = h;
     }
 
+    /**
+     * v2.24: the plan - one line per ICP saying what the Current row
+     * will do in Betty (update #id, or NEW with no analysis ID), shown
+     * before anything is written. Rows without an ID are written only
+     * when the operator states those ICPs have no Current in Betty.
+     */
+    function wbBettyPlanRender() {
+      var area = document.getElementById('wbBettyPlan'), nrow = document.getElementById('wbBettyNewRow');
+      if (!area) return;
+      if (!wbAnalysedIds || !wbAnalysedIds.length || wbProspect) { area.innerHTML = ''; if (nrow) nrow.style.display = 'none'; return; }
+      wbRatesDraftLoad();
+      var built = wbBettyRows();
+      if (!built.rows.length) { area.innerHTML = ''; if (nrow) nrow.style.display = 'none'; return; }
+      var h = '<div class="tblwrap"><table><thead><tr><th class="tL">ICP</th><th class="tL">In Betty</th><th class="tL">Retailer</th><th class="tL">Rates</th></tr></thead><tbody>';
+      var fresh = [];
+      for (var i = 0; i < built.rows.length; i++) {
+        var r = built.rows[i];
+        if (!r.analysisId) fresh.push(r.icp);
+        h += '<tr><td class="tL mono">' + esc(r.icp) + '</td>' +
+          '<td class="tL">' + (r.analysisId ? 'update Current analysis #' + esc(r.analysisId) + ' <span class="muted" style="font-size:11px">(from ' + esc(wbBetty.fileName) + ')</span>'
+            : '<span class="pill flag">NEW</span> <span class="muted" style="font-size:11px">no analysis ID — Betty will create a Current analysis</span>') + '</td>' +
+          '<td class="tL">' + (r.retailer ? esc(r.retailer) : '<span class="error">none</span>') + '</td>' +
+          '<td class="tL muted" style="font-size:12px">' + (wbRates[r.icp] ? 'saved' : 'none') + '</td></tr>';
+      }
+      h += '</tbody></table></div>';
+      if (wbBetty.fileName) h += '<p class="muted" style="font-size:12px;margin:4px 0">Loaded from ' + esc(wbBetty.fileName) + (wbBetty.loadedAt ? ' at ' + esc(wbBetty.loadedAt) : '') +
+        (wbBetty.restored ? ' (kept from before the page was reloaded)' : '') + '.</p>';
+      if (fresh.length) {
+        h += '<p class="flag" style="font-size:12px;margin:4px 0">⚠ ' + fresh.length + ' ICP(s) would go out with NO analysis ID' +
+          (wbBetty.fileName ? ' — they were not in the loaded template.' : ' — nothing has been loaded from Betty this session.') +
+          ' If any of them already has a Current analysis, Betty rejects the whole file ("Duplicate Current status"). Load the Bulk Import Template in step 1 so Walter carries the IDs.</p>';
+      }
+      area.innerHTML = h;
+      if (nrow) {
+        nrow.style.display = fresh.length ? '' : 'none';
+        var t = document.getElementById('wbBettyNewTxt');
+        if (t) t.textContent = 'I have checked in Betty: ' + (fresh.length === 1 ? 'this ICP has' : 'these ' + fresh.length + ' ICPs have') + ' no Current analysis, so Betty should create ' + (fresh.length === 1 ? 'one' : 'them');
+      }
+    }
+    function wbBettyFresh(rows) {
+      var out = [];
+      for (var i = 0; i < rows.length; i++) if (!rows[i].analysisId) out.push(rows[i].icp);
+      return out;
+    }
+
     /** One Current row per Betty-customer ICP, built entirely from the screen. */
     function wbBettyRows() {
       var model = wbIcpModel();
@@ -5387,7 +5465,7 @@
       for (var i = 0; i < model.length; i++) {
         var e = model[i];
         if (!e.custId) continue;
-        var ld = wbBetty.loaded[e.icp] || null;
+        var ld = wbBettyLd(e.icp);
         var p = pay[e.icp] || { unit: {}, fields: {} };
         var meters = [];
         for (var m = 0; m < e.meters.length; m++) {
@@ -5396,9 +5474,9 @@
         }
         var fields = {}, k;
         for (k in p.fields) if (Object.prototype.hasOwnProperty.call(p.fields, k)) fields[k] = p.fields[k];
-        // Defaults apply only where nothing was loaded from Betty or typed.
-        if (fields.contractDays === undefined) fields.contractDays = wbBetty.defaults.contractDays;
-        if (fields.brokerage === undefined) fields.brokerage = wbBetty.defaults.brokerage;
+        // Defaults apply only where nothing was loaded from Betty or typed; a blank default stays blank.
+        if (fields.contractDays === undefined && wbNz(wbBetty.defaults.contractDays)) fields.contractDays = wbBetty.defaults.contractDays;
+        if (fields.brokerage === undefined && wbNz(wbBetty.defaults.brokerage)) fields.brokerage = wbBetty.defaults.brokerage;
         var fuel = 'ELEC', name = '';
         for (var r = 0; r < (wbLastRows || []).length; r++) {
           if (wbLastRows[r].icp === e.icp) { fuel = wbLastRows[r].lookup.fuel || fuel; name = wbLastRows[r].lookup.registeredName || ''; break; }
@@ -5421,6 +5499,14 @@
       if (built.problems.length) {
         area.innerHTML = '<p class="error">Not written — fix these first (Betty rejects a whole file over one bad row):</p><ul>' +
           built.problems.map(function (p) { return '<li class="error">' + esc(p) + '</li>'; }).join('') + '</ul>';
+        return;
+      }
+      var fresh = wbBettyFresh(built.rows), okBox = document.getElementById('wbBettyNewOk');
+      if (fresh.length && !(okBox && okBox.checked)) {
+        wbBettyPlanRender();
+        area.innerHTML = '<p class="error">Not written — ' + fresh.length + ' ICP(s) have no analysis ID: <span class="mono">' + fresh.map(esc).join(', ') + '</span>.</p>' +
+          '<p class="error" style="font-size:12px">Betty rejects the whole file if any of them already has a Current analysis. Either load the Bulk Import Template from Betty (step 1) so Walter carries their IDs, ' +
+          'or tick the box above to state that you have checked and they have none.</p>';
         return;
       }
       var upd = 0, cre = 0;
@@ -5462,7 +5548,7 @@
       h += '<div class="tblwrap"><table><thead><tr><th class="tL">ICP</th><th class="tL">Analysis</th><th class="tL">Retailer</th>' +
         '<th class="tL">Now in the file</th><th class="tL">Was in Betty</th><th class="tL">Other changes</th></tr></thead><tbody>';
       for (var i = 0; i < rows.length; i++) {
-        var r = rows[i], ld = wbBetty.loaded[r.icp];
+        var r = rows[i], ld = wbBettyLd(r.icp);
         var ch = [];
         if (ld) {
           for (var c = 0; c < RATE_CHARGES.length + RATE_OTHER.length; c++) {
@@ -5475,7 +5561,7 @@
         var manual = false, est = false;
         for (var m = 0; m < r.meters.length; m++) { if (r.meters[m].manual) manual = true; if (r.meters[m].est) est = true; }
         h += '<tr><td class="tL mono">' + esc(r.icp) + '</td>' +
-          '<td class="tL">' + (r.analysisId ? 'update #' + esc(r.analysisId) : '<span class="pill flag">new</span>') + '</td>' +
+          '<td class="tL">' + (r.analysisId ? 'update #' + esc(r.analysisId) : '<span class="pill flag">NEW</span>') + '</td>' +
           '<td class="tL">' + esc(r.retailer) + '</td>' +
           '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + (est ? ' <span class="flag">(estimated from bill)</span>' : '') + '</td>' +
           '<td class="tL muted" style="font-size:12px">' + (ld ? esc(wbBettyMetersTxt(ld.meters) || 'no meters') : '—') + '</td>' +
@@ -5810,7 +5896,7 @@
     /** Give every Workbench section a collapse arrow, like the Betty section (v2.18). */
     // v2.21: one arrow for every section (the same dark triangle the
     // ICP blocks use), and only ICP meters and Current customer start open.
-    var WB_OPEN_BY_DEFAULT = { wbBandCard: true, wbCurCard: true };
+    var WB_OPEN_BY_DEFAULT = { wbBandCard: true };
     function wbCardCollapse(card, on) {
       if (!card) return;
       var cls = String(card.className || '').replace(/(^| )collapsed( |$)/g, ' ').replace(/\s+/g, ' ').replace(/^ | $/g, '');
@@ -5833,7 +5919,10 @@
           wbCardCollapse(cd, !/(^| )collapsed( |$)/.test(cd.className));
         }; })(card);
         head.insertBefore(btn, head.firstChild);
-        wbCardCollapse(card, !WB_OPEN_BY_DEFAULT[card.id]);
+        // v2.24: only ICP meters starts open; Current customer opens itself
+        // while the session has no files, since that is where a session starts.
+        var emptySession = typeof wbSession === 'undefined' || !wbSession || !wbSession.length;
+        wbCardCollapse(card, !(WB_OPEN_BY_DEFAULT[card.id] || (card.id === 'wbCurCard' && emptySession)));
       }
     }
     try { initCollapsers(); } catch (e) {}

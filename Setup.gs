@@ -25,8 +25,8 @@ const CDP_CONFIG_KEYS = [
   ['format_report_email',      'peter@theutilitycompany.net', 'Unknown-format files reported from the Workbench are emailed here'],
   ['betty_output_folder_id',   '', 'Optional - Drive folder for filled Betty templates; blank => a "Betty files" subfolder of the output folder'],
   ['betty_file_viewers',       '', 'Email addresses (comma separated) that every filled Betty template is shared with - add operators on personal accounts'],
-  ['rates_default_contract_days', '1095', 'Enter rates: contract length (days) used when nothing was loaded from Betty or typed'],
-  ['rates_default_brokerage',     '5.75', 'Enter rates: brokerage fee (per cent, as Betty holds it) used when nothing was loaded or typed'],
+  ['rates_default_contract_days', '730', 'Enter rates: contract length (days) used when nothing was loaded from Betty or typed'],
+  ['rates_default_brokerage',     '', 'Enter rates: brokerage fee (per cent, as Betty holds it) used when nothing was loaded or typed - blank = no default, the cell goes to Betty empty'],
   ['bulk_quote_email',         'peter@theutilitycompany.net', 'Bulk pricing export files are emailed here (interim, until sent to retailers directly)'],
 ];
 
