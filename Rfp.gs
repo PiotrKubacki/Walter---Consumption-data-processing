@@ -770,3 +770,81 @@ function loadEaDetails_() {
   }
   return map;
 }
+
+// ---------------- Customer list for Rita (v2.26) ----------------
+// One bulk quote (Adonis / Octopus) comes back as a file for Betty;
+// Rita needs the customers it covers. Built from every OPEN row in
+// the RFP queue, three columns (Customer ID, trading name, registered
+// name), the analyst looked up in Betty Customers (Imports), sorted by
+// analyst on screen and copied as text - no file, no log, for now.
+
+/** Finds the analyst column in Betty Customers (Imports): Config betty_analyst_header, else a few usual names. */
+function rfpAnalystLookup_() {
+  const cust = cdpLoadLookups_().customers;
+  const want = String(getConfig_().betty_analyst_header || '').trim();
+  const candidates = want ? [want] : ['Analyst', 'Analyst name', 'Account manager', 'Account Manager', 'Consultant', 'Sales rep', 'Owner'];
+  const keys = Object.keys(cust.headerMap);
+  let header = '';
+  for (const c of candidates) {
+    const hit = keys.filter(k => k.toLowerCase() === c.toLowerCase())[0];
+    if (hit) { header = hit; break; }
+  }
+  const col = header ? cust.headerMap[header] : -1;
+  return {
+    header: header, headers: keys,
+    get: (id) => {
+      const row = cust.index[String(id || '').trim()];
+      if (!row) return null;
+      return {
+        analyst: col >= 0 ? String(row[col] || '').trim() : '',
+        registeredName: String(row[cust.headerMap['Registered name']] || '').trim(),
+        tradingName: String(row[cust.headerMap['Trading name']] || '').trim(),
+      };
+    },
+  };
+}
+
+function apiRfpCustomerList() {
+  rfpEnsureSetup_();
+  const sheet = rfpSheet_(RFP_QUEUE_TAB);
+  const by = {};
+  const order = [];
+  if (sheet.getLastRow() > 1) {
+    const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 13).getValues();
+    for (const r of vals) {
+      if (String(r[2]).trim().toUpperCase() !== 'OPEN') continue;
+      const id = String(r[5]).trim();
+      const name = String(r[6]).trim();
+      const trading = String(r[7]).trim();
+      const prospect = !id || id === RFP_PROSPECT_ID;
+      const key = prospect ? 'P:' + name.toLowerCase() : id;
+      if (!by[key]) {
+        by[key] = { customerId: prospect ? '' : id, registeredName: name, tradingName: trading, prospect: prospect, analyst: '', icps: 0 };
+        order.push(key);
+      }
+      by[key].icps++;
+    }
+  }
+  const look = rfpAnalystLookup_();
+  const rows = [];
+  for (const k of order) {
+    const c = by[k];
+    const info = c.customerId ? look.get(c.customerId) : null;
+    if (info) {
+      c.analyst = info.analyst;
+      if (!c.registeredName) c.registeredName = info.registeredName;
+      if (!c.tradingName) c.tradingName = info.tradingName;
+    }
+    rows.push(c);
+  }
+  return { rows: rows, analystHeader: look.header, headers: look.headers };
+}
+
+/** The "+" on the list: names + analyst for a Customer ID typed by the operator. */
+function apiRfpCustomerLookup(customerId) {
+  const id = String(customerId || '').trim();
+  if (!id) throw new Error('Type a Customer ID first.');
+  const info = rfpAnalystLookup_().get(id);
+  if (!info) throw new Error('Customer ID ' + id + ' is not in Betty Customers (Imports).');
+  return { customerId: id, registeredName: info.registeredName, tradingName: info.tradingName, analyst: info.analyst, prospect: false, icps: 0 };
+}

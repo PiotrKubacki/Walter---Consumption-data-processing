@@ -24,6 +24,7 @@ const CDP_CONFIG_KEYS = [
   ['near_zero_avm_kwh',        '10',  'Informational flag: AVM below this kWh/month => near-zero flag'],
   ['format_report_email',      'peter@theutilitycompany.net', 'Unknown-format files reported from the Workbench are emailed here'],
   ['betty_output_folder_id',   '', 'Optional - Drive folder for filled Betty templates; blank => a "Betty files" subfolder of the output folder'],
+  ['betty_analyst_header',     '', 'Customer list for Rita (RFP tab): header of the analyst column in Betty Customers (Imports); blank = Walter looks for Analyst / Account manager'],
   ['cdf_max_cells',            '5000000', 'CDF parts: start a new part when the next file would take a workbook past this many cells (Google caps a workbook at 10 million; the xlsx export at 50 MB)'],
   ['cdf_max_source_mb',        '30', 'CDF parts: start a new part when the source files in one part would exceed this many MB'],
   ['betty_file_viewers',       '', 'Email addresses (comma separated) that every filled Betty template is shared with - add operators on personal accounts'],
@@ -35,6 +36,11 @@ const CDP_CONFIG_KEYS = [
 const CDP_TABS = [
   { name: 'Config',          headers: ['key', 'value', 'note'] },
   { name: 'Register Map',    headers: ['fuel (ELEC/GAS/ANY)', 'source pattern', 'betty meter type', 'note'] },
+  // RETIRED v2.28 (18 Nov): the Day/Night time profile is gone - the
+  // retailer Band Register (Band Register / Band Seasons / Band Types
+  // tabs) is the only source of network pricing options. The two tabs
+  // below are still created and seeded for older bootstraps; nothing
+  // reads them any more. Delete in a later clean-up.
   { name: 'Time Boundaries', headers: ['network', 'register config', 'window', 'start (HH:mm)', 'end (HH:mm)', 'source / date checked'] },
   { name: 'Seasons',         headers: ['month (1-12)', 'season'] },
   { name: 'Run Log',         headers: ['timestamp', 'operator', 'files', 'icp_count', 'reliability_summary', 'output_link'] },

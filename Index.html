@@ -32,6 +32,9 @@
     /* TODO: paste the TUC owl logo <img src="data:image/png;base64,..."> here */
     header h1 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; margin: 0; display: inline-flex; align-items: center; gap: 8px; }
     main { margin: 24px 18px; }
+    /* v2.27: the header (title, tabs with the customer block, progress strip) stays in view while scrolling */
+    #topbar { position: sticky; top: 0; z-index: 40; }
+    .card2, .card { scroll-margin-top: 130px; }
     .card {
       background: #fff; border: 1px solid var(--tuc-line); border-radius: 10px;
       padding: 6px 20px 18px; margin-bottom: 18px;
@@ -106,7 +109,7 @@
     #wbSessName { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #wbSessionCard .sessline { font-size: 11px; color: #D6E6E8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #wbMergeState:not(:empty)::before { content: ' · '; }
-    #wbSessionCard button { min-width: 0; height: 38px; padding: 0 14px; font-size: 13px; flex-shrink: 0; }
+    #wbSessionCard button, #wbSessionCard a.ghostbtn { width: 148px; min-width: 148px; box-sizing: border-box; height: 38px; padding: 0 6px; font-size: 13px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
     #wbAnalyseBtn { background: #fff; color: var(--tuc-accent-dark); }
     #wbSessionCard a.ghostbtn { background: transparent; color: #fff; border-color: rgba(255,255,255,.6); flex-shrink: 0; }
     #wbSessionCard a.ghostbtn:hover { background: rgba(255,255,255,.12); color: #fff; }
@@ -175,6 +178,7 @@
   </style>
 </head>
 <body>
+  <div id="topbar">
   <header>
     <h1><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAPUElEQVR42u2be5BcdZXHP+f3u/f2a3omkxnyYCaBkAkEEkQEAcsCAoI8LMNDA7siG4VdKdi13HW3dLFEV1H+UthaV2VdZY21KiSAlIAPHkGiKwRZIFkwIYQQ8pzJZGaSmZ7uvq/f2T9upxMkEjKTCAZuVVd11e3u+zvf3znfc873/FoA9ItfNPKlL7m7L57dUQz8T6nI/NTpLKDIoXFVrZEXRPWnA9Xw3664b832XTbL4gXYy5aQ3v2hOe8vWfutwDMzw9SROkUPEesFsEYIrCFM3Lowia+5+O5VDy1egBWA+xfMPde35ucgNkzTFBUjgnAIXaoooi5vrXWqSZjE58+/a9XD8rMFPYc5Ck8G1kwP0zQRxOMQvhRNctZ6Ueo2OC88yTjNX1f0zfQwTtND3fgsHMQL4zQt+ma6SYLrjAoXxQ4VEeEtcomIxA5V5WJPVI5MnR5iEb9vN0idCipHGIR2p7qLLN8yEDhVxDDR8Ba/3gbgbQDeBuBtAN4G4K18/clLXxEBkUZ30qxLsipEFVU9NAEQERRIowiXpogIYjIHVOdQdRjrYYKggYUeIgA0+uokDBFraDm8i/aeHgqdh5GfMAGA+o4d1Lb3M7R2LZXerWia4uVymYccZCC8g2u7wbmENIrpmD2baWfOo3XaEXjFIujuXc7CApJqleGNG9j46CMMrF6NCXyM8VB1f34AiDGkUYRXKHDMJQuY/K6TECOkYZ14ZOfev2M92ntmMeGoHnqfepIX77uXpF7DBgHq3J8PACJCGscEra3M+ciVtM+cQVSpgPGRXCvGL4ENEJvLOCANIY3QeJQkrICL6Tr1FIqdnTz3w/8mqoxgPe+g8ILct+B4PdAxr6nD5nOccNXVlKcfSUIRW5qE5NvAK4Cxe2k+FVwKSRWtj5BW+vCkysjLL7HitttIozAjzQMMwgH2gIzZk2qFoy++hLbjTiMxE/GK7Y3U57JXmuw2mj06cRHwW5CgFa98OK42SNucqcy8oJdVd/wIv6WMpm6P772JABBjAYiGBug+dz7d86/F2RY8AXXpHrYKKuaVhjduZolSQdNscaUOVDvonn8tw32DbHrwpwQTOhqpM32zACCAEo8OIyL0fPTvOeLiq0gxxPVRUude4bXWCoHJvEEbhopYMIYwVdJU94wmrDH4+RLHXPMV8pNmsG7xt1EUr1BqPvsNBGCXIY6ucz/MpHefRcdJZ6JxRFSvsWlrH4FvyQU+IoJzShRFTEw2kpOoyexiDKEGDHrTCIIAYwRVJYxiojile+oUgnyeGZdfR2vPHLY9sZTeX9+PiMlQesMAEHBxzLHXfIHu8/8SF4UktVEQwfcsR5RDnl/7Ek+sWMvAjhG6p3by3hN7aOsMqNYcu3RY5xxtRRjYtpalT69lU+8Ane2tnPqOmRw9awbGs7g0I8jOk+cx6T3n0Xb0Caz+zo2YIDcuYvTGHvMZ2U1+7wV0nbOAaOfArhsYYzBiuOXWRSy6436CIEdrqcDgzhFyQcCnr76IKy46ndFqCECpmOOH9yzj5u/dQxjFTGwrMzxa45YoYuHlH+CfPv8VnGZAJdUKUKH73MsYXPFb+n77S7xiy5jrBG886c4lCROOPbHZ3Ij1cM5RKOS58cs3cev37+Ef/voSPvT+Uyi3FNg2sJPv3P4Q13/9R+QCnw9fcBoAS37+ONd//Udc/oH38onLz+GwjlZGKjXu/OVybvneT3C5Dm644XoqlVGMsWiagAgTjn0XW5fdP64wGDsACmKEcKAfRTNAnKNUKvH448v5z9sWceNnruZvLjuDynAVRZk5bTLf+MJVWCPcdOtPOPs9c1FVbvr2XVwx/3Ru/txCqrWQ1DlK+Rz/fN0lTGxv58v/uojz3v8+3n3KKYyOjjYaKyUcGkCMjIsHx6EHKGI8Rl5cgYY1xPioc3iexwMPLuWYmdO58uJ5DA3sIHWOai0kjhMq1TqfWnghgW9Z+Jl/Z+Fnv0ku5/PJv7qAymidOE6bIAxt38mVl5zNrKO6eeChR/A8D3Uue1ZYZWTt04jxxpUJxg6AKuIHTDl+Njq4Gk3qiPVRYOvWPg7vLENao5DP8+P7fsN5V32V5SvXEviWUjFPuVRgRvckZnRPoq2lSKmQI/Atj694gfM+/lVuv/9/KBRyGFfj8M4yW7b2opA9I6mjg88z+fhjEC94Y0jQpSl+oUDrjKNId25Cd/ahuTa0VqBkRlk3MIxLHcYYqrWQ0VpIvR5hjaVWj+jdvoPPfOIi1Cn/uPy57N6EMrV69tlaPQKEJHH0DQwzZfIo2vcMbqSKhDtQUlqP7MEvFkjq9aa28CfzAGmQYFJr7HwS4ka2ko70cuZJR/PCS1tZvuIF8oUcCy+dx4Pfv4EzT52Dzfnc98j/ogpdHUWmTsyTOuVnjz6NzXmcddpcHlx0A1dedAb5Yo7Hn1nDmvW9nHny0aTDW3AjW9AkQqxHWq/jkoTxjDXtR+ZM/pcxAWAtSS1rVScd/w5UwXg+UeKYdeQUfr92E7f++AGO6prEcbO6aW9tQVW5bfHDfPmbd3LtR87j/DPeiU+E2ICv3XY/LfkcJx43g44JZQLf8otfPcUnv3IbZ5x8LH935QXUE8X6OcRa/EKRl5c+yI61a7HB2MNg3N2gOse0089gyknvzlwqn6NQLjMyUuXTNy3i0d+t4sRjj6C9tcTmbUOsXreZhZfO4/PXXkqSKgPbNtPa1s4tP3iQ/7pzKbNndtE1aSKDOys8s3o9Z55yHDdfv5ByuUhteAQXZrVD71NPsnHZo2N2/QPaDqdRiF9qIa3XmX7W2cw4/0II6yCGXz3xHEsfe5ahnRW6pnRw/hnv5OS5M4niBMQwuG0zuXyRjs7DeGLFC/xi2dNs7hti4oQWzjptDvNOmZOV20Gel35+Hxsf/RU2nyeuVLC53JtDDxDJancXx+QmtHPS334Smy8ASksxn/GFOqwxJEnKaC1ERKjsHKReq9LeOQXjeZTyAZ5nSZ3DiEFVqVTrgJDWazz1rW9QHxrC+H7zmW+KdnjXQmwuR22gn74VzzB93tlElRGGK9Vm46AoApiG2xrr0d45Gc/3m8bqLpm88Q51BOUyW5Y/RrW/H79UaqjIB0YTOKCDEVXFBjk2/WYZ1f5teEGAiGS9gclaW9PQDQBaWifg+UHTGGNs4zMZSCKKFwRUt/Wx6dfLsLncAZfFDuxkSBXjedQHB1lz95JMEjcmU3V3HT9yUZOxndPd5K2a3QOQTAkWY1GENXfdSX1oEON5B1wSO+CjMXUOr1Bg8PnnWbX4DsRYjBGweWzXaUh5GlgvU31c1AAkBeshrdOwXaeBzWceYAyrl9zO4Jrn8QqFg6IMHxRVeBcIvb9bjotDjrn0w/hlhxvZjEychTHHoFEFknpjw/MQZC2t7lyP5znCasTzdy2hf+WKZtz/Wc0F1Dn8Uon+lSsZ3drLEeecw6S5c6G2DZfrRIoTM4UY0LSODvQi4XY0rrJl5bO8/PBD1Ab6D6rxB0cW34tw4uIIVaWlq5tZH/wgrdOmk0ZRU0jVNMHmcgxv3MAL997LyOaNGDEYPzioxh8UDmjqpI2Xpln7ar0CQ6tepPfJZzF+HowHYrOX8TF+nt7fPcvQqhfxvGLW8qbuFb/15g+BxiI1AVwGrwkUkwNbTPEPF0bDX1MbOZ0gNwFNsrLWeHmqw31UwmWU5wpEKWlVcaHiImn+VvMcq77ZAGjULRpn7/12JZiU4ncqtkUQLwQbUjrsBDp6/oJ85+mIAq4xIDEeBYGjP2oYWHs7o/0rIM2hSY60osQDQtRniYcy9Ue8A6KIHyAOkMaOC+SmOApHpQSHKeIrqEHTGD9/OJOPu4bWrvfh+WVcWm2OQprqEmBskSQeYXjzw/T9/j+I61sQ64M4NBaifqG2zhL2mt1A6BvpAZLtuj9RaZmTEEzWJiAaCYghjeu0Tj2Wjp7LSerbSeKd2SDkD0ZjCo17ho6eyxneuoz6y+uwfkP2FshNVXJTEsI+YfQ5j3hQEH98IHjjNb4wM6X8jhTxGiHwChJ0GOMTjqwnrvYixs+GGX9IGs2mygBCXO0lHFmPMdnuN1Nr4/dzU5SgM2ZkhaW2zo4LBDNm4yMozk5pPTndvbg/ZGvN4juubSeNKw0Bc89aIX3VjE+MRxpXiGvbs0yhr84uu4BoPTmlODtFo7FnCTNW4/MzUsrHNx6uf2wBiojFJZXMA+SVtXy+2Ea+2PZKoVU84movLqk0QkVfk3TLx6fkZ4wdhP0HIAGvXSmfkGZDXN3Hg8Xg4ipRdUuW28kaIGs9Hnvguzz2wHexNjv8oChifKLqFlxcBTH7zjwplE9I8doVkoMNQDYAouW4BJNr5HrZ11cEVUdU2dTcTRFwLmXpPV/nkXtuxjm3h7CpRJVNWTe47x8HByaXrUl1/73A2990F0xyBFN1d8y/vnqYsLKhaZSqYj2fKz71fUAx1pLEaROssLLhtXd/L2QcTFWCSY6o3+xXety/LOAgP80htnGG4XUAkLm1JapsRF3UODYnJHHEtJ53ARBH9aYHqIuIKhsbWsDrtEKzijo/zRFt2y+nVgNUXpes7sDkMw9gfw5n7CK2+naS+mBzlGX2UHOz99moLakPEte3v4ow963MZmtrhua+Yl9A0WGD6sueEUVf42vS0CzaHKaQHfN5/bGWeUASDpKEA03DRAz3Lrqee3/wuWy3G0Al4QBJONjoFPX1h4EDU8jWuE/vVJw1oqKy3qjKnb4R0X35mwO/TcdWfoptZILezFcbofHS6sdYv+q3u3daLFG1t5EB7H4KEGB88Ft1nx6gquobEZze7VljvzkaJVfnfdtdf60/ThqwxTFOXxBUU8KRDYjY7FywGD7+2TtopgV1iFjCkQ2oNghx/yVJbElfM7cpmuR9641GbqPmom+ZC5c8068qH1PVOG+tp2j6x7zBFMZRd6sjqmxsVHMGl8SUWjsptXbikjhjfSH7zFiPxmpjjXsHRxVN89Z6qhobkY/N//Ga7WbxAuz8u/7v4dEkviBxuq7ke9a3exk3CoinY1xXRnBRdTMuqTWPzKdJTJrEWWYQwSU1oupmxHiM9a/b4umr4l8A34qUfM86py9W4/jCDyxZuXTxAqy5bAnp4gUL7CV3rXp4sFo/NUrSGxVWKFT3Espj3X7EeMSjvbhkV3xrdmRepJnHXFIlHu0d16GHva1RoarKyihJbxyNolOzf44vsJctIf1/r3Nv0aJnrU4AAAAASUVORK5CYII=" alt="Walter" style="height:26px;border-radius:5px"> <span>I'm Walter · I know what you <s style="opacity:.6">did</s> consumed last summer</span></h1>
     <span style="margin-left:auto;font-size:12px;opacity:.75;text-align:right;line-height:1.35">build <?= (typeof build === 'undefined' ? '?' : build) ?><br><span id="hdrCdfTotals" style="font-size:11px" title="Total storage used by CDF (consumption data) files in the output folder"></span></span>
@@ -200,6 +204,7 @@
     </div>
   </nav>
   <div id="wbProgress" style="display:none"></div>
+  </div>
   <main>
   <div id="tab-workbench">
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
@@ -374,8 +379,10 @@
       <h2>💰 RFP — bulk pricing requests</h2>
       <p>
         <button onclick="rfpLoad(this)">🔄 Refresh</button>
+        <button onclick="rfpClOpen(this)" style="margin-left:16px" title="Every customer with an OPEN row in the queue, sorted by analyst, to paste into Rita">📋 Customer list for Rita</button>
         <button onclick="rfpClearAll(this)" style="margin-left:16px">🧹 <span>Clear all (testing)</span></button>
       </p>
+      <div id="rfpClArea" style="display:none"></div>
       <div id="rfpRedirect"></div>
       <div id="rfpMsg"></div>
       <div id="rfpDraft"></div>
@@ -754,17 +761,7 @@
       var arrs = [lk.flags || [], a.breaches || [], a.flags || []];
       for (var g = 0; g < arrs.length; g++) for (var i = 0; i < arrs[g].length; i++) flagItems.push('<div class="flag">⚠ ' + esc(arrs[g][i]) + '</div>');
       var fl = collapseFlags(flagItems);
-      var profileHtml = '';
-      var tp = a.timeProfile;
-      if (tp) {
-        var ph = '';
-        var sk = Object.keys(tp.seasonal || {});
-        if (sk.length) ph += '<div><b>Seasonal:</b> ' + sk.map(function (s) { return esc(s) + ' ' + (tp.seasonal[s].monthlyAvg === null ? '—' : fmtNum(tp.seasonal[s].monthlyAvg) + ' kWh/mo'); }).join(' · ') + '</div>';
-        var wk = Object.keys(tp.windows || {});
-        if (wk.length) ph += '<div><b>Windows' + (tp.usedDefaultWindows ? ' (DEFAULT)' : '') + ':</b> ' + wk.map(function (w) { return esc(w) + ' ' + tp.windows[w].sharePct + '% (' + (tp.windows[w].monthlyAvg === null ? '—' : fmtNum(tp.windows[w].monthlyAvg) + ' kWh/mo') + ')'; }).join(' · ') + '</div>';
-        if (tp.weekday.kWhPerDay !== null || tp.weekend.kWhPerDay !== null) ph += '<div><b>Weekday/Weekend:</b> ' + tp.weekday.kWhPerDay + ' / ' + tp.weekend.kWhPerDay + ' kWh/day</div>';
-        if (ph) profileHtml = '<details><summary class="muted">⚡ time profile</summary><div style="font-size:12px;padding:4px 0">' + ph + '</div></details>';
-      }
+      // v2.28: the Day/Night "time profile" is retired - the Band Register is the only source of pricing options.
       return '<tr>' +
         '<td style="font-size:20px" title="' + esc(a.grade) + '">' + a.gradeEmoji + '</td>' +
         '<td class="mono tL">' + copyableIcp(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
@@ -774,7 +771,7 @@
         '<td class="mono tL">' + esc(a.windowFrom) + '<br>' + esc(a.windowTo) + '</td>' +
         '<td class="tR">' + fmtNum(Math.round(a.daysCovered)) + ' / ' + fmtNum(Math.round(a.windowDays)) + ' d' +
           (a.estimateShare > 0 ? '<div class="muted">est ' + Math.round(a.estimateShare * 100) + '%</div>' : '') + '</td>' +
-        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + '</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
         '<td class="tL flagcell">' + (fl || '<span class="ok">clean</span>') + '</td>' +
         '<td>' + r.sources.map(inspectIconForName).join(' ') + '</td>' +
@@ -1467,16 +1464,7 @@
 
     function wbCalcRow(r) {
       var a = r.analysis;
-      var profileHtml = '';
-      var tp = a.timeProfile;
-      if (tp) {
-        var ph = '';
-        var sk = Object.keys(tp.seasonal || {});
-        if (sk.length) ph += '<div><b>Seasonal:</b> ' + sk.map(function (s) { return esc(s) + ' ' + (tp.seasonal[s].monthlyAvg === null ? '—' : fmtNum(tp.seasonal[s].monthlyAvg) + ' kWh/mo'); }).join(' · ') + '</div>';
-        var wk = Object.keys(tp.windows || {});
-        if (wk.length) ph += '<div><b>Windows' + (tp.usedDefaultWindows ? ' (DEFAULT)' : '') + ':</b> ' + wk.map(function (w) { return esc(w) + ' ' + tp.windows[w].sharePct + '%'; }).join(' · ') + '</div>';
-        if (ph) profileHtml = '<details><summary class="muted">⚡ profile</summary><div style="font-size:12px">' + ph + '</div></details>';
-      }
+      // v2.28: the Day/Night "time profile" is retired - the Band Register is the only source of pricing options.
       var flagItems = [];
       // "Not found in the Betty lookups" is expected on every row of a
       // prospect session, so it is not repeated there as a flag.
@@ -1496,7 +1484,7 @@
         '<td class="muted tL filecell" style="font-size:12px">' + r.sources.map(esc).join('<br>') + '</td>' +
         '<td><span class="pill">' + esc(a.layer) + '</span></td>' +
         '<td class="tR">' + fmtNum(Math.round(a.daysCovered)) + ' / ' + fmtNum(Math.round(a.windowDays)) + ' d</td>' +
-        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + profileHtml + '</td>' +
+        '<td class="tR" style="font-weight:600">' + copyableNum(a.avm) + '</td>' +
         '<td class="tR" style="font-weight:600">' + copyableNum(a.annualKwh) + '</td>' +
         '<td class="tL flagcell">' + (collapseFlags(flagItems) || '<span class="ok">clean</span>') + '</td>' +
         '</tr>';
@@ -3042,6 +3030,120 @@
       area.innerHTML = nav + body;
     }
 
+    // ---- Customer list for Rita (v2.26) ----
+    // Every customer with an OPEN row in the queue: Customer ID, trading
+    // name, registered name; sorted by analyst (from Betty Customers);
+    // ✕ takes a line out, + adds one; copied as text for Rita.
+    var rfpCl = null; // { rows, analystHeader, headers }
+    function rfpClOpen(btn) {
+      var area = document.getElementById('rfpClArea');
+      area.style.display = '';
+      area.innerHTML = '<div class="card2"><span class="muted">Building the customer list…</span></div>';
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) { if (btn) btn.disabled = false; rfpCl = res; rfpClRender(); })
+        .withFailureHandler(function (e) { if (btn) btn.disabled = false; area.innerHTML = '<div class="card2"><span class="error">' + esc(e.message || e) + '</span></div>'; })
+        .apiRfpCustomerList();
+    }
+    function rfpClClose() {
+      var area = document.getElementById('rfpClArea');
+      area.style.display = 'none'; area.innerHTML = '';
+      rfpCl = null;
+    }
+    function rfpClGroupName(r) {
+      if (r.prospect) return 'Prospects (not in Betty)';
+      return r.analyst || 'No analyst found';
+    }
+    /** Rows grouped by analyst, analysts A-Z, prospects and unknowns last; names A-Z inside a group. */
+    function rfpClGroups() {
+      var groups = {}, names = [];
+      for (var i = 0; i < rfpCl.rows.length; i++) {
+        var r = rfpCl.rows[i], g = rfpClGroupName(r);
+        if (!groups[g]) { groups[g] = []; names.push(g); }
+        groups[g].push({ row: r, i: i });
+      }
+      var rank = function (g) { return g === 'No analyst found' ? 1 : g === 'Prospects (not in Betty)' ? 2 : 0; };
+      names.sort(function (a, b) { return rank(a) - rank(b) || a.localeCompare(b); });
+      var out = [];
+      for (var n = 0; n < names.length; n++) {
+        var list = groups[names[n]];
+        list.sort(function (a, b) { return String(a.row.registeredName).localeCompare(String(b.row.registeredName)); });
+        out.push({ name: names[n], rows: list });
+      }
+      return out;
+    }
+    function rfpClText() {
+      var groups = rfpClGroups(), lines = [];
+      for (var g = 0; g < groups.length; g++) {
+        if (g) lines.push('');
+        lines.push(groups[g].name);
+        for (var k = 0; k < groups[g].rows.length; k++) {
+          var r = groups[g].rows[k].row;
+          lines.push((r.customerId || '') + '\t' + (r.tradingName || '') + '\t' + (r.registeredName || ''));
+        }
+      }
+      return lines.join('\n');
+    }
+    function rfpClRender() {
+      var area = document.getElementById('rfpClArea');
+      if (!rfpCl) return;
+      var groups = rfpClGroups();
+      var h = '<div class="card2"><div class="cardhead"><h2>📋 Customer list for Rita</h2>' +
+        '<span class="muted" style="font-size:12px">' + rfpCl.rows.length + ' customer(s) with OPEN rows in the queue</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn-sm" onclick="copyPlain(rfpClText(), this)" title="Copies analyst headings and the three columns, tab-separated, ready for Rita">📋 copy list</button>' +
+        '<button class="btn-sm" onclick="rfpClClose()">close</button></div>';
+      if (!rfpCl.analystHeader) {
+        h += '<p class="flag" style="font-size:12px">⚠ No analyst column found in Betty Customers (Imports) — the columns there are: ' + esc((rfpCl.headers || []).join(', ')) +
+          '. Set Config <span class="mono">betty_analyst_header</span> to the right one and reopen this list.</p>';
+      }
+      h += '<div class="tblwrap"><table><thead><tr><th class="tL">Customer ID</th><th class="tL">Trading name</th><th class="tL">Registered name</th><th></th></tr></thead><tbody>';
+      for (var g = 0; g < groups.length; g++) {
+        h += '<tr><td colspan="4" class="tL" style="background:var(--tuc-warm-bg);font-weight:600">' + esc(groups[g].name) + ' <span class="muted" style="font-weight:400">(' + groups[g].rows.length + ')</span></td></tr>';
+        for (var k = 0; k < groups[g].rows.length; k++) {
+          var r = groups[g].rows[k].row;
+          h += '<tr><td class="tL mono">' + esc(r.customerId || '') + '</td><td class="tL">' + esc(r.tradingName || '') + '</td><td class="tL">' + esc(r.registeredName || '') + '</td>' +
+            '<td><button class="cpy" style="color:var(--bad, #B3261E);padding:0" title="Take this customer off the list" aria-label="Remove" onclick="rfpClRemove(' + groups[g].rows[k].i + ')">' + ICONS.x + '</button></td></tr>';
+        }
+      }
+      h += '</tbody></table></div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px">' +
+        '<b>+</b> <input id="rfpClId" type="text" placeholder="Customer ID" style="width:110px;border:1px solid var(--tuc-line);border-radius:6px;padding:5px 8px">' +
+        '<input id="rfpClTrading" type="text" placeholder="trading name (blank = from Betty)" style="width:220px;border:1px solid var(--tuc-line);border-radius:6px;padding:5px 8px">' +
+        '<input id="rfpClReg" type="text" placeholder="registered name (blank = from Betty)" style="width:240px;border:1px solid var(--tuc-line);border-radius:6px;padding:5px 8px">' +
+        '<button class="btn-sm" onclick="rfpClAdd(this)">add</button><span id="rfpClMsg" class="error"></span></div></div>';
+      area.innerHTML = h;
+    }
+    function rfpClRemove(i) {
+      if (!rfpCl) return;
+      rfpCl.rows.splice(i, 1);
+      rfpClRender();
+    }
+    function rfpClAdd(btn) {
+      if (!rfpCl) return;
+      var id = String(document.getElementById('rfpClId').value || '').trim();
+      var trading = String(document.getElementById('rfpClTrading').value || '').trim();
+      var reg = String(document.getElementById('rfpClReg').value || '').trim();
+      var msg = document.getElementById('rfpClMsg');
+      if (!id && !trading && !reg) { msg.textContent = 'Type a Customer ID (or the names).'; return; }
+      for (var i = 0; i < rfpCl.rows.length; i++) if (id && rfpCl.rows[i].customerId === id) { msg.textContent = 'Customer ' + id + ' is already on the list.'; return; }
+      var push = function (row) { rfpCl.rows.push(row); rfpClRender(); };
+      if (!id) { push({ customerId: '', tradingName: trading, registeredName: reg, prospect: true, analyst: '', icps: 0 }); return; }
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (trading) res.tradingName = trading;
+          if (reg) res.registeredName = reg;
+          push(res);
+        })
+        .withFailureHandler(function (e) {
+          btn.disabled = false;
+          if (trading || reg) { push({ customerId: id, tradingName: trading, registeredName: reg, prospect: false, analyst: '', icps: 0 }); return; }
+          msg.textContent = (e.message || e) + ' — type the names to add it anyway.';
+        })
+        .apiRfpCustomerLookup(id);
+    }
+
     function rfpSmallBtn(onclick, label) {
       return '<button class="btn-sm" onclick="' + onclick + '">' + label + '</button>';
     }
@@ -3591,6 +3693,7 @@
     // re-split at once - the slot matrix is by calendar month.
     var BAND_WINTER_DEFAULT = [false, false, false, true, true, true, true, true, true, false, false, false];
     var wbBandSeasons = {};  // retailer (normalised) -> [12 x bool] from the Register
+    var wbBandTypes = {};    // v2.27: band name (normalised) -> Betty meter type chosen on the Register tab
     var wbSeasonOv = null;   // [12 x bool] chosen for this session, or null
     var wbSeasonEditOpen = false;
 
@@ -3632,6 +3735,7 @@
         .withSuccessHandler(function (res) {
           wbBandReg = (res && res.rows) || [];
           wbBandSeasons = bandSeasonsFromServer(res && res.seasons);
+          wbBandTypes = (res && res.types) || {};
           wbBandRegErr = '';
           wbBandsRender(true);
           if (then) then();
@@ -3808,15 +3912,19 @@
      */
     function bandWeighted(split, rt) {
       var div = 100 * (rt.gst ? BAND_GST : 1);
-      var out = { byBand: {}, daily: null };
+      var out = { byBand: {}, daily: null, bySeason: rt.mode === 'season' };
+      var W = split.winter || BAND_WINTER_DEFAULT;
       for (var b = 0; b < split.bands.length; b++) {
         var band = split.bands[b];
         var col = bandMapCol(rt, band);
-        var res = { col: col, rate: null, missing: [] };
+        // v2.28: rateW / rateS - the winter and summer rates in $/kWh excl
+        // GST, filled when the rate card is by season (then they are simply
+        // the two typed rates), shown beside the all-year weighted figure.
+        var res = { col: col, rate: null, rateW: null, rateS: null, missing: [] };
         if (col >= 0) {
           var num = 0, den = 0, plain = 0, plainN = 0;
           for (var m = 0; m < 12; m++) {
-            var r = bandNum(bandRateAt(rt, m, col, split.winter || BAND_WINTER_DEFAULT));
+            var r = bandNum(bandRateAt(rt, m, col, W));
             if (r !== null) { plain += r; plainN++; }
             var k = split.kwh[band].months[m];
             if (!(k > 0)) continue;
@@ -3825,6 +3933,11 @@
           }
           if (den > 0) res.rate = num / den / div;
           else if (!(split.kwh[band].total > 0) && plainN) res.rate = plain / plainN / div; // no consumption: plain average
+          if (rt.mode === 'season') {
+            var rw = bandNum((rt.season.W || [])[col]), rs = bandNum((rt.season.S || [])[col]);
+            res.rateW = rw === null ? null : rw / div;
+            res.rateS = rs === null ? null : rs / div;
+          }
         }
         out.byBand[band] = res;
       }
@@ -3844,7 +3957,7 @@
       var slots = [];
       for (var b = 0; b < split.bands.length; b++) {
         var band = split.bands[b], k = split.kwh[band];
-        slots.push({ name: band, parts: [band], summer: k.summer, winter: k.winter, total: k.total, rate: w.byBand[band].rate });
+        slots.push({ name: band, parts: [band], summer: k.summer, winter: k.winter, total: k.total, rate: w.byBand[band].rate, rateW: w.byBand[band].rateW, rateS: w.byBand[band].rateS });
       }
       var folds = [];
       var find = function (name) { for (var i = 0; i < slots.length; i++) if (slots[i].name === name) return i; return -1; };
@@ -3854,6 +3967,8 @@
         else if (!(t.total > 0)) t.rate = f.rate;
         else if (f.rate === null || t.rate === null) t.rate = null;
         else t.rate = (f.rate * f.total + t.rate * t.total) / (f.total + t.total);
+        // a folded slot keeps its seasonal rates only when both parts share them
+        if (f.rateW !== t.rateW || f.rateS !== t.rateS) { t.rateW = null; t.rateS = null; }
         t.summer += f.summer; t.winter += f.winter; t.total += f.total;
         t.parts = t.parts.concat(f.parts);
         folds.push({ from: f.name, to: t.name, auto: auto });
@@ -4027,7 +4142,7 @@
         var r = rows[i];
         var e = byIcp[r.icp];
         if (!e) {
-          e = byIcp[r.icp] = { calcTotal: null, billSplit: false, icp: r.icp, custId: (r.lookup && r.lookup.customerId) || '', info: wbBandInfo(r), rows: [], meters: [], notes: [], bands: [], others: [] };
+          e = byIcp[r.icp] = { calcTotal: null, billSplit: false, combined: false, icp: r.icp, custId: (r.lookup && r.lookup.customerId) || '', info: wbBandInfo(r), rows: [], meters: [], notes: [], bands: [], others: [] };
           out.push(e);
         }
         var grade = (r.analysis.gradeEmoji || '') + ' ' + (r.analysis.grade || '');
@@ -4043,7 +4158,7 @@
             var seasonal = nWb > 0 && nWb < 12 && c.split.days > 0;
             var annB = bandAnnual(so.total, c.split.days);
             e.rows.push({ key: r.register + '/' + so.name, src: r.register + ' · ' + so.name, calcType: bettyMeterName(so.name),
-              calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, grade: grade, nW: nWb,
+              calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, rateW: wbNz(so.rateW) ? so.rateW : null, rateS: wbNz(so.rateS) ? so.rateS : null, grade: grade, nW: nWb,
               calcWinter: seasonal ? Math.round(bandAnnual(so.winter, c.split.days) / nWb) : null,
               calcSummer: seasonal ? Math.round(bandAnnual(so.summer, c.split.days) / (12 - nWb)) : null,
               calcAnnual: annB === null ? null : Math.round(annB) });
@@ -4103,8 +4218,8 @@
           en.rows.push({ key: 'x' + st.extra[k].id, src: 'added by hand', calcType: '', calcMonthly: null, rate: null, grade: 'manual', extra: true,
             nW: 0, calcWinter: null, calcSummer: null, calcAnnual: null });
         }
-        for (k = 0; k < en.rows.length; k++) {
-          var row = en.rows[k], ov = st.ov[row.key] || {};
+        var applyOv = function (row) {
+          var ov = st.ov[row.key] || {};
           row.type = ov.type !== undefined ? ov.type : row.calcType;
           row.monthly = ov.monthly !== undefined ? ov.monthly : row.calcMonthly;
           row.winter = ov.winter !== undefined ? ov.winter : row.calcWinter;
@@ -4117,6 +4232,37 @@
           row.manualType = ov.type !== undefined && ov.type !== row.calcType;
           row.manualMonthly = ov.monthly !== undefined && ov.monthly !== row.calcMonthly;
           row.removed = !!ov.removed;
+        };
+        for (k = 0; k < en.rows.length; k++) applyOv(en.rows[k]);
+        // v2.27: "combine into one meter" - the rows still going to Betty
+        // become ONE row carrying their totals (the Trojan Holdings case:
+        // bands say Peak / Off-Peak, the bill says one Uncontrolled rate).
+        if (st.combine) {
+          var parts = [], tm2 = 0, tw2 = 0, ts2 = 0, ta2 = 0, allSeason = true, worst = 'GOOD', worstRank = -1, anyEst = false, anyMan = false, nWc = nWd;
+          for (k = 0; k < en.rows.length; k++) {
+            var pr2 = en.rows[k];
+            if (pr2.removed || !pr2.type || !wbNz(pr2.monthly)) continue;
+            parts.push(pr2);
+            tm2 += pr2.monthly; ta2 += wbNz(pr2.annual) ? pr2.annual : Math.round(pr2.monthly * 12);
+            if (wbNz(pr2.winter) && wbNz(pr2.summer)) { tw2 += pr2.winter; ts2 += pr2.summer; nWc = pr2.nW; } else allSeason = false;
+            var rk2 = WB_GRADE_RANK[pr2.grade] === undefined ? 0 : WB_GRADE_RANK[pr2.grade];
+            if (rk2 > worstRank) { worstRank = rk2; worst = pr2.grade; }
+            if (pr2.est) anyEst = true;
+            if (pr2.manualMonthly || pr2.manualType || pr2.manualSeason) anyMan = true;
+          }
+          if (parts.length) {
+            var srcs = [];
+            for (k = 0; k < parts.length; k++) srcs.push(parts[k].src);
+            var comb = { key: 'combined', src: 'combined: ' + srcs.join(' + '), calcType: 'Anytime', calcMonthly: Math.round(tm2),
+              calcWinter: allSeason ? Math.round(tw2) : null, calcSummer: allSeason ? Math.round(ts2) : null, calcAnnual: Math.round(ta2), nW: nWc,
+              rate: null, grade: worst, combined: true, est: anyEst, manualParts: anyMan };
+            applyOv(comb);
+            en.rows = [comb];
+            en.combined = true;
+          }
+        }
+        for (k = 0; k < en.rows.length; k++) {
+          var row = en.rows[k];
           if (row.removed) continue;
           if (row.warn) en.notes.push(row.src + ': ' + row.warn);
           if (!row.type) { en.notes.push(row.src + ': no Betty meter type picked — it will not be sent to Betty'); continue; }
@@ -4125,15 +4271,90 @@
           for (var m = 0; m < en.meters.length; m++) if (en.meters[m].name === row.type) hit = en.meters[m];
           if (hit) {
             hit.monthly += row.monthly; hit.src += ' + ' + row.src; hit.manual = hit.manual || row.manualMonthly || row.manualType;
-            hit.est = hit.est || !!row.est;
+            hit.est = hit.est || !!row.est; hit.combined = hit.combined || !!row.combined;
             if (hit.rate === null) hit.rate = row.rate;
           } else {
-            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade, est: !!row.est });
+            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade, est: !!row.est, combined: !!row.combined });
           }
         }
         if (en.meters.length > 4) en.notes.push('More than four meters — Betty has four slots; the extra ones will not be written');
       }
       return out;
+    }
+
+    // ---- flags report (v2.27) ----
+    // Everything the ICP blocks show, as one CSV the operator can keep:
+    // a row per ICP x register (grade, coverage, flags, figures) plus the
+    // meter rows going to Betty and the Betty plan. Built in the browser
+    // from what is on screen, downloaded, and a copy saved in CDP Output.
+    function wbCsvCell(v) {
+      var t = v === null || v === undefined ? '' : String(v);
+      return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    }
+    function wbFlagsReportRows() {
+      var rows = wbLastRows || [], model = wbIcpModel();
+      var byIcp = {};
+      for (var i = 0; i < model.length; i++) byIcp[model[i].icp] = model[i];
+      var plan = {};
+      try { var built = wbBettyRows(); for (var p = 0; p < built.rows.length; p++) plan[built.rows[p].icp] = built.rows[p].analysisId ? 'update #' + built.rows[p].analysisId : 'NEW'; } catch (e) {}
+      var out = [['ICP', 'Register', 'Fuel', 'Network', 'Retailer', 'Customer ID', 'File(s)', 'Layer', 'Days covered', 'Window days', 'Grade', 'Lookup flags', 'Breaches', 'Flags', 'AVM kWh/month', 'Annual kWh', 'ICP grade', 'ICP flag count', 'Meter rows to Betty', 'Meter warnings', 'Betty', 'Rates saved']];
+      var seen = {};
+      var icpTxt = function (e, icp) {
+        if (!e) return ['', '', '', '', '', '', ''];
+        var q = wbIcpQuality(icp), mts = [], warns = [];
+        for (var r = 0; r < e.rows.length; r++) {
+          var mr = e.rows[r];
+          if (mr.removed || !mr.type) continue;
+          mts.push(mr.type + ' ' + (wbNz(mr.monthly) ? fmtNum(Math.round(mr.monthly)) : '—') + '/mo' +
+            (wbNz(mr.winter) && wbNz(mr.summer) ? ' (W ' + fmtNum(Math.round(mr.winter)) + ' · S ' + fmtNum(Math.round(mr.summer)) + ')' : '') +
+            (wbNz(mr.annual) ? ' · ' + fmtNum(Math.round(mr.annual)) + '/yr' : '') +
+            (mr.combined ? ' [combined]' : mr.est ? ' [estimated from bill]' : (mr.manualMonthly || mr.manualType || mr.manualSeason) ? ' [manual]' : ''));
+          if (mr.warn) warns.push(mr.type + ': ' + mr.warn);
+        }
+        for (var n = 0; n < e.notes.length; n++) if (warns.indexOf(e.notes[n]) === -1) warns.push(e.notes[n]);
+        return [(e.info && (e.info.network || e.info.networkName)) || '', (e.info && e.info.matched) || '', e.custId || '', q.gradeTxt, q.flags, mts.join(' | '), warns.join(' | ')];
+      };
+      for (var k = 0; k < rows.length; k++) {
+        var r = rows[k], a = r.analysis || {}, e = byIcp[r.icp], x = icpTxt(e, r.icp);
+        seen[r.icp] = true;
+        out.push([r.icp, r.register || '', fuelLabel ? String(fuelLabel(r.lookup)).replace(/<[^>]+>/g, '') : (r.lookup && r.lookup.fuel) || '',
+          x[0], x[1], x[2], (r.sources || []).join(' | '), a.layer || '', wbNz(a.daysCovered) ? Math.round(a.daysCovered) : '', wbNz(a.windowDays) ? Math.round(a.windowDays) : '',
+          a.grade || '', ((r.lookup && r.lookup.flags) || []).join(' | '), (a.breaches || []).join(' | '), (a.flags || []).join(' | '),
+          wbNz(a.avm) ? Math.round(a.avm) : '', wbNz(a.annualKwh) ? Math.round(a.annualKwh) : '', x[3], x[4], x[5], x[6],
+          plan[r.icp] || '', wbRates[r.icp] ? 'yes' : '']);
+      }
+      for (var mi = 0; mi < model.length; mi++) {
+        if (seen[model[mi].icp]) continue; // ICPs added by hand, no file behind them
+        var y = icpTxt(model[mi], model[mi].icp);
+        out.push([model[mi].icp, '', '', y[0], y[1], y[2], 'added by hand', '', '', '', '', '', '', '', '', '', y[3], y[4], y[5], y[6], plan[model[mi].icp] || '', wbRates[model[mi].icp] ? 'yes' : '']);
+      }
+      return out;
+    }
+    function wbFlagsReport(btn) {
+      var meta = wbBuildFinishMeta();
+      var rows = wbFlagsReportRows();
+      if (rows.length < 2) { wbError('Nothing to report yet — analyse the session first.'); return; }
+      var csv = '\ufeff' + rows.map(function (r) { return r.map(wbCsvCell).join(','); }).join('\r\n');
+      var stamp = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      var name = 'FLAGS - ' + (meta ? wbCdfLabel(meta) : 'session') + ' - ' + stamp.getFullYear() + '-' + pad(stamp.getMonth() + 1) + '-' + pad(stamp.getDate()) + ' ' + pad(stamp.getHours()) + pad(stamp.getMinutes()) + '.csv';
+      try {
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 2000);
+      } catch (e) {}
+      if (btn) btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (btn) btn.disabled = false;
+          document.getElementById('wbWarn').innerHTML = '<p class="ok">Flags report downloaded (' + (rows.length - 1) + ' row(s)) and saved in CDP Output: <a href="' + esc(res.url) + '" target="_blank">' + esc(res.name) + '</a></p>';
+        })
+        .withFailureHandler(function (e) {
+          if (btn) btn.disabled = false;
+          document.getElementById('wbWarn').innerHTML = '<p class="flag">Flags report downloaded (' + (rows.length - 1) + ' row(s)); the copy for CDP Output could not be saved: ' + esc(e.message || e) + '</p>';
+        })
+        .apiWbSaveText(name, csv.replace(/^\ufeff/, ''), 'text/csv');
     }
 
     function wbIcpByIcp(icp) {
@@ -4167,7 +4388,8 @@
         esc(bandSeasonText(Wn)) + '</b><span class="muted">' + (wbSeasonOv ? '(changed for this session)' : '(default from the Register)') + '</span>' +
         '<button class="linkbtn" onclick="wbSeasonEdit()">' + (wbSeasonEditOpen ? 'done' : 'change') + '</button>' +
         (wbSeasonOv ? '<button class="linkbtn" onclick="wbSeasonReset()">back to the default</button>' : '') +
-        '<span style="margin-left:auto;display:flex;gap:10px"><button class="linkbtn" onclick="wbIcpOpenAll(true)">expand all</button>' +
+        '<span style="margin-left:auto;display:flex;gap:10px"><button class="linkbtn" title="One CSV row per ICP and register: grade, coverage, flags, figures, meter rows and the Betty plan" onclick="wbFlagsReport(this)">⬇ flags report</button>' +
+        '<button class="linkbtn" onclick="wbIcpOpenAll(true)">expand all</button>' +
         '<button class="linkbtn" onclick="wbIcpOpenAll(false)">collapse all</button>' +
         '<button class="linkbtn" onclick="wbIcpOpenProblems()">only ICPs with problems</button></span></div>';
       if (wbSeasonEditOpen) {
@@ -4301,7 +4523,7 @@
         '<th class="tR" title="Average month in ' + esc(bandMonthsText(W, false)) + '">Monthly<br>Summer</th>' +
         '<th class="tR">Total<br>Annual</th><th class="tR" title="$ per kWh excl GST, from Enter rates">Unit<br>cost $</th><th></th></tr></thead><tbody>';
       var edited = st.extra.length > 0;
-      if (st.bill) edited = true;
+      if (st.bill || st.combine) edited = true;
       for (var ri = 0; ri < e.rows.length; ri++) {
         var row = e.rows[ri];
         if (st.ov[row.key]) edited = true;
@@ -4329,11 +4551,26 @@
           cell('wbMtAn_', row.annual, 'wbMeterAnnual(' + args + ', this.value)', true) +
           '<div id="wbMtWarn_' + id + '" class="error" style="font-size:11px" title="' + esc(row.warn || '') + '">' + esc(wbMeterWarnShort(row)) + '</div></td>' +
           '<td class="tR mono" style="font-size:12px;white-space:nowrap">' + (rt || (row.rate !== null && row.rate !== undefined
-            ? '<span class="muted" title="Weighted average from the rate card typed in the time-band detail — not saved in Enter rates yet">' + bandRateTxt(row.rate) + '</span>'
+            ? (wbNz(row.rateW) && wbNz(row.rateS)
+              ? '<span class="muted" title="Rate card by season (time-band detail): winter / summer — all year weighted ' + bandRateTxt(row.rate) + ' — not saved in Enter rates yet">W ' + bandRateTxt(row.rateW) + '<br>S ' + bandRateTxt(row.rateS) + '</span>'
+              : '<span class="muted" title="Weighted average from the rate card typed in the time-band detail — not saved in Enter rates yet">' + bandRateTxt(row.rate) + '</span>')
             : '<span class="muted">—</span>')) +
           (rt || (row.rate !== null && row.rate !== undefined)
-            ? '<button class="cpy" title="Copy this unit cost" onclick="copyPlain(\'' + (rt || bandRateTxt(row.rate)) + '\', this)">' + ICONS.copy + '</button>' : '') + '</td>' +
+            ? '<button class="cpy" title="Copy this unit cost' + (!rt && wbNz(row.rateW) && wbNz(row.rateS) ? ' (all year, weighted)' : '') + '" onclick="copyPlain(\'' + (rt || bandRateTxt(row.rate)) + '\', this)">' + ICONS.copy + '</button>' : '') + '</td>' +
           '<td><button class="cpy" style="color:var(--bad, #B3261E);padding:0" title="Remove this row — it is not sent to Betty" aria-label="Remove this row" onclick="wbMeterRemove(' + args + ', true)">' + ICONS.x + '</button></td></tr>';
+      }
+      // v2.27: totals of the rows going to Betty, each with a copy button.
+      var tt = { n: 0, mo: 0, wi: 0, su: 0, an: 0, season: true };
+      for (var ti = 0; ti < e.rows.length; ti++) {
+        var tr = e.rows[ti];
+        if (tr.removed || !tr.type || !wbNz(tr.monthly)) continue;
+        tt.n++; tt.mo += tr.monthly; tt.an += wbNz(tr.annual) ? tr.annual : Math.round(tr.monthly * 12);
+        if (wbNz(tr.winter) && wbNz(tr.summer)) { tt.wi += tr.winter; tt.su += tr.summer; } else tt.season = false;
+      }
+      if (tt.n) {
+        var tcell = function (v) { return '<td class="tR" style="font-weight:600;white-space:nowrap">' + (wbNz(v) ? fmtNum(Math.round(v)) + '<button class="cpy" title="Copy this total" onclick="copyPlain(\'' + Math.round(v) + '\', this)">' + ICONS.copy + '</button>' : '<span class="muted">—</span>') + '</td>'; };
+        h += '<tr style="border-top:2px solid var(--tuc-line);background:var(--tuc-warm-bg)"><td class="tL" style="font-weight:600">Total <span class="muted" style="font-weight:400;font-size:11px">(' + tt.n + ' row' + (tt.n === 1 ? '' : 's') + ' to Betty)</span></td>' +
+          tcell(tt.mo) + tcell(tt.season ? tt.wi : null) + tcell(tt.season ? tt.su : null) + tcell(tt.an) + '<td></td><td></td></tr>';
       }
       h += '</tbody></table></div>';
       if (st.splitEdit) h += wbSplitBoxHtml(e, bi, st);
@@ -4343,6 +4580,8 @@
         '<button class="linkbtn" title="No half-hourly split? Share this ICP’s total consumption across the tariffs on a bill, pro rata" onclick="wbSplitOpen(' + bi + ')">' +
         (st.bill ? 'change the bill split' : 'split from a bill') + '</button>' +
         (st.bill ? '<button class="linkbtn" onclick="wbSplitUndo(' + bi + ')">undo bill split</button>' : '') +
+        (st.combine ? '<button class="linkbtn" onclick="wbCombine(' + bi + ', false)">undo combine</button>'
+          : tt.n > 1 ? '<button class="linkbtn" title="One row for Betty carrying the totals - when the bill has one rate where the bands have several" onclick="wbCombine(' + bi + ', true)">combine into one meter</button>' : '') +
         (edited ? '<button class="linkbtn" onclick="wbMeterReset(' + bi + ')">back to what Walter calculated</button>' : '') +
         (e.custId && !wbProspect ? '<button class="linkbtn" onclick="wbRatesOpenFor(\'' + esc(e.icp) + '\')">✏️ rates for this ICP</button>' : '') + '</div>';
       return h;
@@ -4427,6 +4666,16 @@
     function wbSplitUndo(bi) {
       var st = wbSplitSt(bi); if (!st) return;
       wbSplitClear(st);
+      st.splitEdit = null;
+      wbBandsRender(true);
+      wbRatesStatus();
+    }
+    /** v2.27: fold the ICP's rows into one Anytime row carrying the totals (or undo it). */
+    function wbCombine(bi, on) {
+      var e = wbIcpModel()[bi]; if (!e) return;
+      var st = wbMeterState(e.icp);
+      st.combine = !!on;
+      if (!on) delete st.ov.combined;
       st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
@@ -4536,7 +4785,7 @@
       var e = wbIcpModel()[bi]; if (!e) return;
       if (!confirm('Discard your changes to the meters of ' + e.icp + ' and go back to what Walter calculated?')) return;
       var st = wbMeterState(e.icp);
-      st.ov = {}; st.extra = []; st.bill = null; st.splitEdit = null;
+      st.ov = {}; st.extra = []; st.bill = null; st.combine = false; st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
     }
@@ -4551,7 +4800,7 @@
         if (!e.custId) continue;
         var list = [];
         for (var m = 0; m < e.meters.length; m++) {
-          list.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est, grade: e.meters[m].grade || '' });
+          list.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est, combined: !!e.meters[m].combined, grade: e.meters[m].grade || '' });
         }
         out[e.icp] = list;
       }
@@ -5017,6 +5266,8 @@
     function bettyMeterName(band) {
       var k = bandNameKey(band), i;
       if (!k) return '';
+      // v2.27: a mapping chosen on the Register tab wins (Weekend Day -> Day, Super Off-Peak -> Off Peak, ...).
+      if (wbBandTypes[k]) { var want = bandNameKey(wbBandTypes[k]); for (i = 0; i < BETTY_METERS.length; i++) if (bandNameKey(BETTY_METERS[i]) === want) return BETTY_METERS[i]; }
       for (i = 0; i < BETTY_METERS.length; i++) if (bandNameKey(BETTY_METERS[i]) === k) return BETTY_METERS[i];
       for (i = 0; i < BETTY_METERS.length; i++) if (bandNameKey(BETTY_METERS[i]) === 'all' + k) return BETTY_METERS[i];
       return '';
@@ -5598,7 +5849,7 @@
         var meters = [];
         for (var m = 0; m < e.meters.length; m++) {
           var u = p.unit[e.meters[m].name];
-          meters.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, unit: u === undefined ? 0 : u, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est });
+          meters.push({ name: e.meters[m].name, monthly: e.meters[m].monthly, unit: u === undefined ? 0 : u, src: e.meters[m].src, manual: !!e.meters[m].manual, est: !!e.meters[m].est, combined: !!e.meters[m].combined });
         }
         var fields = {}, k;
         for (k in p.fields) if (Object.prototype.hasOwnProperty.call(p.fields, k)) fields[k] = p.fields[k];
@@ -5686,12 +5937,12 @@
           }
           if (ld.retailer && ld.retailer !== r.retailer) ch.push('retailer ' + ld.retailer + ' → ' + r.retailer);
         }
-        var manual = false, est = false;
-        for (var m = 0; m < r.meters.length; m++) { if (r.meters[m].manual) manual = true; if (r.meters[m].est) est = true; }
+        var manual = false, est = false, combined = false;
+        for (var m = 0; m < r.meters.length; m++) { if (r.meters[m].manual) manual = true; if (r.meters[m].est) est = true; if (r.meters[m].combined) combined = true; }
         h += '<tr><td class="tL mono">' + esc(r.icp) + '</td>' +
           '<td class="tL">' + (r.analysisId ? 'update #' + esc(r.analysisId) : '<span class="pill flag">NEW</span>') + '</td>' +
           '<td class="tL">' + esc(r.retailer) + '</td>' +
-          '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + (est ? ' <span class="flag">(estimated from bill)</span>' : '') + '</td>' +
+          '<td class="tL" style="font-size:12px">' + esc(wbBettyMetersTxt(r.meters)) + (manual ? ' <span class="flag">(has manual figures)</span>' : '') + (est ? ' <span class="flag">(estimated from bill)</span>' : '') + (combined ? ' <span class="flag">(combined)</span>' : '') + '</td>' +
           '<td class="tL muted" style="font-size:12px">' + (ld ? esc(wbBettyMetersTxt(ld.meters) || 'no meters') : '—') + '</td>' +
           '<td class="tL muted" style="font-size:12px">' + (ch.length ? esc(ch.join('; ')) : (ld ? 'none' : '')) + '</td></tr>';
       }
@@ -5815,6 +6066,7 @@
       if (wbBandRegErr) h += '<p class="error">' + esc(wbBandRegErr) + '</p>';
       h += '<div id="regMsg"></div>';
       if (regEd) h += regEditorHtml();
+      h += regBandTypesHtml(rows);
       // Seasons per retailer (v2.19): the default the Workbench starts from.
       var rets = bandRetailers();
       if (rets.length) {
@@ -5914,6 +6166,51 @@
     }
 
     var regSeasonEd = {}; // retailer (normalised) -> [12 x bool] being edited
+    // ---- band -> Betty meter type (v2.27) ----
+    /** Every band name used in the register's schedules, with the Betty meter type it maps to (automatic or chosen). */
+    function regBandNames(rows) {
+      var names = {}, out = [];
+      for (var i = 0; i < rows.length; i++) {
+        // schedules are text: "00:00 Off-Peak; 07:00 Peak; ..." (weekday, and weekend when different)
+        var segs = (String(rows[i].weekday || '') + ';' + String(rows[i].weekend || '')).split(/[;\n]+/);
+        for (var j = 0; j < segs.length; j++) {
+          var b = segs[j].trim().replace(/^\d{1,2}:\d{2}\s+/, '').trim();
+          if (b && !names[b.toLowerCase()]) { names[b.toLowerCase()] = true; out.push(b); }
+        }
+      }
+      out.sort();
+      return out;
+    }
+    function regBandTypesHtml(rows) {
+      var names = regBandNames(rows);
+      if (!names.length) return '';
+      var h = '<div style="border:1px solid var(--tuc-line);border-radius:10px;padding:10px 14px;margin-bottom:14px"><b>Band → Betty meter type</b>' +
+        '<span class="muted" style="font-size:12px"> — a band whose name is not a Betty meter type is sent to Betty only once you say which type it is (Northpower, Unison and Orion have such bands). Applies to every ICP from then on.</span>' +
+        '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12px">';
+      for (var i = 0; i < names.length; i++) {
+        var k = bandNameKey(names[i]), auto = bettyMeterName(names[i]), chosen = wbBandTypes[k] || '';
+        var opts = '<option value="">' + (auto && !chosen ? '— automatic: ' + esc(auto) + ' —' : '— not sent to Betty —') + '</option>';
+        for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === chosen ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
+        h += '<label style="display:flex;gap:6px;align-items:center"><b style="min-width:150px">' + esc(names[i]) + '</b>' +
+          '<select onchange="regBandTypeSave(\'' + esc(names[i]) + '\', this.value, this)" style="height:30px;border:1px solid ' + (auto || chosen ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:12px">' + opts + '</select></label>';
+      }
+      return h + '</div><div id="regTypesMsg" class="muted" style="font-size:12px;margin-top:6px"></div></div>';
+    }
+    function regBandTypeSave(band, type, sel) {
+      if (sel) sel.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          wbBandTypes = (res && res.types) || {};
+          regRender();
+          var m = document.getElementById('regTypesMsg'); if (m) m.textContent = 'Saved: ' + band + ' → ' + (type || 'not sent');
+          wbBandsRender(true);
+        })
+        .withFailureHandler(function (e) {
+          if (sel) sel.disabled = false;
+          var m = document.getElementById('regTypesMsg'); if (m) { m.className = 'error'; m.textContent = e.message || String(e); }
+        })
+        .apiBandTypeSave(band, type);
+    }
     function regSeasonToggle(ri, m) {
       var name = bandRetailers()[ri]; if (!name) return;
       var k = bandNorm(name);

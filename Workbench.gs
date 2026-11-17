@@ -398,6 +398,17 @@ function shareForLinks_(file) {
   }
 }
 
+/**
+ * v2.27: a small text report built in the browser (the flags report)
+ * saved beside the CDFs in CDP Output, link-shared like them.
+ */
+function apiWbSaveText(name, text, mime) {
+  const safe = String(name || 'report').replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 120);
+  const file = DriveApp.getFolderById(requireConfig_('output_folder_id')).createFile(safe, String(text || ''), mime || MimeType.CSV);
+  const sh = shareForLinks_(file);
+  return { name: file.getName(), url: file.getUrl(), fileId: file.getId(), shared: sh.shared, shareError: sh.shareError };
+}
+
 /** CDF file name: "CDF - <label> - <yyyy-MM-dd>". */
 function wbCdfName_(label) {
   const stamp = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd');

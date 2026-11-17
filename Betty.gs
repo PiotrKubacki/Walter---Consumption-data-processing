@@ -655,7 +655,7 @@ function apiBettyWrite(payload) {
   if (rows.length > 2000) throw new Error('Too many rows for one file (' + rows.length + ').');
   const lists = bettyLists_();
   const canon = (list, v) => { const k = bettyKey_(v); for (const x of list) if (bettyKey_(x) === k) return x; return ''; };
-  const errors = [], seen = {}, values = [];
+  const errors = [], seen = {}, values = [], flagsLog = [];
   let ratesRows = 0, updates = 0, creates = 0;
   const custIds = {}; let custName = '';
   const num = (v) => { const n = Number(v); return v === null || v === undefined || String(v).trim() === '' || !isFinite(n) ? 0 : n; };
@@ -682,6 +682,10 @@ function apiBettyWrite(payload) {
       if (!m) { line.push('', 0, 0); continue; }
       const name = canon(lists.meters, m.name);
       if (!name) errors.push(tag + ': "' + String(m.name || '') + '" is not a Betty meter type');
+      // v2.27: how each figure came about goes to the Flags Log with the file.
+      if (m.combined) flagsLog.push([icp, name || String(m.name || ''), 'COMBINED', String(m.src || '')]);
+      else if (m.est) flagsLog.push([icp, name || String(m.name || ''), 'ESTIMATED_FROM_BILL', String(m.src || '')]);
+      else if (m.manual) flagsLog.push([icp, name || String(m.name || ''), 'MANUAL_FIGURE', String(m.src || '') + ' = ' + Math.round(Number(m.monthly) || 0)]);
       const monthly = Number(m.monthly), unit = num(m.unit);
       if (!isFinite(monthly) || monthly < 0) errors.push(tag + ': ' + String(m.name || '') + ' has no monthly figure');
       if (unit < 0) errors.push(tag + ': ' + String(m.name || '') + ' has a negative unit cost');
@@ -701,7 +705,7 @@ function apiBettyWrite(payload) {
     }
     values.push(line);
     if (anyRate) ratesRows++;
-    if (line[0]) updates++; else creates++;
+    if (line[0]) updates++; else { creates++; flagsLog.push([icp, '', 'NEW_ANALYSIS', 'no analysis ID - Betty creates the Current analysis']); }
     if (custId) { custIds[custId] = true; custName = custName || String(r.registeredName || ''); }
   }
   if (errors.length) {
@@ -728,6 +732,7 @@ function apiBettyWrite(payload) {
     SpreadsheetApp.flush();
     const outFile = bettyFolder_().createFile(exportXlsx_(tmp.getId()).setName(outName + '.xlsx'));
     const share = bettyShare_(outFile);
+    try { writeFlagsLog_(outFile.getName(), flagsLog); } catch (e) {}
     let indexError = '';
     try {
       betIndexAdd_({ customerId: idList.join(', '), customer: idList.length === 1 ? custName : '',

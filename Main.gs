@@ -149,8 +149,10 @@ function analyseFromCache_(fileIds) {
   }
 
   const rows = [];
-  const boundaries = loadTimeBoundaries_();
-  const seasons = loadSeasons_();
+  // v2.28: the v1 Day/Night "time profile" (Time Boundaries + Seasons
+  // tabs) is retired - network pricing options come from the retailer
+  // Band Register only (Peter, 18 Nov). loadTimeBoundaries_ / loadSeasons_
+  // / computeTimeProfile_ stay in TimeCalcs.gs, unused, for a later clean-up.
   // v2.16.2: the Betty meter type each register maps to (Register Map),
   // so the Workbench knows a controlled register from an uncontrolled one.
   let regMapForRows = [];
@@ -167,8 +169,6 @@ function analyseFromCache_(fileIds) {
         ') \u2014 records combined; check this is intended (one Current analysis per ICP)');
     }
     const lookup = cdpLookupIcp_(icp);
-    // B5: time profile from interval data inside the analysis window
-    let timeProfile = null;
     // v2.16: slot matrix for the retailer time-band split (Bands.gs).
     let slotMatrix = null;
     if (analysis.layer === 'HH' && analysis.windowFrom && analysis.windowTo) {
@@ -176,19 +176,10 @@ function analyseFromCache_(fileIds) {
         r.periodStart >= analysis.windowFrom && r.periodEnd <= analysis.windowTo);
       if (hhInWindow.length) {
         try { slotMatrix = bandSlotMatrix_(hhInWindow); } catch (e) { slotMatrix = null; }
-        let registerConfig = '';
-        for (const r of hhInWindow) if (r.registerConfig) { registerConfig = r.registerConfig; break; }
-        const windowSel = selectWindows_(boundaries, lookup.networkName, lookup.networkId, registerConfig);
-        timeProfile = computeTimeProfile_(hhInWindow, seasons, windowSel);
-        if (timeProfile && timeProfile.usedDefaultWindows && windowSel.windows.length) {
-          analysis.flags.push('Day/Night split uses DEFAULT time windows \u2014 add ' +
-            (lookup.networkName !== CDP_NOT_FOUND ? lookup.networkName : 'this network') +
-            ' to the Time Boundaries tab for network-accurate splits');
-        }
       }
     }
     const serialised = serialiseAnalysis_(analysis);
-    serialised.timeProfile = timeProfile;
+    serialised.timeProfile = null; // retired v2.28 (see above)
     serialised.slotMatrix = slotMatrix;
     rows.push({
       icp: icp, register: register,

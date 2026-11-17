@@ -162,7 +162,76 @@ function bandRegisterLoad_() {
 
 /** Client: the whole register (it is small). */
 function apiBandRegister() {
-  return { rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_(), maxSegments: BAND_MAX_SEGMENTS };
+  return { rows: bandRegisterLoad_(), seasons: bandSeasonsLoad_(), types: bandTypesLoad_(), maxSegments: BAND_MAX_SEGMENTS };
+}
+
+// Band -> Betty meter type (v2.27). A band whose name is not itself a
+// Betty meter type (Weekend Day, Weekend Shoulder, Super Off-Peak, ...)
+// is sent to Betty only when the operator has said which meter type it
+// is. The choice lives on the "Band Types" tab, edited from the Register
+// tab, and applies to every ICP from then on.
+const BAND_TYPES_TAB = 'Band Types';
+const BAND_TYPES_HEADERS = ['band', 'betty meter type', 'updated at', 'updated by'];
+
+function bandTypeKey_(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+
+function bandTypesSheet_() {
+  const ss = SpreadsheetApp.openById(getConfig_()._backingId);
+  let sheet = ss.getSheetByName(BAND_TYPES_TAB);
+  if (!sheet) sheet = ss.insertSheet(BAND_TYPES_TAB);
+  if (!sheet.getRange(1, 1).getValue()) {
+    sheet.getRange(1, 1, 1, BAND_TYPES_HEADERS.length).setValues([BAND_TYPES_HEADERS]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/** { "weekendday": "Day", ... } keyed by the band name with case and punctuation removed; the last row for a band wins. */
+function bandTypesLoad_() {
+  const sheet = bandTypesSheet_();
+  const out = {};
+  const n = sheet.getLastRow() - 1;
+  if (n < 1) return out;
+  const vals = sheet.getRange(2, 1, n, 2).getValues();
+  for (const r of vals) {
+    const k = bandTypeKey_(r[0]);
+    if (k) out[k] = String(r[1] || '').trim();
+  }
+  return out;
+}
+
+/** Save which Betty meter type a band is (blank = not decided, the band is not sent). */
+function apiBandTypeSave(band, type) {
+  const name = String(band || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!name) throw new Error('Band is required.');
+  const want = String(type || '').trim();
+  let meterType = '';
+  if (want) {
+    const meters = bettyLists_().meters;
+    const key = bandTypeKey_(want);
+    for (const m of meters) if (bandTypeKey_(m) === key) meterType = m;
+    if (!meterType) throw new Error('"' + want + '" is not a Betty meter type.');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = bandTypesSheet_();
+    let operator = '';
+    try { operator = Session.getActiveUser().getEmail(); } catch (err) {}
+    const n = sheet.getLastRow() - 1;
+    let target = 0;
+    if (n >= 1) {
+      const vals = sheet.getRange(2, 1, n, 1).getValues();
+      for (let i = 0; i < n; i++) if (bandTypeKey_(vals[i][0]) === bandTypeKey_(name)) target = i + 2;
+    }
+    const rowVals = [name, meterType, new Date(), operator];
+    if (target) sheet.getRange(target, 1, 1, 4).setValues([rowVals]);
+    else sheet.appendRow(rowVals);
+    SpreadsheetApp.flush();
+    return { ok: true, types: bandTypesLoad_() };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Seasons per retailer (v2.19): which months are Winter. Tab "Band
