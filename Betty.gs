@@ -778,8 +778,17 @@ function bettyShare_(file) {
   const list = String(getConfig_().betty_file_viewers || '').split(/[\s,;]+/);
   for (const x of list) { const a = x.trim().toLowerCase(); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)) emails[a] = true; }
   const ok = [], bad = [];
+  // v2.25: shared QUIETLY - Drive's "X shared a spreadsheet with you"
+  // email on every Betty file was noise for the operators (Yuka, 17
+  // Nov). The advanced Drive service can suppress it; DriveApp cannot,
+  // so it is only the fallback.
   for (const a of Object.keys(emails)) {
-    try { file.addViewer(a); ok.push(a); } catch (e) { bad.push(a); }
+    try {
+      Drive.Permissions.create({ role: 'reader', type: 'user', emailAddress: a }, file.getId(), { sendNotificationEmail: false });
+      ok.push(a);
+    } catch (e1) {
+      try { file.addViewer(a); ok.push(a); } catch (e2) { bad.push(a); }
+    }
   }
   return { sharedWith: ok, shareError: bad.length ? 'could not share with ' + bad.join(', ') : '' };
 }

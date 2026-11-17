@@ -223,13 +223,51 @@ function apiWbFinishV2(fileIds, meta) {
   return { merged: null, queued: 0, duplicates: [], skippedIcps: [], trashed: fin.trashed };
 }
 
-function apiWbMergeStart(label) {
+/**
+ * v2.25: a CDF is built in PARTS when a lot is big. Google caps a
+ * workbook at 10 million cells and the xlsx export at 50 MB, so a new
+ * part is started when the next file would push the current one past
+ * the Config limits (cdf_max_cells, cdf_max_source_mb). Each part
+ * carries a hidden ledger tab of the files already in it, which makes
+ * a retried or resumed add idempotent.
+ */
+const CDF_LEDGER_TAB = '_cdp_files';
+
+function wbCdfLimits_() {
+  const cfg = getConfig_();
+  const cells = Number(cfg.cdf_max_cells);
+  const mb = Number(cfg.cdf_max_source_mb);
+  return { cells: cells > 0 ? cells : 5000000, bytes: (mb > 0 ? mb : 30) * 1024 * 1024 };
+}
+
+function wbCdfLedger_(merged) {
+  let s = merged.getSheetByName(CDF_LEDGER_TAB);
+  if (!s) {
+    s = merged.insertSheet(CDF_LEDGER_TAB);
+    s.getRange(1, 1, 1, 4).setValues([['file id', 'name', 'bytes', 'cells']]);
+    try { s.hideSheet(); } catch (e) {}
+  }
+  const out = { sheet: s, ids: {}, files: 0, bytes: 0, cells: 0 };
+  const n = s.getLastRow() - 1;
+  if (n > 0) {
+    for (const r of s.getRange(2, 1, n, 4).getValues()) {
+      const id = String(r[0] || '').trim();
+      if (!id) continue;
+      out.ids[id] = true; out.files++;
+      out.bytes += Number(r[2]) || 0; out.cells += Number(r[3]) || 0;
+    }
+  }
+  return out;
+}
+
+function apiWbMergeStart(label, part) {
   // CDF = Consumption Data File (renamed from CONS, 9 Nov)
-  const name = wbCdfName_(label);
+  const name = wbCdfName_(label) + (Number(part) > 1 ? ' - part ' + Number(part) : '');
   const merged = SpreadsheetApp.create(name);
   // Move it straight into CDP Output so nothing ever strands in My Drive root.
   DriveApp.getFileById(merged.getId()).moveTo(DriveApp.getFolderById(requireConfig_('output_folder_id')));
-  return { mergedId: merged.getId(), name: name };
+  wbCdfLedger_(merged);
+  return { mergedId: merged.getId(), name: name, part: Number(part) || 1 };
 }
 
 /**
@@ -250,8 +288,17 @@ function wbCdfTabBase_(icps, fileName) {
   return list.slice(0, 4).join(', ') + ' +' + (list.length - 4) + ' more';
 }
 
+/**
+ * Add one session file to a CDF part. Returns
+ *   { ok, skipped }            the file was already in this part (a retried call)
+ *   { ok, full, cells, bytes } NOT added - the part is full, start the next one
+ *   { ok, tabs, cells, bytes } added; cells/bytes = the part's running totals
+ */
 function apiWbMergeAdd(mergedId, fileId, icps) {
   const merged = SpreadsheetApp.openById(mergedId);
+  const ledger = wbCdfLedger_(merged);
+  if (ledger.ids[fileId]) return { ok: true, skipped: true, cells: ledger.cells, bytes: ledger.bytes };
+  const limits = wbCdfLimits_();
   const used = {};
   for (const s of merged.getSheets()) used[s.getName().toLowerCase()] = true;
   const tabName = (base) => {
@@ -263,10 +310,21 @@ function apiWbMergeAdd(mergedId, fileId, icps) {
   };
   const file = DriveApp.getFileById(fileId);
   const mime = file.getMimeType();
+  const bytes = file.getSize();
   // Tabs are named by ICP (10 Nov), not by source file name.
   const base = wbCdfTabBase_(icps, file.getName());
   let tabs = 0;
   let tempId = null;
+  // A part that already holds a file takes no more once the next one
+  // would cross a limit; an empty part takes anything (a single file
+  // over the limit fails loudly at Google's own ceiling).
+  const wouldFill = (cells) => ledger.files > 0 &&
+    (ledger.cells + cells > limits.cells || ledger.bytes + bytes > limits.bytes);
+  const full = () => ({ ok: true, full: true, cells: ledger.cells, bytes: ledger.bytes });
+  const record = (cells) => {
+    ledger.sheet.appendRow([fileId, file.getName(), bytes, cells]);
+    return { ok: true, name: file.getName(), tabs: tabs, cells: ledger.cells + cells, bytes: ledger.bytes + bytes };
+  };
   try {
     if (mime === MimeType.GOOGLE_SHEETS || /spreadsheetml|ms-excel/.test(mime)) {
       let ssId = fileId;
@@ -277,14 +335,19 @@ function apiWbMergeAdd(mergedId, fileId, icps) {
         tempId = copy.id;
       }
       const src = SpreadsheetApp.openById(ssId);
-      const sheets = src.getSheets();
+      const sheets = src.getSheets().filter(s => s.getLastRow() > 0);
+      // Google counts a sheet's whole grid (max rows x max columns), not just the used cells.
+      let cells = 0;
+      for (const s of sheets) cells += s.getMaxRows() * s.getMaxColumns();
+      if (wouldFill(cells)) return full();
       for (const s of sheets) {
-        if (s.getLastRow() === 0) continue;
         const copied = s.copyTo(merged);
         copied.setName(tabName(sheets.length > 1
           ? base + ' - ' + s.getName() : base));
         tabs++;
       }
+      SpreadsheetApp.flush();
+      return record(cells);
     } else {
       // Text/CSV: write the raw rows into a tab, exactly as received.
       let content = file.getBlob().getDataAsString();
@@ -298,15 +361,18 @@ function apiWbMergeAdd(mergedId, fileId, icps) {
         rows.push(f);
       }
       while (rows.length && rows[rows.length - 1].join('') === '') rows.pop();
+      // A new tab starts at 1000 x 26 and grows to fit - that is the grid Google counts.
+      const cells = rows.length ? Math.max(1000, rows.length) * Math.max(26, maxLen) : 0;
+      if (wouldFill(cells)) return full();
       if (rows.length) {
         for (const r of rows) while (r.length < maxLen) r.push('');
         const sheet = merged.insertSheet(tabName(base));
         sheet.getRange(1, 1, rows.length, maxLen).setValues(rows);
         tabs++;
       }
+      SpreadsheetApp.flush();
+      return record(cells);
     }
-    SpreadsheetApp.flush();
-    return { ok: true, name: file.getName(), tabs: tabs };
   } finally {
     if (tempId) { try { DriveApp.getFileById(tempId).setTrashed(true); } catch (e) {} }
   }
@@ -414,6 +480,9 @@ function apiWbMergeExport(mergedId, opts) {
   const merged = SpreadsheetApp.openById(mergedId);
   const first = merged.getSheets()[0];
   if (merged.getSheets().length > 1 && first.getLastRow() === 0) merged.deleteSheet(first);
+  // v2.25: the file ledger is working data, not part of the archive.
+  const ledger = merged.getSheetByName(CDF_LEDGER_TAB);
+  if (ledger && merged.getSheets().length > 1) merged.deleteSheet(ledger);
   let analysisError = '';
   if (opts.analysis) {
     // The archive is still worth having if this tab cannot be built,
@@ -422,7 +491,9 @@ function apiWbMergeExport(mergedId, opts) {
     catch (e) { analysisError = String(e.message || e); }
   }
   SpreadsheetApp.flush();
-  const name = opts.label ? wbCdfName_(opts.label) : merged.getName();
+  // v2.25: "- part k of N" when the lot needed more than one workbook.
+  const partTxt = Number(opts.parts) > 1 ? ' - part ' + Number(opts.part) + ' of ' + Number(opts.parts) : '';
+  const name = (opts.label ? wbCdfName_(opts.label) : merged.getName().replace(/ - part \d+$/, '')) + partTxt;
   const blob = exportXlsx_(mergedId).setName(name + '.xlsx');
   const outFile = DriveApp.getFolderById(requireConfig_('output_folder_id')).createFile(blob);
   try { DriveApp.getFileById(mergedId).setTrashed(true); } catch (e) {}
@@ -433,7 +504,7 @@ function apiWbMergeExport(mergedId, opts) {
   const sh = shareForLinks_(outFile);
   return { name: outFile.getName(), url: outFile.getUrl(), fileId: outFile.getId(),
     sizeBytes: outFile.getSize(), shared: sh.shared, shareError: sh.shareError,
-    analysisError: analysisError };
+    analysisError: analysisError, part: Number(opts.part) || 1, parts: Number(opts.parts) || 1 };
 }
 
 /**
@@ -441,10 +512,12 @@ function apiWbMergeExport(mergedId, opts) {
  * CDF. When given, one row is appended to the CDF Index tab so the
  * file can be found again from the Archive tab without Betty.
  */
-function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue, merged) {
+function apiWbFinalise(fileIds, meta, mergedUrl, skipQueue, merged, parts) {
   const out = { queued: 0, duplicates: [], skippedIcps: [], trashed: [] };
-  if (meta && merged && merged.fileId) {
-    try { cdfIndexAdd_(meta, merged); out.indexed = true; }
+  // v2.25: every part of a multi-part CDF gets its own index row.
+  const list = (parts && parts.length) ? parts : (merged && merged.fileId ? [merged] : []);
+  if (meta && list.length) {
+    try { for (const p of list) if (p && p.fileId) cdfIndexAdd_(meta, p); out.indexed = true; }
     catch (e) { out.indexError = 'CDF Index not updated: ' + e.message; }
   }
   if (meta && !skipQueue) {

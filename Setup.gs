@@ -24,6 +24,8 @@ const CDP_CONFIG_KEYS = [
   ['near_zero_avm_kwh',        '10',  'Informational flag: AVM below this kWh/month => near-zero flag'],
   ['format_report_email',      'peter@theutilitycompany.net', 'Unknown-format files reported from the Workbench are emailed here'],
   ['betty_output_folder_id',   '', 'Optional - Drive folder for filled Betty templates; blank => a "Betty files" subfolder of the output folder'],
+  ['cdf_max_cells',            '5000000', 'CDF parts: start a new part when the next file would take a workbook past this many cells (Google caps a workbook at 10 million; the xlsx export at 50 MB)'],
+  ['cdf_max_source_mb',        '30', 'CDF parts: start a new part when the source files in one part would exceed this many MB'],
   ['betty_file_viewers',       '', 'Email addresses (comma separated) that every filled Betty template is shared with - add operators on personal accounts'],
   ['rates_default_contract_days', '730', 'Enter rates: contract length (days) used when nothing was loaded from Betty or typed'],
   ['rates_default_brokerage',     '', 'Enter rates: brokerage fee (per cent, as Betty holds it) used when nothing was loaded or typed - blank = no default, the cell goes to Betty empty'],

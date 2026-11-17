@@ -92,6 +92,9 @@
     nav.tabs .sesshold { flex: 2 1 560px; min-width: 0; }
     @media (max-width: 1500px) { nav.tabs .tabgroup > button { font-size: 13px; padding: 0 3px; gap: 4px; } }
     @media (max-width: 1250px) { nav.tabs .tabgroup > button .tabico { display: none; } }
+    /* v2.25: finish-off progress, under the tabs so it shows on every tab */
+    #wbProgress { background: #FFF4D6; color: #5a4300; border-bottom: 1px solid #e8d49a; padding: 7px 18px; font-size: 13px; }
+    #wbProgress .mono { font-family: monospace; }
     /* v2.21: the current customer and its buttons sit on the tab row (design option C). */
     #wbSessionCard {
       width: 100%; min-width: 0; height: 52px; box-sizing: border-box;
@@ -196,6 +199,7 @@
     </div>
     </div>
   </nav>
+  <div id="wbProgress" style="display:none"></div>
   <main>
   <div id="tab-workbench">
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
@@ -2498,27 +2502,102 @@
     // The slow part of finishing (file conversion + tab copying)
     // starts the moment an analysis completes, while the operator
     // writes the proposal notes. Finish then only exports + queues.
+    //
+    // v2.25: ONE merge engine for the background build and the finish-
+    // off, with (a) CDF PARTS - the server starts refusing files for a
+    // part once the next one would cross the Config limits (cells /
+    // source MB), and the client opens the next part; (b) RETRIES - a
+    // dropped call (HTTP 0: the hotspot moment of 17 Nov) is tried
+    // three more times before the build is marked failed; (c) RESUME -
+    // a failed build keeps its parts and continues from the file that
+    // failed; (d) the analysis is kept until the finish-off succeeds,
+    // so "retry" is a real retry, never "finish without analysing".
 
-    var wbMerge = { gen: 0, id: null, status: 'none', done: 0, total: 0 };
+    function wbMergeBlank(gen) { return { gen: gen, status: 'none', parts: [], next: 0, total: 0, ids: [], icpMap: {}, label: '', err: '', retrying: 0 }; }
+    var wbMerge = wbMergeBlank(0);
     var wbFinishPending = false;
     var wbSentToQueue = false;
     var wbFinishBtn = null, wbFinishMeta = null, wbFinishIds = null;
     var wbFinishTable = null, wbFinishIcpMap = null; // captured at Finish, before the session resets
+    var wbFin = null; // the finish-off in progress: { t0, step, detail, stepT0 }
+    var wbFinTick = null;
 
     function wbMergeStatus() {
       var el = document.getElementById('wbMergeState');
       if (!el) return;
-      if (wbMerge.status === 'running') el.textContent = 'archive: merging ' + wbMerge.done + '/' + wbMerge.total + '…';
-      else if (wbMerge.status === 'ready') el.textContent = 'archive ready ✓';
-      else if (wbMerge.status === 'failed') el.textContent = 'archive build failed — will rebuild at finish';
+      var parts = wbMerge.parts.length > 1 ? ' (' + wbMerge.parts.length + ' parts)' : '';
+      if (wbMerge.status === 'running') el.textContent = 'archive: merging ' + wbMerge.next + '/' + wbMerge.total + '…' + parts + (wbMerge.retrying ? ' (retry ' + wbMerge.retrying + ')' : '');
+      else if (wbMerge.status === 'ready') el.textContent = 'archive ready ✓' + parts;
+      else if (wbMerge.status === 'failed') el.textContent = 'archive build stopped at file ' + (wbMerge.next + 1) + '/' + wbMerge.total + ' — will continue at finish';
       else el.textContent = '';
     }
 
     function wbInvalidateMerge() {
-      wbMerge.gen++;
-      if (wbMerge.id) google.script.run.apiWbDiscardMerge(wbMerge.id);
-      wbMerge = { gen: wbMerge.gen, id: null, status: 'none', done: 0, total: 0 };
+      var gen = wbMerge.gen + 1;
+      for (var i = 0; i < wbMerge.parts.length; i++) {
+        if (wbMerge.parts[i].id && !wbMerge.parts[i].exported) google.script.run.apiWbDiscardMerge(wbMerge.parts[i].id);
+      }
+      wbMerge = wbMergeBlank(gen);
       wbMergeStatus();
+    }
+
+    /** A connection that dropped or a Google hiccup - worth another go. A real server error is not. */
+    function wbTransient(e) {
+      var m = String((e && e.message) || e || '');
+      return /NetworkError|HTTP 0|timed out|time-out|timeout|temporarily|try again|Service error|Service Spreadsheets failed|Service invoked too many times|Rate Limit|Internal error|Backend Error|unavailable/i.test(m);
+    }
+    /** One server call, retried up to three times (2 s, 6 s, 15 s apart) when the failure looks transient. */
+    function wbCallRetry(fnName, args, onOk, onFail, onTry) {
+      var tries = 0, delays = [2000, 6000, 15000];
+      var go = function () {
+        tries++;
+        var r = google.script.run.withSuccessHandler(onOk).withFailureHandler(function (e) {
+          if (tries <= delays.length && wbTransient(e)) {
+            if (onTry) onTry(tries, e);
+            setTimeout(go, delays[tries - 1]);
+          } else onFail(e);
+        });
+        r[fnName].apply(r, args);
+      };
+      go();
+    }
+    function wbSessionFileName(id) {
+      for (var i = 0; i < wbSession.length; i++) if (wbSession[i].id === id) return wbSession[i].name;
+      return '';
+    }
+
+    /** Adds wbMerge.ids from wbMerge.next onwards, opening a new part when the server says the current one is full. */
+    function wbMergeRun(gen, done, fail) {
+      var m = wbMerge;
+      var startPart = function (then) {
+        var n = m.parts.length + 1;
+        wbCallRetry('apiWbMergeStart', [m.label, n], function (res) {
+          if (gen !== m.gen) { google.script.run.apiWbDiscardMerge(res.mergedId); return; }
+          m.parts.push({ id: res.mergedId, name: res.name, part: n, cells: 0, bytes: 0, files: 0, exported: null });
+          wbMergeStatus();
+          then();
+        }, fail, function (t) { m.retrying = t; wbMergeStatus(); });
+      };
+      var step = function () {
+        if (gen !== m.gen) return;
+        m.retrying = 0;
+        if (m.next >= m.ids.length) { m.status = 'ready'; wbMergeStatus(); done(); return; }
+        if (!m.parts.length) { startPart(step); return; }
+        var p = m.parts[m.parts.length - 1], id = m.ids[m.next];
+        wbMergeStatus();
+        wbCallRetry('apiWbMergeAdd', [p.id, id, m.icpMap[id] || []], function (res) {
+          if (gen !== m.gen) return;
+          if (res && res.full) { startPart(step); return; } // this file opens the next part
+          if (res) { p.cells = res.cells || p.cells; p.bytes = res.bytes || p.bytes; }
+          p.files++;
+          m.next++;
+          wbMergeStatus();
+          step();
+        }, fail, function (t) { m.retrying = t; wbMergeStatus(); });
+      };
+      m.status = 'running';
+      wbMergeStatus();
+      step();
     }
 
     function wbStartBgMerge() {
@@ -2526,34 +2605,53 @@
       if (!meta) return;
       wbInvalidateMerge();
       var gen = wbMerge.gen;
-      var ids = wbAnalysedIds.slice();
-      wbMerge.status = 'running'; wbMerge.total = ids.length; wbMerge.done = 0;
-      wbMergeStatus();
-      var label = wbCdfLabel(meta);
-      var icpMap = wbFileIcpMap();
-      var failed = function (e) {
-        if (gen !== wbMerge.gen) return;
-        wbMerge.status = 'failed'; wbMergeStatus();
-        if (wbFinishPending) wbFinishContinue();
-      };
-      google.script.run.withSuccessHandler(function (startRes) {
-        if (gen !== wbMerge.gen) { google.script.run.apiWbDiscardMerge(startRes.mergedId); return; }
-        wbMerge.id = startRes.mergedId;
-        var i = 0;
-        var next = function () {
+      wbMerge.ids = wbAnalysedIds.slice(); wbMerge.total = wbMerge.ids.length;
+      wbMerge.label = wbCdfLabel(meta); wbMerge.icpMap = wbFileIcpMap();
+      wbMergeRun(gen,
+        function () { if (wbFinishPending) wbFinishContinue(); },
+        function (e) {
           if (gen !== wbMerge.gen) return;
-          if (i >= ids.length) {
-            wbMerge.status = 'ready'; wbMergeStatus();
-            if (wbFinishPending) wbFinishContinue();
-            return;
-          }
-          google.script.run
-            .withSuccessHandler(function () { if (gen !== wbMerge.gen) return; i++; wbMerge.done = i; wbMergeStatus(); next(); })
-            .withFailureHandler(failed)
-            .apiWbMergeAdd(startRes.mergedId, ids[i], icpMap[ids[i]] || []);
-        };
-        next();
-      }).withFailureHandler(failed).apiWbMergeStart(label);
+          wbMerge.status = 'failed'; wbMerge.err = String((e && e.message) || e); wbMergeStatus();
+          if (wbFinishPending) wbFinishContinue();
+        });
+    }
+
+    // ---- finish-off progress strip (v2.25) ----
+    function wbFinProgress() {
+      var el = document.getElementById('wbProgress');
+      if (!el || !wbFin) return;
+      var detail = wbFin.detail;
+      if (wbMerge.status === 'running' && (wbFin.step === 'merging' || wbFin.step === 'waiting')) {
+        detail = 'merging file ' + Math.min(wbMerge.next + 1, wbMerge.total) + ' of ' + wbMerge.total +
+          (wbMerge.parts.length > 1 ? ' (part ' + wbMerge.parts.length + ')' : '') +
+          (wbSessionFileName(wbMerge.ids[wbMerge.next]) ? ' — ' + wbSessionFileName(wbMerge.ids[wbMerge.next]) : '') +
+          (wbMerge.retrying ? ' — connection dropped, retry ' + wbMerge.retrying + ' of 3' : '');
+      }
+      var slow = Date.now() - (wbFin.stepT0 || wbFin.t0) > 90000 ? ' — still working; a big step can take a few minutes' : '';
+      el.innerHTML = '⏳ <b>Finishing ' + esc(wbFin.name || 'customer') + '</b>: ' + esc(detail || '') + ' · <span class="mono">' + wbElapsed(wbFin.t0) + '</span>' + slow +
+        ' <span class="muted">— keep this page open</span>';
+    }
+    function wbFinProgressStart(name) {
+      if (!wbFin) wbFin = { t0: Date.now(), stepT0: Date.now(), step: '', detail: '' };
+      wbFin.name = name || wbFin.name;
+      var el = document.getElementById('wbProgress');
+      if (el) el.style.display = '';
+      if (!wbFinTick && typeof setInterval === 'function') wbFinTick = setInterval(wbFinProgress, 1000);
+      try { window.onbeforeunload = function () { return 'Walter is still finishing this customer — leaving now stops it half-way.'; }; } catch (e) {}
+      wbFinProgress();
+    }
+    function wbFinStep(step, detail) {
+      if (!wbFin) return;
+      if (wbFin.step !== step) wbFin.stepT0 = Date.now();
+      wbFin.step = step; wbFin.detail = detail;
+      wbFinProgress();
+    }
+    function wbFinProgressStop() {
+      if (wbFinTick && typeof clearInterval === 'function') clearInterval(wbFinTick);
+      wbFinTick = null;
+      var el = document.getElementById('wbProgress');
+      if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+      try { window.onbeforeunload = null; } catch (e) {}
     }
 
     function wbFinish(btn) {
@@ -2590,6 +2688,8 @@
       wbFinishIcpMap = wbFileIcpMap();
       if (wbMerge.status === 'running') {
         wbFinishPending = true;
+        wbFinProgressStart(wbCdfLabel(meta));
+        wbFinStep('waiting', 'waiting for the archive build');
         setLbl('Waiting for archive\u2026');
         return;
       }
@@ -2601,77 +2701,104 @@
       var btn = wbFinishBtn, meta = wbFinishMeta, ids = wbFinishIds;
       var label = btn.querySelector('span');
       var setLbl = function (t) { if (label) label.textContent = t; };
+      wbFinProgressStart(wbCdfLabel(meta));
+      var fin = wbFin;
       var fail = function (e) {
+        wbFinProgressStop();
         btn.disabled = false; setLbl('Finish customer');
-        wbError('Finish-off stopped: ' + (e.message || e) + ' \u2014 nothing was deleted; you can retry.');
+        wbError('Finish-off stopped while ' + (fin.detail || fin.step || 'finishing') + ': ' + ((e && e.message) || e) +
+          ' — nothing was deleted and the analysis is kept; click Finish customer again to carry on from where it stopped.');
       };
-      var exportStep = function (mergedId) {
-        setLbl('Exporting xlsx\u2026');
-        google.script.run.withSuccessHandler(function (merged) {
-          setLbl('Finishing\u2026');
-          google.script.run.withSuccessHandler(function (res) {
-            setLbl('Finish customer');
-            var h = '<p class="ok">Consumption archive: <b>' + esc(merged.name) + '</b><br>' +
-              '<a href="' + esc(merged.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' +
-              (merged.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(merged.fileId) + '">' + ICONS.download + ' download to PC</a>' : '') +
-              (merged.shared === false ? ' <span class="flag">⚠ link-sharing could not be set (' + esc(merged.shareError || '') + ') — others may hit an access prompt</span>' : '') +
-              '</p>';
-            if (merged.analysisError) h += '<p class="flag">⚠ The “Analysis” tab could not be added to the file (' + esc(merged.analysisError) + ') — the raw data tabs are all there.</p>';
-            if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
-            h += wbDupHtml(res);
-            if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
-            if (res.queueError) h += '<p class="error">' + esc(res.queueError) + '</p>';
-            if (res.indexed) h += '<p class="muted">Indexed — find this file again any time on the 🗄 Archive tab.</p>';
-            if (res.indexError) h += '<p class="flag">⚠ ' + esc(res.indexError) + ' (the file itself is fine).</p>';
-            wbResetSession(btn);
-            document.getElementById('wbWarn').innerHTML = h;
-            rfpLoaded = false;
-            arcLoaded = false;
-            cdfTotalsLoad(true);
-          }).withFailureHandler(fail).apiWbFinalise(ids, meta, merged.url, wbSentToQueue,
-            { fileId: merged.fileId, name: merged.name, url: merged.url });
-        }).withFailureHandler(fail).apiWbMergeExport(mergedId, { label: wbCdfLabel(meta), analysis: wbFinishTable });
+      var report = function (parts, res) {
+        wbFinProgressStop();
+        setLbl('Finish customer');
+        var h = '';
+        for (var k = 0; k < parts.length; k++) {
+          var merged = parts[k].exported;
+          h += '<p class="ok">Consumption archive' + (parts.length > 1 ? ' part ' + (k + 1) + ' of ' + parts.length : '') + ': <b>' + esc(merged.name) + '</b><br>' +
+            '<a href="' + esc(merged.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' +
+            (merged.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(merged.fileId) + '">' + ICONS.download + ' download to PC</a>' : '') +
+            (merged.shared === false ? ' <span class="flag">⚠ link-sharing could not be set (' + esc(merged.shareError || '') + ') — others may hit an access prompt</span>' : '') +
+            '</p>';
+          if (merged.analysisError) h += '<p class="flag">⚠ The “Analysis” tab could not be added to the file (' + esc(merged.analysisError) + ') — the raw data tabs are all there.</p>';
+        }
+        if (parts.length > 1) h += '<p class="muted">The lot was too big for one workbook, so the archive is in ' + parts.length + ' parts — each has the Analysis tab; the files are split between them.</p>';
+        if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (💰 RFP tab).</p>';
+        h += wbDupHtml(res);
+        if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">⚠ Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
+        if (res.queueError) h += '<p class="error">' + esc(res.queueError) + '</p>';
+        if (res.indexed) h += '<p class="muted">Indexed — find ' + (parts.length > 1 ? 'these files' : 'this file') + ' again any time on the 🗄 Archive tab.</p>';
+        if (res.indexError) h += '<p class="flag">⚠ ' + esc(res.indexError) + ' (the file itself is fine).</p>';
+        h += '<p class="muted">Done in ' + wbElapsed(fin.t0) + '.</p>';
+        wbResetSession(btn);
+        document.getElementById('wbWarn').innerHTML = h;
+        rfpLoaded = false;
+        arcLoaded = false;
+        cdfTotalsLoad(true);
+        // The RFP tab may be the one on screen - redraw it so the new rows show.
+        var bq = document.getElementById('tab-bulkquote');
+        if (bq && bq.style.display !== 'none') { rfpLoaded = true; rfpLoad(null); }
+      };
+      var finalise = function () {
+        var parts = wbMerge.parts;
+        wbFinStep('queueing', 'queueing ' + meta.icps.length + ' ICP(s) for RFP and indexing the archive');
+        setLbl('Finishing…');
+        var info = [];
+        for (var k = 0; k < parts.length; k++) info.push({ fileId: parts[k].exported.fileId, name: parts[k].exported.name, url: parts[k].exported.url });
+        google.script.run.withSuccessHandler(function (res) { report(parts, res); })
+          .withFailureHandler(fail)
+          .apiWbFinalise(ids, meta, info[0].url, wbSentToQueue, info[0], info);
+      };
+      var exportAll = function () {
+        var parts = wbMerge.parts, n = parts.length, k = 0;
+        var nextExport = function () {
+          if (k >= n) { finalise(); return; }
+          var p = parts[k];
+          if (p.exported) { k++; nextExport(); return; }
+          wbFinStep('exporting', 'exporting the CDF' + (n > 1 ? ' part ' + (k + 1) + ' of ' + n : '') + ' as xlsx — one long step, a few minutes for a big lot');
+          setLbl('Exporting' + (n > 1 ? ' ' + (k + 1) + '/' + n : '') + '…');
+          google.script.run.withSuccessHandler(function (res) { p.exported = res; k++; nextExport(); })
+            .withFailureHandler(fail)
+            .apiWbMergeExport(p.id, { label: wbCdfLabel(meta), analysis: wbFinishTable, part: k + 1, parts: n });
+        };
+        nextExport();
       };
 
       if (!ids.length) {
         // Manual-only session: nothing to merge or trash beyond queueing.
-        setLbl('Finishing\u2026');
+        wbFinStep('queueing', 'queueing ' + meta.icps.length + ' ICP(s) for RFP');
+        setLbl('Finishing…');
         google.script.run.withSuccessHandler(function (res) {
+          wbFinProgressStop();
           setLbl('Finish customer');
           var h = '';
-          if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (\ud83d\udcb0 RFP tab).</p>';
+          if (res.queued) h += '<p class="ok">' + res.queued + ' ICP(s) queued for bulk pricing (💰 RFP tab).</p>';
           h += wbDupHtml(res);
-          if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">\u26a0 Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
+          if (res.skippedIcps && res.skippedIcps.length) h += '<p class="flag">⚠ Not queued (no annual figure): ' + res.skippedIcps.map(esc).join(', ') + '</p>';
           wbResetSession(btn);
           document.getElementById('wbWarn').innerHTML = h;
           rfpLoaded = false;
         }).withFailureHandler(fail).apiWbFinalise([], meta, '', wbSentToQueue);
         return;
       }
-      if (wbMerge.status === 'ready' && wbMerge.id) {
-        var takenId = wbMerge.id;
-        wbMerge.id = null; wbMerge.status = 'none'; wbMergeStatus();
-        exportStep(takenId);
+      if (wbMerge.status === 'ready' && wbMerge.parts.length) { exportAll(); return; }
+      if (wbMerge.status === 'running') {
+        wbFinishPending = true;
+        wbFinStep('waiting', 'waiting for the archive build');
+        setLbl('Waiting for archive…');
         return;
       }
-
-      // No usable background merge (failed or never ran): rebuild inline.
-      var labelText = wbCdfLabel(meta);
-      var finIcpMap = wbFinishIcpMap || {};
-      setLbl('Creating archive\u2026');
-      google.script.run.withSuccessHandler(function (startRes) {
-        var i = 0;
-        var addNext = function () {
-          if (i >= ids.length) { exportStep(startRes.mergedId); return; }
-          setLbl('Merging ' + (i + 1) + '/' + ids.length + '\u2026');
-          google.script.run
-            .withSuccessHandler(function () { i++; addNext(); })
-            .withFailureHandler(fail)
-            .apiWbMergeAdd(startRes.mergedId, ids[i], finIcpMap[ids[i]] || []);
-        };
-        addNext();
-      }).withFailureHandler(fail).apiWbMergeStart(labelText);
-      wbLastRows = null;
+      // Failed (continue from the file that failed, parts kept) or never built (start fresh).
+      if (wbMerge.status !== 'failed' || !wbMerge.parts.length || wbMerge.ids.join(',') !== ids.join(',')) {
+        wbInvalidateMerge();
+        wbMerge.ids = ids.slice(); wbMerge.total = ids.length;
+        wbMerge.label = wbCdfLabel(meta); wbMerge.icpMap = wbFinishIcpMap || {};
+      }
+      var gen = wbMerge.gen;
+      wbFinStep('merging', 'merging');
+      setLbl('Merging…');
+      wbMergeRun(gen, function () { exportAll(); },
+        function (e) { wbMerge.status = 'failed'; wbMerge.err = String((e && e.message) || e); wbMergeStatus(); fail(e); });
     }
 
     function wbResetSession(btn) {
@@ -2702,8 +2829,9 @@
       wbCardCollapse(document.getElementById('wbCurCard'), false); // a new session starts at the drop zone
       document.getElementById('wbRatesModal').style.display = 'none';
       document.getElementById('wbRatesState').textContent = '';
-      wbMerge = { gen: wbMerge.gen + 1, id: null, status: 'none', done: 0, total: 0 };
+      wbMerge = wbMergeBlank(wbMerge.gen + 1); // exported parts are gone from Drive already; nothing to discard
       wbMergeStatus();
+      wbFin = null; wbFinProgressStop();
       wbRenderFiles();
       document.getElementById('wbPreview').style.display = 'none';
       document.getElementById('wbCalcs').innerHTML = '<span class="muted">Add files and analyse — each ICP then gets its own block below: meters, reliability grade, monthly and annual kWh, and flags.</span>';
