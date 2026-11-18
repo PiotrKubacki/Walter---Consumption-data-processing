@@ -375,7 +375,7 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData, rates) {
     const share = bettyShare_(outFile);
     let indexError = '';
     try {
-      betIndexAdd_({ customerId: idList.length === 1 ? idList[0] : idList.join(', '), customer: idList.length === 1 ? custName : '',
+      betIndexAdd_({ customerId: idList.length === 1 ? idList[0] : idList.join(', '), customer: idList.length === 1 ? custName : '', tradingName: idList.length === 1 ? custTrading : '',
         icps: summary.updated.map(u => u.icp), hasRates: summary.ratesRows > 0, file: outFile });
     } catch (e) { indexError = String(e.message || e); }
 
@@ -740,7 +740,7 @@ function apiBettyWrite(payload) {
     try { writeFlagsLog_(outFile.getName(), flagsLog); } catch (e) {}
     let indexError = '';
     try {
-      betIndexAdd_({ customerId: idList.join(', '), customer: idList.length === 1 ? custName : '',
+      betIndexAdd_({ customerId: idList.join(', '), customer: idList.length === 1 ? custName : '', tradingName: idList.length === 1 ? custTrading : '',
         icps: values.map(v => v[3]), hasRates: ratesRows > 0, file: outFile });
     } catch (e) { indexError = String(e.message || e); }
     return { ok: true, outputUrl: outFile.getUrl(), outputName: outFile.getName(), fileId: outFile.getId(),
@@ -764,7 +764,7 @@ function apiBettyWrite(payload) {
 
 const BET_INDEX_TAB = 'Betty Index';
 const BET_INDEX_HEADERS = ['date', 'customer id', 'registered name', 'icp count', 'icps', 'operator',
-  'file name', 'file id', 'url', 'size bytes', 'rates (Y/N)', 'deleted at', 'deleted by', 'delete reason'];
+  'file name', 'file id', 'url', 'size bytes', 'rates (Y/N)', 'deleted at', 'deleted by', 'delete reason', 'trading name'];
 const BET_FOLDER_NAME = 'Betty files';
 
 /** Config key betty_output_folder_id if set, else a "Betty files" subfolder of the output folder (created on first use). */
@@ -814,6 +814,10 @@ function betIndexSheet_() {
   // v2.21: delete columns, added to a tab made by an earlier build.
   if (!sheet.getRange(1, 12).getValue()) {
     sheet.getRange(1, 12, 1, 3).setValues([BET_INDEX_HEADERS.slice(11, 14)]).setFontWeight('bold');
+  }
+  // v2.32: trading name, so the Archive list can show the standard customer label.
+  if (!sheet.getRange(1, 15).getValue()) {
+    sheet.getRange(1, 15, 1, 1).setValues([BET_INDEX_HEADERS.slice(14, 15)]).setFontWeight('bold');
   }
   return sheet;
 }
@@ -872,7 +876,8 @@ function betIndexAdd_(info) {
   try { size = info.file.getSize(); } catch (e) {}
   betIndexSheet_().appendRow([new Date(), String(info.customerId || ''), String(info.customer || ''),
     info.icps.length, info.icps.join(', ').slice(0, 45000), operator,
-    info.file.getName(), info.file.getId(), info.file.getUrl(), size, info.hasRates ? 'Y' : '']);
+    info.file.getName(), info.file.getId(), info.file.getUrl(), size, info.hasRates ? 'Y' : '',
+    '', '', '', String(info.tradingName || '')]);
 }
 
 /** Archive search over the Betty Index: customer id, name, file name or ICP. Newest first, capped at 50. */
@@ -887,12 +892,12 @@ function apiBetSearch(q) {
     if (!String(r[7] || '').trim() && !String(r[6] || '').trim()) continue;
     out.total++;
     const icps = String(r[4] || '');
-    if (needle && [r[1], r[2], r[6], icps].join(' | ').toLowerCase().indexOf(needle) === -1) continue;
+    if (needle && [r[1], r[2], r[14], r[6], icps].join(' | ').toLowerCase().indexOf(needle) === -1) continue; // v2.32: trading name searchable too
     out.matched++;
     if (out.rows.length >= 50) continue;
     out.rows.push({
       date: r[0] instanceof Date ? Utilities.formatDate(r[0], 'Pacific/Auckland', 'yyyy-MM-dd HH:mm') : String(r[0] || ''),
-      customerId: String(r[1] || ''), customer: String(r[2] || ''),
+      customerId: String(r[1] || ''), customer: String(r[2] || ''), tradingName: String(r[14] || ''),
       icpCount: Number(r[3]) || 0, operator: String(r[5] || ''),
       fileName: String(r[6] || ''), fileId: String(r[7] || ''), url: String(r[8] || ''),
       sizeBytes: Number(r[9]) || 0, hasRates: /^y/i.test(String(r[10] || '')),

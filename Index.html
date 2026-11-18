@@ -109,6 +109,8 @@
     #wbSessName { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #wbSessionCard .sessline { font-size: 11px; color: #D6E6E8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #wbMergeState:not(:empty)::before { content: ' · '; }
+    #wbSessionCard .sesscancel { all: unset; cursor: pointer; margin-left: 10px; color: #FFC9C4; font: inherit; font-size: 11px; text-decoration: underline; }
+    #wbSessionCard .sesscancel:hover { color: #fff; }
     #wbSessionCard button, #wbSessionCard a.ghostbtn { width: 148px; min-width: 148px; box-sizing: border-box; height: 38px; padding: 0 6px; font-size: 13px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
     #wbAnalyseBtn { background: #fff; color: var(--tuc-accent-dark); }
     #wbSessionCard a.ghostbtn { background: transparent; color: #fff; border-color: rgba(255,255,255,.6); flex-shrink: 0; }
@@ -195,7 +197,7 @@
     <div id="wbSessionCard" style="display:none">
       <div class="sessid">
         <div id="wbSessName">New session</div>
-        <div class="sessline"><span id="wbSessStatus"></span><span id="wbMergeState"></span></div>
+        <div class="sessline"><span id="wbSessStatus"></span><span id="wbMergeState"></span><button id="wbCancelBtn" class="sesscancel" onclick="wbCancelSession(this)" title="Throw this session away: uploaded files go to the Drive bin, nothing is queued or archived">✕ cancel session</button></div>
       </div>
       <a id="wbBettyLink" class="ghostbtn" href="#" target="_blank" title="Open this customer in Betty">🔗 Betty</a>
       <button id="wbAnalyseBtn" onclick="wbAnalyse(this)">⚡ Analyse session</button>
@@ -1259,20 +1261,137 @@
     }
 
     var wbUpTotal = 0; // files in the lot being uploaded (v2.22)
+    // v2.33: a file is sent to Walter as ONE google.script.run call carrying it
+    // base64-encoded, and Apps Script refuses a call much past 50 MB with a
+    // bare HTTP 400. A big EIEP book (the whole Meridian file: 52 MB, 555k
+    // rows, 27 ICPs) is therefore split in the browser into one file per ICP
+    // before upload - which also keeps every later step (parse time, cache,
+    // one CDF tab per file) inside Google's limits. Files under WB_SPLIT_MB
+    // go up as they are.
+    var WB_SPLIT_MB = 10;
+    var WB_UPLOAD_MAX_MB = 35; // a single call past this is refused by Apps Script before Walter sees it
+    var wbSplitNote = '';
     function wbSendFiles(fileList) {
-      for (var i = 0; i < fileList.length; i++) (function (f) {
-        wbBusy++; wbUpTotal++;
-        wbRenderFiles();
-        var reader = new FileReader();
-        reader.onload = function () {
-          google.script.run
-            .withSuccessHandler(function (info) { wbBusy--; wbAddInfo(info); })
-            .withFailureHandler(function (e) { wbBusy--; wbError(f.name + ': ' + (e.message || e)); })
-            .apiWbUpload(reader.result.split(',')[1], f.name, f.type);
+      var list = [];
+      for (var i = 0; i < fileList.length; i++) list.push(fileList[i]);
+      var next = function () {
+        if (!list.length) return;
+        var f = list.shift();
+        if (f.size > WB_SPLIT_MB * 1024 * 1024) wbSendLarge(f, next);
+        else { wbUploadOne(f, f.name, f.type); next(); }
+      };
+      next();
+    }
+    /** One file (or one split part) up to the work folder; parts of a split go one after another. */
+    function wbUploadOne(blob, name, type, done) {
+      wbBusy++; wbUpTotal++;
+      wbRenderFiles();
+      var reader = new FileReader();
+      reader.onload = function () {
+        google.script.run
+          .withSuccessHandler(function (info) { wbBusy--; wbAddInfo(info); if (done) done(); })
+          .withFailureHandler(function (e) { wbBusy--; wbError(name + ': ' + (e.message || e)); if (done) done(); })
+          .apiWbUpload(reader.result.split(',')[1], name, type);
+      };
+      reader.onerror = function () { wbBusy--; wbError('Could not read ' + name); if (done) done(); };
+      reader.readAsDataURL(blob);
+    }
+    /** A file over WB_SPLIT_MB: read it as text, split per ICP when it is an EIEP file, upload the parts one at a time. */
+    function wbSendLarge(f, next) {
+      var mb = Math.round(f.size / 1024 / 1024 * 10) / 10;
+      wbSplitNote = 'reading ' + f.name + ' (' + mb + ' MB) to split it by ICP…';
+      wbRenderFiles();
+      var reader = new FileReader();
+      reader.onload = function () {
+        var res = eiepSplitText(String(reader.result || ''), f.name);
+        wbSplitNote = '';
+        if (res.error) {
+          if (f.size > WB_UPLOAD_MAX_MB * 1024 * 1024) {
+            wbError(f.name + ' (' + mb + ' MB): ' + res.error + ' Files this big cannot be uploaded in one go — ' +
+              'ask the retailer for a shorter window or fewer ICPs per file, or split it yourself.');
+            next();
+          } else {
+            // not an EIEP file we can split, but small enough to try as it is
+            wbUploadOne(f, f.name, f.type, next);
+          }
+          return;
+        }
+        wbSplitNote = f.name + ': split into ' + res.files.length + ' files (one per ICP), uploading…';
+        var k = 0;
+        var up = function () {
+          if (k >= res.files.length) { wbSplitNote = ''; wbRenderFiles(); next(); return; }
+          var part = res.files[k++];
+          wbUploadOne(new Blob([part.text], { type: 'text/csv' }), part.name, 'text/csv', up);
         };
-        reader.onerror = function () { wbBusy--; wbError('Could not read ' + f.name); };
-        reader.readAsDataURL(f);
-      })(fileList[i]);
+        up();
+      };
+      reader.onerror = function () { wbSplitNote = ''; wbError('Could not read ' + f.name); next(); };
+      reader.readAsText(f);
+    }
+
+    /**
+     * Split an EIEP ICPCONS / ICPSUMM file into one file per ICP (pure; the
+     * server has the same function, eiepSplitText_ in Workbench.gs - keep
+     * the two identical). Every part carries the file's head rows (HDR,
+     * the v1.4 DET label row, the ICPSUMM DES row) with the HDR record
+     * count rewritten, then that ICP's DET rows in file order.
+     * Returns { files: [{ name, text, icp, rows }], icps, error }.
+     */
+    function eiepSplitText(text, baseName) {
+      var out = { files: [], icps: 0, error: '' };
+      var lines = String(text || '').split(/\r?\n/);
+      if (lines.length && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].slice(1);
+      var head = [], hdrAt = -1, icpCol = 2, format = '';
+      var first = -1;
+      var fieldsOf = function (line) { return line.split(','); };
+      var isLabelRow = function (fs) {
+        var j = fs.slice(1).join(',').toLowerCase();
+        return j.indexOf('icp') !== -1 && (j.indexOf('period_start') !== -1 || j.indexOf('consumption') !== -1);
+      };
+      for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i];
+        if (!ln || !ln.replace(/\s/g, '')) continue;
+        var fs = fieldsOf(ln);
+        var t = String(fs[0] || '').trim().toUpperCase();
+        if (t === 'HDR') {
+          format = String(fs[1] || '').trim().toUpperCase();
+          if (format !== 'ICPCONS' && format !== 'ICPSUMM') { out.error = 'Not an EIEP consumption file (HDR says ' + (fs[1] || '?') + ').'; return out; }
+          hdrAt = head.length; head.push(ln); continue;
+        }
+        if (t === 'DES') {
+          for (var d = 1; d < fs.length; d++) if (String(fs[d]).toLowerCase().indexOf('icp') !== -1) { icpCol = d; break; }
+          head.push(ln); continue;
+        }
+        if (t === 'DET' && isLabelRow(fs)) {
+          for (var l = 1; l < fs.length; l++) if (String(fs[l]).trim().toLowerCase() === 'icp') { icpCol = l; break; }
+          head.push(ln); continue;
+        }
+        if (t === 'DET') { first = i; break; }
+        head.push(ln); // anything else before the data is kept as head
+      }
+      if (hdrAt === -1) { out.error = 'No HDR row - not an EIEP file, so Walter cannot split it by ICP.'; return out; }
+      if (first === -1) { out.error = 'No DET rows in the file.'; return out; }
+      var byIcp = {}, order = [];
+      for (var r = first; r < lines.length; r++) {
+        var row = lines[r];
+        if (!row || !row.replace(/\s/g, '')) continue;
+        var fr = fieldsOf(row);
+        if (String(fr[0] || '').trim().toUpperCase() !== 'DET') continue; // stray rows are dropped - never guessed into an ICP
+        var icp = String(fr[icpCol] || '').trim() || '(blank ICP)';
+        if (!byIcp[icp]) { byIcp[icp] = []; order.push(icp); }
+        byIcp[icp].push(row);
+      }
+      out.icps = order.length;
+      if (order.length < 2) { out.error = 'The file has ' + (order.length ? 'one ICP' : 'no ICP') + ', so it cannot be split by ICP.'; return out; }
+      var base = String(baseName || 'file').replace(/\.[^.]+$/, '');
+      for (var o = 0; o < order.length; o++) {
+        var rows = byIcp[order[o]];
+        var h = head.slice();
+        var hf = fieldsOf(h[hdrAt]);
+        if (hf.length > 8) { hf[8] = String(rows.length); h[hdrAt] = hf.join(','); }
+        out.files.push({ name: base + ' - ' + order[o] + '.csv', text: h.concat(rows).join('\r\n') + '\r\n', icp: order[o], rows: rows.length });
+      }
+      return out;
     }
 
     function wbAddDrive(btn) {
@@ -1286,6 +1405,12 @@
     }
 
     function wbAddInfo(info) {
+      // v2.33: a Drive link to a big EIEP book comes back as several files (split per ICP on the server)
+      if (info && info.files && info.files.length !== undefined) {
+        for (var i = 0; i < info.files.length; i++) wbAddInfo(info.files[i]);
+        if (info.note) document.getElementById('wbWarn').innerHTML = '<p class="muted">' + esc(info.note) + '</p>';
+        return;
+      }
       wbInvalidateMerge();
       wbSession.push(info);
       wbSelected = info.id;
@@ -1312,8 +1437,9 @@
           '<button class="icon" style="color:var(--bad)" title="Remove this file from the session" onclick="event.stopPropagation();wbRemoveFile(\'' + f.id + '\')">✕</button>' +
           '</div>';
       }
-      if (!wbBusy) wbUpTotal = 0; // the lot is finished
-      else h += '<div class="muted" style="padding:4px 6px">⏳ uploading ' + wbUpTotal + ' file(s) — ' + (wbUpTotal - wbBusy) + ' of ' + wbUpTotal + ' done…</div>';
+      if (!wbBusy && !wbSplitNote) wbUpTotal = 0; // the lot is finished
+      else if (wbBusy) h += '<div class="muted" style="padding:4px 6px">⏳ uploading ' + wbUpTotal + ' file(s) — ' + (wbUpTotal - wbBusy) + ' of ' + wbUpTotal + ' done…</div>';
+      if (wbSplitNote) h += '<div class="muted" style="padding:4px 6px">✂ ' + esc(wbSplitNote) + '</div>';
       box.innerHTML = h;
       wbRenderSession();
     }
@@ -1977,6 +2103,35 @@
       var bl = document.getElementById('wbBettyLink');
       if (burl && !wbProspect) { bl.href = burl; bl.style.display = 'inline-flex'; }
       else bl.style.display = 'none';
+    }
+
+    /**
+     * v2.33: Cancel session (Peter, 19 Nov) - throw the session away: the
+     * files uploaded for it go to the Drive bin (like Finish does), a
+     * half-built archive is discarded, nothing is queued or archived. The
+     * rates draft stays - it belongs to the customer, not the session.
+     * Not while uploading or finishing.
+     */
+    function wbCancelSession(btn) {
+      if (wbFin) { alert('Walter is finishing this customer — wait for it to end.'); return; }
+      if (wbBusy) { alert('Files are still uploading — wait for them to finish, then cancel.'); return; }
+      var n = wbSession.length;
+      var who = document.getElementById('wbSessName').textContent || 'this session';
+      if (!confirm('Cancel the session for ' + who + '?\n\n' + (n ? n + ' uploaded file(s) go to the Drive bin; ' : '') +
+        'nothing is queued or archived. Rates already saved stay with the customer.')) return;
+      var ids = [];
+      for (var i = 0; i < wbSession.length; i++) ids.push(wbSession[i].id);
+      btn.disabled = true;
+      var finish = function () {
+        wbInvalidateMerge(); // half-built archive parts are discarded on the server
+        wbResetSession(btn);
+        document.getElementById('wbWarn').innerHTML = '<p class="muted">Session cancelled' + (n ? ' — ' + n + ' file(s) moved to the Drive bin.' : '.') + '</p>';
+      };
+      if (!ids.length) { finish(); return; }
+      google.script.run
+        .withSuccessHandler(function () { finish(); })
+        .withFailureHandler(function (e) { btn.disabled = false; wbError('Could not cancel the session: ' + (e.message || e)); })
+        .apiTrashFiles(ids);
     }
 
     // ---------------- Prospect session (10 Nov) ----------------

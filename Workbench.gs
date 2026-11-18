@@ -47,8 +47,86 @@ function apiWbAddDriveFile(idOrUrl) {
   const m = String(idOrUrl || '').match(/[-\w]{25,}/);
   if (!m) throw new Error('No Drive file ID found in: ' + idOrUrl);
   const src = DriveApp.getFileById(m[0]);
+  // v2.33: a big EIEP book linked from Drive is split per ICP here, the
+  // way the browser splits an uploaded one (one tab of 555k rows would
+  // never fit a CDF workbook). The original is never touched.
+  if (src.getSize() > WB_SPLIT_MB_ * 1024 * 1024 && /\.(csv|txt)$/i.test(src.getName())) {
+    const res = eiepSplitText_(src.getBlob().getDataAsString(), src.getName());
+    if (!res.error) {
+      const folder = getWorkFolder_();
+      const files = res.files.map(p => wbFileInfo_(folder.createFile(p.name, p.text, MimeType.CSV)));
+      return { files: files, note: src.getName() + ' (' + Math.round(src.getSize() / 1048576) + ' MB) was split into ' + files.length + ' files, one per ICP.' };
+    }
+  }
   const copy = src.makeCopy(src.getName(), getWorkFolder_());
   return wbFileInfo_(copy);
+}
+
+const WB_SPLIT_MB_ = 10; // same threshold as the browser's WB_SPLIT_MB
+
+/**
+ * v2.33: split an EIEP ICPCONS / ICPSUMM file into one file per ICP.
+ * IDENTICAL to eiepSplitText in Index.html (pure ES5; a test checks the
+ * two give the same output) - change both or neither. Every part carries
+ * the file's head rows (HDR, the v1.4 DET label row, the ICPSUMM DES
+ * row) with the HDR record count rewritten, then that ICP's DET rows in
+ * file order. Returns { files: [{ name, text, icp, rows }], icps, error }.
+ */
+function eiepSplitText_(text, baseName) {
+  var out = { files: [], icps: 0, error: '' };
+  var lines = String(text || '').split(/\r?\n/);
+  if (lines.length && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].slice(1);
+  var head = [], hdrAt = -1, icpCol = 2, format = '';
+  var first = -1;
+  var fieldsOf = function (line) { return line.split(','); };
+  var isLabelRow = function (fs) {
+    var j = fs.slice(1).join(',').toLowerCase();
+    return j.indexOf('icp') !== -1 && (j.indexOf('period_start') !== -1 || j.indexOf('consumption') !== -1);
+  };
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    if (!ln || !ln.replace(/\s/g, '')) continue;
+    var fs = fieldsOf(ln);
+    var t = String(fs[0] || '').trim().toUpperCase();
+    if (t === 'HDR') {
+      format = String(fs[1] || '').trim().toUpperCase();
+      if (format !== 'ICPCONS' && format !== 'ICPSUMM') { out.error = 'Not an EIEP consumption file (HDR says ' + (fs[1] || '?') + ').'; return out; }
+      hdrAt = head.length; head.push(ln); continue;
+    }
+    if (t === 'DES') {
+      for (var d = 1; d < fs.length; d++) if (String(fs[d]).toLowerCase().indexOf('icp') !== -1) { icpCol = d; break; }
+      head.push(ln); continue;
+    }
+    if (t === 'DET' && isLabelRow(fs)) {
+      for (var l = 1; l < fs.length; l++) if (String(fs[l]).trim().toLowerCase() === 'icp') { icpCol = l; break; }
+      head.push(ln); continue;
+    }
+    if (t === 'DET') { first = i; break; }
+    head.push(ln); // anything else before the data is kept as head
+  }
+  if (hdrAt === -1) { out.error = 'No HDR row - not an EIEP file, so Walter cannot split it by ICP.'; return out; }
+  if (first === -1) { out.error = 'No DET rows in the file.'; return out; }
+  var byIcp = {}, order = [];
+  for (var r = first; r < lines.length; r++) {
+    var row = lines[r];
+    if (!row || !row.replace(/\s/g, '')) continue;
+    var fr = fieldsOf(row);
+    if (String(fr[0] || '').trim().toUpperCase() !== 'DET') continue; // stray rows are dropped - never guessed into an ICP
+    var icp = String(fr[icpCol] || '').trim() || '(blank ICP)';
+    if (!byIcp[icp]) { byIcp[icp] = []; order.push(icp); }
+    byIcp[icp].push(row);
+  }
+  out.icps = order.length;
+  if (order.length < 2) { out.error = 'The file has ' + (order.length ? 'one ICP' : 'no ICP') + ', so it cannot be split by ICP.'; return out; }
+  var base = String(baseName || 'file').replace(/\.[^.]+$/, '');
+  for (var o = 0; o < order.length; o++) {
+    var rows = byIcp[order[o]];
+    var h = head.slice();
+    var hf = fieldsOf(h[hdrAt]);
+    if (hf.length > 8) { hf[8] = String(rows.length); h[hdrAt] = hf.join(','); }
+    out.files.push({ name: base + ' - ' + order[o] + '.csv', text: h.concat(rows).join('\r\n') + '\r\n', icp: order[o], rows: rows.length });
+  }
+  return out;
 }
 
 function wbFileInfo_(file) {
