@@ -29,6 +29,15 @@ function analyseGroup_(recs, cfg) {
     return { grade: GRADE.NO_DATA, flags: ['No records'], avm: null };
   }
 
+  // ---- 0. Duplicates and channels (v2.30) ----
+  // Meridian ICPCONS files carry two half-hourly rows per period on a
+  // two-channel meter (same register code, different kWh). Summing their
+  // kWh is right; counting their days twice halved the AVM. Identical
+  // rows (same period AND same kWh) are duplicates and are dropped.
+  const merged = mergeChannels_(recs);
+  recs = merged.recs;
+  const flags = merged.flags;
+
   // ---- 1. Layer selection ----
   const byLayer = { HH: [], DAILY: [], PERIOD: [] };
   for (const r of recs) byLayer[r.granularity].push(r);
@@ -38,23 +47,28 @@ function analyseGroup_(recs, cfg) {
   for (const g of LAYER_ORDER) {
     if (coverage[g] > coverage[layer]) layer = g;
   }
-  const flags = [];
   const crossChecks = [];
 
   // Overlap check on the CHOSEN layer first: overlapping rows in the
   // data the totals are built from distort kWh and coverage together.
+  // (Channels within one file were merged above, so what is left here
+  // is a real problem: restated summaries, or two files that disagree.)
   const chosenUnion = unionDays_(byLayer[layer]);
+  let overlapInTotals = false;
   if (chosenUnion > 0 && coverage[layer] / chosenUnion > 1.2) {
+    overlapInTotals = true;
     flags.push('OVERLAPPING ROWS IN TOTALS: the ' + layer + ' data used for the AVM contains overlapping ' +
       'periods (' + round2a_(coverage[layer]) + ' row-days across only ' + round2a_(chosenUnion) +
       ' distinct days) — the AVM is NOT reliable. Inspect the file; this usually means summary/total ' +
-      'rows mixed into the detail.');
+      'rows mixed into the detail' + (merged.crossFile ? ', or two files that give different figures for the same periods' : '') + '.');
   }
 
   for (const g of LAYER_ORDER) {
     if (g === layer || coverage[g] <= 0) continue;
-    // Material alternative layer (> 1 day): cross-validate against chosen layer
-    if (coverage[g] > 1) {
+    // Material alternative layer: cross-validate against the chosen layer.
+    // v2.30: material = a week or more AND at least 5% of the chosen layer -
+    // a couple of odd partial-day rows at the ends of a file are not a source.
+    if (coverage[g] >= 7 && coverage[g] >= 0.05 * coverage[layer]) {
       const gUnion = unionDays_(byLayer[g]);
       const overlapFactor = gUnion > 0 ? coverage[g] / gUnion : 1;
       const chosenRate = sumKwhA_(byLayer[layer]) / Math.max(coverage[layer], 0.001);
@@ -117,6 +131,7 @@ function analyseGroup_(recs, cfg) {
   if (windowDays < cfg.min_window_days) breaches.push('window ' + Math.round(windowDays) + 'd < ' + cfg.min_window_days + 'd');
   if (estShare > cfg.max_estimate_share) breaches.push('estimate share ' + Math.round(estShare * 100) + '%');
   if (gapShare > cfg.max_gap_share) breaches.push('gaps ' + Math.round(gapShare * 100) + '% of window');
+  if (overlapInTotals) breaches.push('overlapping rows in the totals'); // v2.30: an unreliable AVM can never grade GOOD
   let grade;
   if (!anchored) grade = GRADE.UNRELIABLE;
   else if (breaches.length === 0) grade = GRADE.GOOD;
@@ -141,7 +156,106 @@ function analyseGroup_(recs, cfg) {
     grade: grade,
     breaches: breaches,
     flags: flags,
+    channels: merged.maxChannels,
+    duplicatesRemoved: merged.duplicates,
   };
+}
+
+/**
+ * v2.30: rows of one register that share a period.
+ * Per source file: when a file gives several rows for the same period,
+ * they are CHANNELS of one meter (kWh summed, read quality the worst)
+ * unless their kWh are identical in practically every such period - then
+ * the file simply states the rows twice and the extras are dropped.
+ * (Two real channels agree now and then - both 0.00 overnight - so a
+ * single period with equal values proves nothing; the whole register
+ * decides.) Across files: identical rows for a period are duplicates
+ * (dropped); different ones are a conflict left for the overlap check.
+ */
+function mergeChannels_(recs) {
+  const keyOf = (r) => r.granularity + '|' + Number(r.periodStart) + '|' + Number(r.periodEnd);
+  const kwhKey = (r) => String(Math.round(r.kWh * 1000000));
+  const quality = (list) => {
+    if (list.some(r => r.readQuality === 'ESTIMATE')) return 'ESTIMATE';
+    if (list.every(r => r.readQuality === 'ACTUAL')) return 'ACTUAL';
+    return list.map(r => r.readQuality).filter(q => q !== 'ACTUAL')[0] || 'UNKNOWN';
+  };
+  // 1. per file, per period
+  const byFile = {};
+  const fileOrder = [];
+  for (const r of recs) {
+    const f = String(r.sourceFile || '');
+    if (!byFile[f]) { byFile[f] = { keys: {}, order: [] }; fileOrder.push(f); }
+    const k = keyOf(r);
+    if (!byFile[f].keys[k]) { byFile[f].keys[k] = []; byFile[f].order.push(k); }
+    byFile[f].keys[k].push(r);
+  }
+  let duplicates = 0, channels = 1, oddDoubles = 0;
+  const perFile = {}; // file -> { key -> one record }
+  for (const f of fileOrder) {
+    const g = byFile[f];
+    let multi = 0, allEqual = 0;
+    const countOf = {};
+    for (const k of g.order) {
+      const list = g.keys[k];
+      if (list.length < 2) continue;
+      multi++;
+      countOf[list.length] = (countOf[list.length] || 0) + 1;
+      const first = kwhKey(list[0]);
+      if (list.every(r => kwhKey(r) === first)) allEqual++;
+    }
+    // A restated file repeats EVERYTHING; a handful of doubled periods (a
+    // DST fall-back hour) is summed like any other channel.
+    const restated = multi >= 10 && allEqual / multi >= 0.98;
+    // channels when most periods come in multiples; a few doubled periods
+    // (a daylight-saving fall-back hour: two real half-hours with one clock
+    // label) are left exactly as they are - two rows, two half-hours of time
+    let isChannels = false;
+    if (!restated && multi) {
+      if (multi >= 0.1 * g.order.length) {
+        isChannels = true;
+        let best = 0;
+        for (const n of Object.keys(countOf)) if (countOf[n] > best) { best = countOf[n]; channels = Math.max(channels, Number(n)); }
+      } else oddDoubles += multi;
+    }
+    perFile[f] = {};
+    for (const k of g.order) {
+      const list = g.keys[k];
+      if (list.length === 1) { perFile[f][k] = list[0]; continue; }
+      if (restated) { duplicates += list.length - 1; perFile[f][k] = list[0]; continue; }
+      if (!isChannels) { perFile[f][k] = list; continue; } // kept as separate rows
+      const one = {};
+      for (const key of Object.keys(list[0])) one[key] = list[0][key];
+      one.kWh = list.reduce((a, r) => a + r.kWh, 0);
+      one.readQuality = quality(list);
+      one.channels = list.length;
+      perFile[f][k] = one;
+    }
+  }
+  // 2. across files
+  const out = [];
+  let crossFile = false;
+  const each = (v, fn) => { if (Array.isArray(v)) { for (const r of v) fn(r); } else fn(v); };
+  if (fileOrder.length === 1) {
+    const f = fileOrder[0];
+    for (const k of byFile[f].order) each(perFile[f][k], (r) => out.push(r));
+  } else {
+    const seenKey = {};
+    for (const f of fileOrder) {
+      for (const k of byFile[f].order) {
+        each(perFile[f][k], (r) => {
+          if (!seenKey[k]) { seenKey[k] = [r]; out.push(r); return; }
+          if (seenKey[k].some(x => kwhKey(x) === kwhKey(r))) { duplicates++; return; } // same figure from another file
+          seenKey[k].push(r); out.push(r); crossFile = true;
+        });
+      }
+    }
+  }
+  const flags = [];
+  if (duplicates) flags.push(duplicates + ' duplicate row(s) removed (the same period and kWh stated twice)');
+  if (channels > 1) flags.push(channels + ' channels on this register (rows with the same period and different kWh in the same file) — kWh summed, days counted once; informational only');
+  else if (oddDoubles) flags.push(oddDoubles + ' period(s) appear twice (a daylight-saving hour, usually) — both counted; informational only');
+  return { recs: out, flags: flags, duplicates: duplicates, maxChannels: channels, crossFile: crossFile };
 }
 
 function sumDays_(recs) {
