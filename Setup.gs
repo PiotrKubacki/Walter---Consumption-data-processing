@@ -90,6 +90,7 @@ const CDP_REGISTER_MAP_SEED = [
   ['ELEC', 'D',               'Day',        ''],
   ['ELEC', 'N',               'Night',      ''],
   ['ELEC', 'KWH-IMP-PRI-TOT', 'Anytime',    'Genesis interval element'],
+  ['ELEC', 'EXPORT',          'Solar Exported', 'generation fed to the grid (EIEP flow I / EG) - not consumption'],
   ['GAS',  'U',               'Gas',        ''],
   ['GAS',  '1',               'Gas',        'single gas register'],
 ];

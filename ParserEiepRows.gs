@@ -148,7 +148,17 @@ function eiepParse_(content, fileName) {
   }
 
   // ---- Pass 2: build records ----
+  // v2.31: energy flow direction. X = extraction (the customer's
+  // consumption); I = injection (solar/generation fed back to the grid,
+  // register content code EG in Meridian files). Injection rows keep
+  // their own register named "EXPORT" - the same name the interval
+  // readings parser uses - so no consumption analysis or RFP total
+  // ever adds generation to usage. The original code is reported in
+  // the file flags.
   const records = [];
+  const exportCodes = {};
+  let exportRows = 0;
+  const flowOf = (v) => String(v || '').trim().toUpperCase();
   for (let di = 0; di < rawDets.length; di++) {
     const det = rawDets[di];
     const f = det.fields;
@@ -174,8 +184,15 @@ function eiepParse_(content, fileName) {
         errors.push({ line: det.line, reason: 'Bad kWh: ' + f[c.kWh] });
         continue;
       }
+      const flow = c.flag === null || c.flag === undefined ? '' : flowOf(f[c.flag]);
+      let register = f[c.tariff];
+      if (flow === 'I') {
+        exportRows++;
+        exportCodes[String(register || '').trim() || '(blank)'] = true;
+        register = 'EXPORT';
+      }
       records.push({
-        icp: f[c.icp], register: f[c.tariff], meterId: f[c.meterId],
+        icp: f[c.icp], register: register, meterId: f[c.meterId],
         periodStart: start, periodEnd: end, kWh: kWh,
         granularity: classifyGranularity_(f[c.intervalEnd], start, end),
         readQuality: normaliseReadQuality_(f[c.readQuality]),
@@ -200,9 +217,15 @@ function eiepParse_(content, fileName) {
         errors.push({ line: det.line, reason: 'Bad units/kWh: ' + f[map.kWh] });
         continue;
       }
+      let sReg = map.register !== null ? f[map.register] : '(single)';
+      if (map.flow !== null && flowOf(f[map.flow]) === 'I') {
+        exportRows++;
+        exportCodes[String(sReg || '').trim() || '(blank)'] = true;
+        sReg = 'EXPORT';
+      }
       records.push({
         icp: f[map.icp],
-        register: map.register !== null ? f[map.register] : '(single)',
+        register: sReg,
         meterId: map.meterId !== null ? f[map.meterId] : '',
         periodStart: start, periodEnd: end, kWh: kWh,
         granularity: 'PERIOD',
@@ -210,6 +233,12 @@ function eiepParse_(content, fileName) {
         line: det.line,
       });
     }
+  }
+
+  if (exportRows) {
+    fileFlags.push('EXPORT direction rows (' + exportRows + ', flow I, register ' + Object.keys(exportCodes).join('/') +
+      '): GENERATION data fed back to the grid, not customer consumption. ' +
+      'Kept as register "EXPORT" - excluded from consumption totals and the RFP queue.');
   }
 
   return { header: header, records: records, errors: errors, fileFlags: fileFlags };
@@ -249,13 +278,14 @@ function icpconsColsFromLabels_(labels, fileFlags) {
     icp:           pick(['icp'], EIEP.icpconsCols.icp),
     meterId:       pick(['meter_register', 'meter_serial_number', 'meter_number'], EIEP.icpconsCols.meterId),
     tariff:        pick(['register_content_code', 'register_code', 'tariff'], EIEP.icpconsCols.tariff),
+    flag:          pick(['energy_flow_direction', 'flow_direction', 'flow'], EIEP.icpconsCols.flag),
     intervalStart: pick(['period_start', 'interval_start'], EIEP.icpconsCols.intervalStart),
     intervalEnd:   pick(['period_end', 'interval_end'], EIEP.icpconsCols.intervalEnd),
     readQuality:   pick(['read_status', 'read_type'], EIEP.icpconsCols.readQuality),
     kWh:           pick(['consumption_kwh', 'consumption', 'kwh', 'units'], EIEP.icpconsCols.kWh),
   };
   fileFlags.push('v1.4 labelled columns used: ICP@' + cols.icp + ', start@' + cols.intervalStart +
-    ', end@' + cols.intervalEnd + ', kWh@' + cols.kWh + ', status@' + cols.readQuality + '.');
+    ', end@' + cols.intervalEnd + ', kWh@' + cols.kWh + ', status@' + cols.readQuality + ', flow@' + cols.flag + '.');
   return cols;
 }
 
@@ -278,7 +308,7 @@ function icpsummColumnMap_(desFields) {
   const map = {
     ok: false, missing: [], _src: (desFields || []).join('|'),
     icp: null, periodStart: null, periodEnd: null, kWh: null,
-    register: null, meterId: null, readStatus: null,
+    register: null, meterId: null, readStatus: null, flow: null,
   };
   if (!desFields) { map.missing = ['(no DES row)']; _icpsummMapCache_ = map; return map; }
   const find = (patterns) => {
@@ -295,6 +325,7 @@ function icpsummColumnMap_(desFields) {
   map.register    = find(['register', 'tariff', 'meter type', 'price']);
   map.meterId     = find(['meter number', 'meter serial', 'meter id']);
   map.readStatus  = find(['read status', 'read type', 'status']);
+  map.flow        = find(['flow direction', 'energy flow', 'flow']);
   const required = { icp: map.icp, periodStart: map.periodStart, periodEnd: map.periodEnd, kWh: map.kWh };
   for (const k of Object.keys(required)) if (required[k] === null) map.missing.push(k);
   map.ok = map.missing.length === 0;

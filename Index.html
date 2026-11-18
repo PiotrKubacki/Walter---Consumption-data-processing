@@ -2180,29 +2180,56 @@
       wbRenderQueuePrev();
     }
 
-    /** Combined ICP list to queue: analysed rows (annuals summed per ICP) + manual entries. */
+    /**
+     * Combined ICP list to queue: analysed ICPs + manual entries.
+     * v2.31: an analysed ICP's Annual kWh is the ICP meters block's total
+     * consumption (wbModelTotals) - hand-typed figures, bill splits,
+     * combines and removed rows included, the EXPORT register never
+     * (Eric, 19 Nov). Short-coverage registers stay excluded until the
+     * operator includes them on the queue row, as before.
+     */
     function wbQueueIcps() {
       var byIcp = {};
       var rows = wbLastRows || [];
+      var model = wbIcpModel(), modelByIcp = {};
+      for (var mi = 0; mi < model.length; mi++) modelByIcp[model[mi].icp] = model[mi];
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         // annualKwh stays null until a register contributes a figure:
         // null = no annual (not queued); 0 = real zero consumption,
         // which IS queued (10 Nov).
-        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: null, srcs: {}, shortRegs: [] });
+        var e = byIcp[r.icp] || (byIcp[r.icp] = { icp: r.icp, fuel: r.lookup.fuel || '', annualKwh: null, srcs: {}, shortRegs: [], excl: {} });
         if (!r.lookup.customerId && /not found/i.test((r.lookup.flags || []).join(' '))) e.unresolved = true;
         var regAnnual = r.analysis.annualKwh;
-        if (regAnnual !== null && regAnnual !== undefined) {
+        var isExp = r.register === 'EXPORT' || !!(r.analysis && r.analysis.isExport);
+        if (isExp) {
+          if (regAnnual !== null && regAnnual !== undefined) e.exportKwh = (e.exportKwh || 0) + regAnnual;
+        } else if (regAnnual !== null && regAnnual !== undefined) {
           var days = r.analysis.daysCovered || 0;
-          if (days >= WB_MIN_REG_DAYS) {
-            e.annualKwh = (e.annualKwh || 0) + regAnnual;
-          } else {
+          if (days < WB_MIN_REG_DAYS) {
             var included = !!wbInclReg[r.icp + '|' + r.register];
-            if (included) e.annualKwh = (e.annualKwh || 0) + regAnnual;
+            if (!included) e.excl[r.register] = true;
             e.shortRegs.push({ reg: r.register, days: days, included: included });
           }
         }
         for (var j = 0; j < (r.sources || []).length; j++) e.srcs[r.sources[j]] = true;
+      }
+      for (var k0 in byIcp) {
+        var en = byIcp[k0], mdl = modelByIcp[en.icp];
+        if (mdl) {
+          var excl = en.excl;
+          var tt = wbModelTotals(mdl, function (reg) { return !!excl[reg]; });
+          if (tt.anyAnnual) en.annualKwh = Math.round(tt.an);
+          en.edited = tt.edited;
+        } else {
+          // no meter model (should not happen once analysed): the registers' own annuals
+          for (var ri = 0; ri < rows.length; ri++) {
+            var rr = rows[ri];
+            if (rr.icp !== en.icp || rr.register === 'EXPORT' || en.excl[rr.register]) continue;
+            if (wbNz(rr.analysis.annualKwh)) en.annualKwh = (en.annualKwh || 0) + rr.analysis.annualKwh;
+          }
+        }
+        delete en.excl;
       }
       for (var i = 0; i < wbManual.length; i++) {
         var m = wbManual[i];
@@ -2310,6 +2337,11 @@
           : (c.fuel === 'GAS' ? 'Gas' : 'Electricity');
         // A real zero is queued as 0 and says so; blank is not queued.
         var zeroCue = isZero ? '<div class="flag" style="font-size:11px;font-weight:400">zero consumption — queued as 0</div>' : '';
+        // v2.31: the figure is the ICP meters block's total consumption; say so when it has been edited or an export register was left out.
+        if (!c.manual && ok) {
+          if (c.edited) zeroCue += '<div class="muted" style="font-size:11px;font-weight:400" title="Hand-typed figures, bill splits, combines or removed rows in the ICP meters block">from ICP meters (edited)</div>';
+          if (wbNz(c.exportKwh)) zeroCue += '<div class="muted" style="font-size:11px;font-weight:400" title="Generation fed back to the grid is not consumption">export ' + fmtNum(Math.round(c.exportKwh)) + ' kWh/yr not counted</div>';
+        }
         var annualCell = c.manual
           ? '<input type="number" min="0" value="' + (ok ? Math.round(c.annualKwh) : '') + '" placeholder="kWh"' +
             ' style="width:95px;text-align:right;font-weight:600;border:1px solid var(--tuc-line);border-radius:6px;padding:4px 6px"' +
@@ -4159,7 +4191,12 @@
           out.push(e);
         }
         var grade = (r.analysis.gradeEmoji || '') + ' ' + (r.analysis.grade || '');
-        var x = bandByKey[r.icp + '|' + r.register];
+        // v2.31: an EXPORT register (solar / generation fed back to the grid,
+        // EIEP flow direction I) is never banded and never consumption: one
+        // whole row, offered to Betty as "Solar Exported", kept out of every
+        // consumption total and of the RFP queue's Annual kWh (Eric, 19 Nov).
+        var isExp = r.register === 'EXPORT' || !!(r.analysis && r.analysis.isExport);
+        var x = isExp ? null : bandByKey[r.icp + '|' + r.register];
         var res = x ? wbBandResolve(x) : null;
         if (x && res.shown && res.sched) {
           e.bands.push(x);
@@ -4170,7 +4207,7 @@
             var nWb = bandWinterCount(c.split.winter);
             var seasonal = nWb > 0 && nWb < 12 && c.split.days > 0;
             var annB = bandAnnual(so.total, c.split.days);
-            e.rows.push({ key: r.register + '/' + so.name, src: r.register + ' · ' + so.name, calcType: bettyMeterName(so.name),
+            e.rows.push({ key: r.register + '/' + so.name, register: r.register, src: r.register + ' · ' + so.name, calcType: bettyMeterName(so.name),
               calcMonthly: mon === null ? null : Math.round(mon), rate: so.rate, rateW: wbNz(so.rateW) ? so.rateW : null, rateS: wbNz(so.rateS) ? so.rateS : null, grade: grade, nW: nWb,
               calcWinter: seasonal ? Math.round(bandAnnual(so.winter, c.split.days) / nWb) : null,
               calcSummer: seasonal ? Math.round(bandAnnual(so.summer, c.split.days) / (12 - nWb)) : null,
@@ -4179,10 +4216,13 @@
         } else {
           if (x && !res.controlled) e.others.push(x);
           var avm = r.analysis.avm;
-          var whole = { key: r.register, src: r.register, calcType: r.bettyType || '', whole: true,
+          var whole = { key: r.register, register: r.register, exportReg: isExp,
+            src: isExp ? r.register + ' (generation, not consumption)' : r.register,
+            calcType: r.bettyType || (isExp ? 'Solar Exported' : ''), whole: true,
             calcMonthly: avm === null || avm === undefined ? null : avm, rate: null, grade: grade,
             nW: 0, calcWinter: null, calcSummer: null,
             calcAnnual: wbNz(r.analysis.annualKwh) ? r.analysis.annualKwh : (wbNz(avm) ? Math.round(avm * 12) : null) };
+          if (isExp) e.exportRow = true;
           if (x && wbNz(whole.calcAnnual)) {
             // seasons of a register that is sent whole: its own half-hourly data, scaled to its annual figure
             var Ww = bandWinterFor(res.retailer), nWw = bandWinterCount(Ww), tot = bandSeasonTotals(x.sm, Ww);
@@ -4203,8 +4243,10 @@
         // (all registers) is shared across the tariffs typed off the bill and
         // those rows replace what Walter calculated.
         var tm = 0, ta = 0, tw = 0, ts = 0, anyRow = false, seasonAll = true, nWp = 0;
+        var expRows = []; // v2.31: export rows ride along untouched by splits and combines
         for (k = 0; k < en.rows.length; k++) {
           var pr = en.rows[k];
+          if (pr.exportReg) { expRows.push(pr); continue; }
           if (!wbNz(pr.calcMonthly)) continue;
           anyRow = true;
           tm += pr.calcMonthly;
@@ -4224,7 +4266,7 @@
               calcWinter: wi ? wi[li] : null, calcSummer: su ? su[li] : null, calcAnnual: an[li], nW: seasonAll ? nWp : 0, rate: null,
               grade: 'estimated from bill', est: true });
           }
-          en.rows = billRows;
+          en.rows = billRows.concat(expRows);
           en.billSplit = true;
         }
         for (k = 0; k < st.extra.length; k++) {
@@ -4254,7 +4296,7 @@
           var parts = [], tm2 = 0, tw2 = 0, ts2 = 0, ta2 = 0, allSeason = true, worst = 'GOOD', worstRank = -1, anyEst = false, anyMan = false, nWc = nWd;
           for (k = 0; k < en.rows.length; k++) {
             var pr2 = en.rows[k];
-            if (pr2.removed || !pr2.type || !wbNz(pr2.monthly)) continue;
+            if (pr2.exportReg || pr2.removed || !pr2.type || !wbNz(pr2.monthly)) continue;
             parts.push(pr2);
             tm2 += pr2.monthly; ta2 += wbNz(pr2.annual) ? pr2.annual : Math.round(pr2.monthly * 12);
             if (wbNz(pr2.winter) && wbNz(pr2.summer)) { tw2 += pr2.winter; ts2 += pr2.summer; nWc = pr2.nW; } else allSeason = false;
@@ -4270,10 +4312,11 @@
               calcWinter: allSeason ? Math.round(tw2) : null, calcSummer: allSeason ? Math.round(ts2) : null, calcAnnual: Math.round(ta2), nW: nWc,
               rate: null, grade: worst, combined: true, est: anyEst, manualParts: anyMan };
             applyOv(comb);
-            en.rows = [comb];
+            en.rows = [comb].concat(expRows);
             en.combined = true;
           }
         }
+        if (en.exportRow) en.notes.push('EXPORT is generation fed back to the grid — shown so it can go to Betty as Solar Exported, but it is not consumption: not in the totals, not in the RFP queue');
         for (k = 0; k < en.rows.length; k++) {
           var row = en.rows[k];
           if (row.removed) continue;
@@ -4287,7 +4330,7 @@
             hit.est = hit.est || !!row.est; hit.combined = hit.combined || !!row.combined;
             if (hit.rate === null) hit.rate = row.rate;
           } else {
-            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade, est: !!row.est, combined: !!row.combined });
+            en.meters.push({ name: row.type, monthly: row.monthly, rate: row.rate, src: row.src, manual: row.manualMonthly || row.manualType, grade: row.grade, est: !!row.est, combined: !!row.combined, exportReg: !!row.exportReg });
           }
         }
         if (en.meters.length > 4) en.notes.push('More than four meters — Betty has four slots; the extra ones will not be written');
@@ -4419,12 +4462,15 @@
         if (e.custId) anyCust = true;
         var open = st.open !== null ? st.open : model.length <= 6;
         var q = wbIcpQuality(e.icp);
-        var total = 0;
-        for (var m = 0; m < e.meters.length; m++) total += e.meters[m].monthly;
+        var total = 0, nCons = 0, nExp = 0; // v2.31: the headline is consumption; export is named, not added
+        for (var m = 0; m < e.meters.length; m++) {
+          if (e.meters[m].exportReg) { nExp++; continue; }
+          nCons++; total += e.meters[m].monthly;
+        }
         h += '<details class="icpblk"' + (open ? ' open' : '') + ' ontoggle="wbMeterToggle(\'' + esc(e.icp) + '\', this.open, this)">' +
           '<summary><b class="mono">' + esc(e.icp) + '</b> <span class="muted" style="font-size:12px;font-weight:400">' +
           esc(e.info.network || 'network unknown') + ' · ' + esc(e.info.retailer || 'retailer unknown') + ' · ' +
-          e.meters.length + ' meter(s) · ' + fmtNum(Math.round(total)) + ' kWh/month</span>' +
+          nCons + ' meter(s)' + (nExp ? ' + export' : '') + ' · ' + fmtNum(Math.round(total)) + ' kWh/month</span>' +
           ' <span class="pill" style="font-weight:400">' + esc(q.gradeTxt) + '</span>' +
           (q.flags ? ' <span class="pill flag" style="font-weight:400">' + q.flags + ' flag(s)</span>' : '') +
           (e.notes.length ? ' <span class="flag" style="font-size:12px">⚠</span>' : '') + '</summary>';
@@ -4527,6 +4573,35 @@
     }
     function wbMeterVal(v) { return wbNz(v) ? v : ''; }
 
+    /**
+     * v2.31: the consumption totals of an ICP's meter rows as shown -
+     * every row not removed, export rows excluded. The same figures feed
+     * the totals row of the table and the RFP queue's Annual kWh, so the
+     * two can never disagree. skipReg(register) -> true leaves a register
+     * out (the queue's short-coverage rule).
+     */
+    function wbModelTotals(e, skipReg) {
+      var tt = { n: 0, noType: 0, mo: 0, wi: 0, su: 0, an: 0, season: true, edited: false, anyAnnual: false, exportAn: null };
+      for (var ti = 0; ti < e.rows.length; ti++) {
+        var tr = e.rows[ti];
+        if (tr.exportReg) {
+          if (!tr.removed && wbNz(tr.annual)) tt.exportAn = (tt.exportAn || 0) + tr.annual;
+          continue;
+        }
+        if (tr.removed) { tt.edited = true; continue; }
+        if (tr.manualMonthly || tr.manualType || tr.manualSeason || tr.est || tr.combined || tr.extra) tt.edited = true;
+        if (skipReg && tr.register && skipReg(tr.register)) continue;
+        if (!wbNz(tr.monthly) && !wbNz(tr.annual)) continue;
+        var an = wbNz(tr.annual) ? tr.annual : Math.round(tr.monthly * 12);
+        var mo = wbNz(tr.monthly) ? tr.monthly : Math.round(an / 12);
+        tt.n++; tt.anyAnnual = true;
+        if (!tr.type) tt.noType++;
+        tt.mo += mo; tt.an += an;
+        if (wbNz(tr.winter) && wbNz(tr.summer)) { tt.wi += tr.winter; tt.su += tr.summer; } else tt.season = false;
+      }
+      return tt;
+    }
+
     function wbMeterTableHtml(e, bi) {
       var st = wbMeterState(e.icp);
       var W = bandWinterFor(e.info.matched || bandRetailers()[0] || '');
@@ -4547,6 +4622,8 @@
         }
         var opts = '<option value="">— not sent to Betty —</option>';
         for (var t = 0; t < BETTY_METERS.length; t++) opts += '<option' + (BETTY_METERS[t] === row.type ? ' selected' : '') + '>' + esc(BETTY_METERS[t]) + '</option>';
+        // v2.31: a type the loaded template's vocabulary lacks (Solar Exported on an older template) still shows as what it is
+        if (row.type && BETTY_METERS.indexOf(row.type) === -1) opts += '<option selected>' + esc(row.type) + '</option>';
         var rt = row.type ? wbMeterRateTxt(e.icp, row.type) : '';
         var id = bi + '_' + ri, args = bi + ', ' + ri;
         var cell = function (pre, val, fn, copy) {
@@ -4556,7 +4633,8 @@
         };
         h += '<tr><td class="tL"><select onchange="wbMeterType(' + args + ', this.value)" style="height:30px;border:1px solid ' +
           (row.type ? 'var(--tuc-line)' : 'var(--warn)') + ';border-radius:6px;font-size:13px;font-weight:600;max-width:170px">' + opts + '</select>' +
-          '<div class="muted" style="font-size:11px;margin-top:2px">from ' + esc(row.src) + '</div></td>' +
+          '<div class="muted" style="font-size:11px;margin-top:2px">from ' + esc(row.src) + '</div>' +
+          (row.exportReg ? '<span class="pill" style="font-size:10px" title="Generation fed back to the grid — kept out of the totals and the RFP queue">export · not consumption</span>' : '') + '</td>' +
           cell('wbMtMo_', row.monthly, 'wbMeterMonthly(' + args + ', this.value)', true) +
           '<div id="wbMtMan_' + id + '" class="flag" style="font-size:11px;white-space:normal">' + esc(wbMeterManTxt(row)) + '</div></td>' +
           cell('wbMtWi_', row.winter, 'wbMeterSeason(' + args + ', \'winter\', this.value)', true) + '</td>' +
@@ -4572,19 +4650,11 @@
             ? '<button class="cpy" title="Copy this unit cost' + (!rt && wbNz(row.rateW) && wbNz(row.rateS) ? ' (all year, weighted)' : '') + '" onclick="copyPlain(\'' + (rt || bandRateTxt(row.rate)) + '\', this)">' + ICONS.copy + '</button>' : '') + '</td>' +
           '<td><button class="cpy" style="color:var(--bad, #B3261E);padding:0" title="Remove this row — it is not sent to Betty" aria-label="Remove this row" onclick="wbMeterRemove(' + args + ', true)">' + ICONS.x + '</button></td></tr>';
       }
-      // v2.27: totals of the rows going to Betty, each with a copy button.
-      var tt = { n: 0, mo: 0, wi: 0, su: 0, an: 0, season: true };
-      for (var ti = 0; ti < e.rows.length; ti++) {
-        var tr = e.rows[ti];
-        if (tr.removed || !tr.type || !wbNz(tr.monthly)) continue;
-        tt.n++; tt.mo += tr.monthly; tt.an += wbNz(tr.annual) ? tr.annual : Math.round(tr.monthly * 12);
-        if (wbNz(tr.winter) && wbNz(tr.summer)) { tt.wi += tr.winter; tt.su += tr.summer; } else tt.season = false;
-      }
-      if (tt.n) {
-        var tcell = function (v) { return '<td class="tR" style="font-weight:600;white-space:nowrap">' + (wbNz(v) ? fmtNum(Math.round(v)) + '<button class="cpy" title="Copy this total" onclick="copyPlain(\'' + Math.round(v) + '\', this)">' + ICONS.copy + '</button>' : '<span class="muted">—</span>') + '</td>'; };
-        h += '<tr style="border-top:2px solid var(--tuc-line);background:var(--tuc-warm-bg)"><td class="tL" style="font-weight:600">Total <span class="muted" style="font-weight:400;font-size:11px">(' + tt.n + ' row' + (tt.n === 1 ? '' : 's') + ' to Betty)</span></td>' +
-          tcell(tt.mo) + tcell(tt.season ? tt.wi : null) + tcell(tt.season ? tt.su : null) + tcell(tt.an) + '<td></td><td></td></tr>';
-      }
+      // v2.27: totals row, each figure with a copy button. v2.31: the same
+      // arithmetic as the RFP queue (wbModelTotals) - consumption rows only,
+      // export rows never counted; redrawn in place as figures are typed.
+      var tt = wbModelTotals(e);
+      if (tt.n) h += '<tr id="wbMtTot_' + bi + '" style="border-top:2px solid var(--tuc-line);background:var(--tuc-warm-bg)">' + wbMeterTotalsCells(tt) + '</tr>';
       h += '</tbody></table></div>';
       if (st.splitEdit) h += wbSplitBoxHtml(e, bi, st);
       for (var n = 0; n < e.notes.length; n++) h += '<div class="flag" style="font-size:12px">⚠ ' + esc(e.notes[n]) + '</div>';
@@ -4598,6 +4668,16 @@
         (edited ? '<button class="linkbtn" onclick="wbMeterReset(' + bi + ')">back to what Walter calculated</button>' : '') +
         (e.custId && !wbProspect ? '<button class="linkbtn" onclick="wbRatesOpenFor(\'' + esc(e.icp) + '\')">✏️ rates for this ICP</button>' : '') + '</div>';
       return h;
+    }
+
+    /** The cells of the totals row (v2.31: redrawn in place by wbMeterRowRefresh). */
+    function wbMeterTotalsCells(tt) {
+      var tcell = function (v) { return '<td class="tR" style="font-weight:600;white-space:nowrap">' + (wbNz(v) ? fmtNum(Math.round(v)) + '<button class="cpy" title="Copy this total" onclick="copyPlain(\'' + Math.round(v) + '\', this)">' + ICONS.copy + '</button>' : '<span class="muted">—</span>') + '</td>'; };
+      var note = tt.n + ' row' + (tt.n === 1 ? '' : 's');
+      if (tt.noType) note += ', ' + tt.noType + ' without a Betty type';
+      if (tt.exportAn !== null) note += '; export ' + fmtNum(Math.round(tt.exportAn)) + ' kWh/yr not counted';
+      return '<td class="tL" style="font-weight:600">Total consumption <span class="muted" style="font-weight:400;font-size:11px" title="What the RFP queue takes as this ICP\'s Annual kWh">(' + note + ')</span></td>' +
+        tcell(tt.mo) + tcell(tt.season ? tt.wi : null) + tcell(tt.season ? tt.su : null) + tcell(tt.an) + '<td></td><td></td>';
     }
 
     // ---- split an ICP from a bill (v2.21, ICP-level since v2.22) ----
@@ -4675,6 +4755,7 @@
       st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
     function wbSplitUndo(bi) {
       var st = wbSplitSt(bi); if (!st) return;
@@ -4682,6 +4763,7 @@
       st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
     /** v2.27: fold the ICP's rows into one Anytime row carrying the totals (or undo it). */
     function wbCombine(bi, on) {
@@ -4692,6 +4774,7 @@
       st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
     function wbMeterCopy(id, el) {
       var inp = document.getElementById(id);
@@ -4730,6 +4813,7 @@
       wbMeterOv(h).type = val;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
     /** Redraws one row's figures in place, so tabbing on to the next field keeps working. */
     function wbMeterRowRefresh(bi, ri) {
@@ -4741,6 +4825,17 @@
       if (man) man.textContent = wbMeterManTxt(row);
       var warn = document.getElementById('wbMtWarn_' + id);
       if (warn) { warn.textContent = wbMeterWarnShort(row); warn.title = row.warn || ''; }
+      var tot = document.getElementById('wbMtTot_' + bi);
+      if (tot) tot.innerHTML = wbMeterTotalsCells(wbModelTotals(h.e));
+      wbQueueFollow();
+    }
+    /**
+     * v2.31: the RFP queue's Annual kWh is what the ICP meters block shows,
+     * so every meter edit redraws the queue preview (Eric, 19 Nov: a figure
+     * typed in the meters block did not reach the queue).
+     */
+    function wbQueueFollow() {
+      if (document.getElementById('wbQueuePrev')) wbRenderQueuePrev();
     }
     /** Monthly kWh typed: Total Annual follows it (x 12). */
     function wbMeterMonthly(bi, ri, val) {
@@ -4785,6 +4880,7 @@
       else wbMeterOv(h).removed = !!on;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
     function wbMeterAdd(bi) {
       var e = wbIcpModel()[bi]; if (!e) return;
@@ -4793,6 +4889,7 @@
       st.extra.push({ id: st.seq });
       st.ov['x' + st.seq] = { type: '', monthly: 0 };
       wbBandsRender(true);
+      wbQueueFollow();
     }
     function wbMeterReset(bi) {
       var e = wbIcpModel()[bi]; if (!e) return;
@@ -4801,6 +4898,7 @@
       st.ov = {}; st.extra = []; st.bill = null; st.combine = false; st.splitEdit = null;
       wbBandsRender(true);
       wbRatesStatus();
+      wbQueueFollow();
     }
 
     /** The meters of every Betty-customer ICP, exactly as shown, for the template fill. */

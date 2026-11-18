@@ -178,14 +178,25 @@ function analyseFromCache_(fileIds) {
         try { slotMatrix = bandSlotMatrix_(hhInWindow); } catch (e) { slotMatrix = null; }
       }
     }
+    // v2.31: an EXPORT register (energy flow direction I - solar or other
+    // generation fed back to the grid) is analysed like any register so
+    // the figure is known, but it is generation, not consumption: the
+    // Workbench keeps it out of the ICP's consumption totals and the RFP
+    // queue's Annual kWh, and offers it to Betty as "Solar Exported".
+    const isExport = register === 'EXPORT';
+    if (isExport) {
+      analysis.flags.unshift('Solar export (generation) register \u2014 kWh fed back to the grid, not consumption; ' +
+        'excluded from consumption totals and the RFP queue');
+    }
     const serialised = serialiseAnalysis_(analysis);
     serialised.timeProfile = null; // retired v2.28 (see above)
     serialised.slotMatrix = slotMatrix;
+    serialised.isExport = isExport;
     rows.push({
       icp: icp, register: register,
       sources: sourceList,
       lookup: lookup,
-      bettyType: translateRegister_(register, lookup.fuel, regMapForRows) || '',
+      bettyType: translateRegister_(register, lookup.fuel, regMapForRows) || (isExport ? 'Solar Exported' : ''),
       bettyUrl: bettyUrl_(lookup.customerId),
       analysis: serialised,
     });
@@ -205,6 +216,7 @@ function nearZeroByIcp_(rows, cfg) {
   const limit = Number(cfg && cfg.near_zero_avm_kwh);
   const inUse = {};
   for (const r of rows) {
+    if (r.analysis && r.analysis.isExport) continue; // v2.31: generation is not usage
     const avm = r.analysis && r.analysis.avm;
     if (avm !== null && avm !== undefined && !(Number(avm) < limit)) inUse[r.icp] = true;
   }
