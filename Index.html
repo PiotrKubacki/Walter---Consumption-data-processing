@@ -3072,17 +3072,29 @@
       }
       return out;
     }
+    /** The rows of one group as text (no heading) - what the per-analyst copy button copies. */
+    function rfpClGroupText(group) {
+      var lines = [];
+      for (var k = 0; k < group.rows.length; k++) {
+        var r = group.rows[k].row;
+        lines.push((r.customerId || '') + '\t' + (r.tradingName || '') + '\t' + (r.registeredName || ''));
+      }
+      return lines.join('\n');
+    }
     function rfpClText() {
       var groups = rfpClGroups(), lines = [];
       for (var g = 0; g < groups.length; g++) {
         if (g) lines.push('');
         lines.push(groups[g].name);
-        for (var k = 0; k < groups[g].rows.length; k++) {
-          var r = groups[g].rows[k].row;
-          lines.push((r.customerId || '') + '\t' + (r.tradingName || '') + '\t' + (r.registeredName || ''));
-        }
+        lines.push(rfpClGroupText(groups[g]));
       }
       return lines.join('\n');
+    }
+    /** v2.29: copy one analyst's sub-list (its rows only, no heading). */
+    function rfpClCopyGroup(gi, btn) {
+      var groups = rfpClGroups();
+      if (!groups[gi]) return;
+      copyPlain(rfpClGroupText(groups[gi]), btn);
     }
     function rfpClRender() {
       var area = document.getElementById('rfpClArea');
@@ -3099,7 +3111,8 @@
       }
       h += '<div class="tblwrap"><table><thead><tr><th class="tL">Customer ID</th><th class="tL">Trading name</th><th class="tL">Registered name</th><th></th></tr></thead><tbody>';
       for (var g = 0; g < groups.length; g++) {
-        h += '<tr><td colspan="4" class="tL" style="background:var(--tuc-warm-bg);font-weight:600">' + esc(groups[g].name) + ' <span class="muted" style="font-weight:400">(' + groups[g].rows.length + ')</span></td></tr>';
+        h += '<tr><td colspan="4" class="tL" style="background:var(--tuc-warm-bg);font-weight:600">' + esc(groups[g].name) + ' <span class="muted" style="font-weight:400">(' + groups[g].rows.length + ')</span>' +
+          ' <button class="cpy" style="font-size:12px" title="Copy just this list — ' + groups[g].rows.length + ' row(s), three columns, no heading" onclick="rfpClCopyGroup(' + g + ', this)">' + ICONS.copy + ' copy</button></td></tr>';
         for (var k = 0; k < groups[g].rows.length; k++) {
           var r = groups[g].rows[k].row;
           h += '<tr><td class="tL mono">' + esc(r.customerId || '') + '</td><td class="tL">' + esc(r.tradingName || '') + '</td><td class="tL">' + esc(r.registeredName || '') + '</td>' +
