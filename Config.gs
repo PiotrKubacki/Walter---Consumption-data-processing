@@ -25,6 +25,24 @@ const CONFIG_TAB = 'Config';
 
 let _configCache_ = null;
 
+/**
+ * v2.32: the standard customer display name (TUC-APP-DEV-PRINCIPLES 6):
+ * "<Customer ID> <Registered name> (<Trading name>)" - brackets kept even
+ * when the names match, dropped only when the trading name is blank;
+ * a prospect shows "PROSPECT <name>". Presentation only - file titles
+ * and screens; stored data keeps id / registered / trading apart.
+ */
+function custLabel_(id, reg, trading, prospect) {
+  let r = String(reg || '').trim(), t = String(trading || '').trim();
+  const i = String(id || '').trim();
+  if (r === 'Not found') r = '';
+  if (t === 'Not found') t = '';
+  if (t && r.slice(-(t.length + 3)) === ' (' + t + ')') r = r.slice(0, -(t.length + 3));
+  const name = r + (t ? ' (' + t + ')' : '');
+  if (prospect || i === 'PROSPECT') return 'PROSPECT ' + (name || 'unnamed');
+  return (i + ' ' + name).trim();
+}
+
 function getConfig_() {
   if (_configCache_) return _configCache_;
   const backingId = PropertiesService.getScriptProperties().getProperty('BACKING_SHEET_ID');

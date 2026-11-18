@@ -754,8 +754,8 @@
       var a = r.analysis;
       var lk = r.lookup;
       var cust = lk.customerId
-        ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(lk.registeredName) + '</a>' : esc(lk.registeredName))
-          + '<div class="muted">' + esc(lk.customerId) + (lk.fuel === 'GAS' ? ' · GAS' : '') + '</div>'
+        ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(custLabel(lk.customerId, lk.registeredName, lk.tradingName)) + '</a>' : esc(custLabel(lk.customerId, lk.registeredName, lk.tradingName)))
+          + (lk.fuel === 'GAS' ? '<div class="muted">GAS</div>' : '')
         : '<span class="error">unresolved</span>';
       var flagItems = [];
       var arrs = [lk.flags || [], a.breaches || [], a.flags || []];
@@ -838,8 +838,8 @@
         var r = v.icpRegisters[i];
         var lk = r.lookup;
         var cust = lk.customerId
-          ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(lk.registeredName) + '</a>' : esc(lk.registeredName))
-            + '<div class="muted">' + esc(lk.customerId) + (lk.fuel === 'GAS' ? ' · GAS' : '') + '</div>'
+          ? (r.bettyUrl ? '<a href="' + esc(r.bettyUrl) + '" target="_blank">' + esc(custLabel(lk.customerId, lk.registeredName, lk.tradingName)) + '</a>' : esc(custLabel(lk.customerId, lk.registeredName, lk.tradingName)))
+            + (lk.fuel === 'GAS' ? '<div class="muted">GAS</div>' : '')
           : '<span class="error">unresolved</span>';
         html += '<tr>' +
           '<td class="mono tL">' + esc(r.icp) + '<div class="muted">' + esc(r.register) + '</div></td>' +
@@ -1157,8 +1157,7 @@
             (r.url ? '<a href="' + esc(r.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' : '') +
             (r.fileId ? ' · <a href="https://drive.google.com/uc?export=download&amp;id=' + esc(r.fileId) + '">' + ICONS.download + ' download to PC</a>' : '');
         h += '<tr' + (r.deleted ? ' style="opacity:.7"' : '') + '><td class="tL mono">' + esc(r.date) + '</td>' +
-          '<td class="tL">' + esc(r.customer) + (r.tradingName && r.tradingName !== r.customer ? ' <span class="muted">(' + esc(r.tradingName) + ')</span>' : '') +
-            (r.prospect ? '<div><span class="pill">PROSPECT</span></div>' : '<div class="muted">' + esc(r.customerId) + '</div>') + '</td>' +
+          '<td class="tL">' + esc(custLabel(r.customerId, r.customer, r.tradingName, r.prospect)) + '</td>' +
           '<td class="tL mono">' + icpList.map(esc).join('<br>') +
             (more > 0 ? '<div class="muted" style="font-family:inherit">+' + more + ' more</div>' : '') + '</td>' +
           '<td class="tL">' + fileCell + '</td>' +
@@ -1408,7 +1407,7 @@
         if (lk.traderId && lk.traderId !== 'Not found') traders[rmap[lk.traderId] || lk.traderId] = true;
       }
       var ids = Object.keys(custIds);
-      wbAnalysedCust = ids.length === 1 ? { id: ids[0], name: Object.keys(custNames)[0] || '' } : null;
+      wbAnalysedCust = ids.length === 1 ? { id: ids[0], name: Object.keys(custNames)[0] || '', trading: tradingName } : null;
       var warn = '';
       if (ids.length > 1) warn = '<p class="error">⚠ Files resolve to ' + ids.length + ' DIFFERENT customers (' + ids.join(', ') + ') — the workbench session is one customer. Check the files.</p>';
       if (!ids.length) warn = '<p class="flag">⚠ No ICP resolved to a Betty customer — check the lookup sheets, or tick “Prospect — not in Betty” if this customer is not in Betty.</p>';
@@ -1953,13 +1952,17 @@
         document.getElementById('wbQueueCard').style.display = 'none';
       }
       document.getElementById('wbAnalyseBtn').style.display = hasFiles ? '' : 'none';
-      var name = wbProspect ? (wbProspectLabel() || 'Prospect (name needed)')
-        : ((wbAnalysedCust && wbAnalysedCust.name) ||
-          (document.getElementById('wbManCustName').value || '').trim() || 'New session');
+      // v2.32: the standard customer label - "<ID> <Registered> (<Trading>)", prospects "PROSPECT <name>"
+      var name;
+      if (wbProspect) name = wbProsName() ? wbProspectDisplay() : 'PROSPECT (name needed)';
+      else if (wbAnalysedCust && wbAnalysedCust.name) name = custLabel(wbQCustVal || wbAnalysedCust.id, wbAnalysedCust.name, wbAnalysedCust.trading);
+      else {
+        var manName = (document.getElementById('wbManCustName').value || '').trim();
+        name = manName || wbQCustVal ? custLabel(wbQCustVal, manName, '') : 'New session';
+      }
       document.getElementById('wbSessName').textContent = name;
       var bits = [];
-      if (wbProspect) bits.push('Prospect, not in Betty');
-      else if (wbQCustVal) bits.push('Customer ID ' + wbQCustVal);
+      if (wbProspect) bits.push('not in Betty');
       if (hasFiles) bits.push(wbSession.length + ' file(s)');
       if (wbManual.length) bits.push(wbManual.length + ' manual ICP(s)');
       bits.push(wbLastRows ? 'analysed ✓' : hasFiles ? 'not analysed yet' : '');
@@ -1992,6 +1995,8 @@
       var n = wbProsName(), t = wbProsTrading();
       return n + (n && t && t !== n ? ' (' + t + ')' : '');
     }
+    /** v2.32: the standard display label for a prospect - "PROSPECT Registered (Trading)". */
+    function wbProspectDisplay() { return custLabel('', wbProsName(), wbProsTrading(), true); }
 
     function wbProspectToggle(on) {
       wbProspect = !!on;
@@ -2012,10 +2017,36 @@
       else { wbRenderQueuePrev(); wbRenderSession(); }
     }
 
-    /** "<customer id> <name>" for the CDF file name; prospects say so. */
+    /**
+     * v2.32: the standard customer display name (TUC-APP-DEV-PRINCIPLES 6,
+     * Peter 18 Nov): "<Customer ID> <Registered name> (<Trading name>)" -
+     * brackets kept even when the two names are the same, dropped only
+     * when the trading name is blank; a prospect shows "PROSPECT <name>".
+     * Used everywhere a customer is named on screen, in a report or in a
+     * file title. The stored data stays separate (id / registered /
+     * trading), this is presentation only.
+     */
+    function custLabel(id, reg, trading, prospect) {
+      var r = String(reg || '').trim(), t = String(trading || '').trim(), i = String(id || '').trim();
+      if (r === 'Not found') r = '';
+      if (t === 'Not found') t = '';
+      // older rows carry "Registered (Trading)" in the name already - do not bracket twice
+      if (t && r.slice(-(t.length + 3)) === ' (' + t + ')') r = r.slice(0, -(t.length + 3));
+      var name = r + (t ? ' (' + t + ')' : '');
+      if (prospect || i === 'PROSPECT') return 'PROSPECT ' + (name || 'unnamed');
+      return (i + ' ' + name).replace(/^\s+|\s+$/g, '');
+    }
+    /** The registered name alone, for data fields: strips a "(Trading)" suffix the HEADER field may carry. */
+    function custPlainName(name, trading) {
+      var r = String(name || '').trim(), t = String(trading || '').trim();
+      if (t && r.slice(-(t.length + 3)) === ' (' + t + ')') r = r.slice(0, -(t.length + 3));
+      return r;
+    }
+
+    /** The standard customer label for the CDF / flags file names and the progress strip; prospects say so. */
     function wbCdfLabel(meta) {
-      if (meta.prospect) return 'PROSPECT ' + (meta.customer || 'unnamed');
-      return (meta.customerId || '?') + ' ' + (meta.customer || 'Unknown customer');
+      if (meta.prospect) return custLabel('', meta.customer, meta.tradingName, true);
+      return custLabel(meta.customerId || '?', meta.customer || 'Unknown customer', meta.tradingName, false);
     }
 
     // ---------------- EA registry details (10 Nov) ----------------
@@ -2276,7 +2307,7 @@
       if (wbProspect) {
         h += '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
           '<span class="muted">Queue under:</span><span class="pill">PROSPECT</span>' +
-          (wbProsName() ? '<b>' + esc(wbProspectLabel()) + '</b>'
+          (wbProsName() ? '<b>' + esc(wbProspectDisplay()) + '</b>'
             : '<span class="error">enter the registered name (under “Prospect — not in Betty”)</span>') +
           '</p>';
       } else {
@@ -2285,7 +2316,7 @@
           '<input value="' + esc(wbQCustVal) + '" onchange="wbSetQCust(this)"' +
           ' style="width:110px;border:1px solid ' + (conflict ? 'var(--bad)' : 'var(--tuc-line)') + ';border-radius:6px;padding:6px 8px;font-weight:600">' +
           (wbAnalysedCust && wbAnalysedCust.name && wbQCustVal === wbAnalysedCust.id
-            ? '<span class="muted">' + esc(wbAnalysedCust.name) + '</span>' : '') +
+            ? '<span class="muted">' + esc(custLabel('', wbAnalysedCust.name, wbAnalysedCust.trading)) + '</span>' : '') +
           '</p>';
       }
       if (anyExt) {
@@ -2441,6 +2472,10 @@
         customer = wbProsName();
         tradingName = wbProsTrading();
       }
+      // v2.32: the HEADER "customer" field reads "Registered (Trading)" for the
+      // notes; as DATA (queue row, retailer files' registered_name, CDF index)
+      // the customer is the registered name alone.
+      customer = custPlainName(customer, tradingName);
       return { customerId: customerId, customer: customer, tradingName: tradingName, icps: icps,
         prospect: wbProspect, allIcps: allIcps };
     }
@@ -2469,8 +2504,9 @@
       var rows = wbLastRows || [];
       var icps = meta.icps || [];
       var summary = [
+        ['Customer', wbCdfLabel(meta)],
         ['Customer ID', meta.prospect ? 'PROSPECT (not in Betty)' : (meta.customerId || '')],
-        ['Customer', meta.customer || ''],
+        ['Registered name', meta.customer || ''],
         ['Trading name', meta.tradingName || ''],
         ['Files', wbSession.map(function (f) { return f.name; }).join('; ')],
         ['ICP count', icps.length]
@@ -3370,9 +3406,7 @@
       h += '<td class="tL mono">' + esc(r.added) +
           (r.urgent ? '<div class="error" style="font-weight:600;font-size:11px">URGENT</div>' : '') +
           (r.extension ? '<div class="flag" style="font-weight:600;font-size:11px">EXT</div>' : '') + '</td>' +
-        '<td class="tL">' + esc(r.customer) +
-          (r.customerId === 'PROSPECT' ? '<div><span class="pill">PROSPECT</span></div>'
-            : '<div class="muted">' + esc(r.customerId) + '</div>') + '</td>' +
+        '<td class="tL">' + esc(custLabel(r.customerId, r.customer, r.tradingName)) + '</td>' +
         '<td class="tL mono">' + esc(r.icp) +
           (r.fileUrl ? '<div style="font-size:11px"><a href="' + esc(r.fileUrl) + '" target="_blank">consumption file</a></div>' : '') + '</td>' +
         '<td>' + esc(r.icpType) + '</td>';
@@ -3876,13 +3910,24 @@
       return { cols: bands.slice(), grid: grid, mode: 'month', season: { S: [], W: [] }, daily: '', gst: true, map: {}, folds: [], forBands: bands.join('|') };
     }
 
-    /** A typed rate as a number, or null when blank / not a number / negative. */
+    /**
+     * A typed figure as a number, or null when blank / not a number.
+     * v2.32: a leading minus is accepted - a solar buy-back is a NEGATIVE
+     * unit cost on a positive export kWh, Betty takes a negative rate on
+     * any meter, and it is the operator's call (Peter, 19 Nov). A typed
+     * Unicode minus (U+2212) counts as a minus too.
+     */
     function bandNum(v) {
       if (v === null || v === undefined) return null;
-      var s = String(v).replace(/[$,\s]/g, '').replace(/c$/i, '');
+      var s = String(v).replace(/\u2212/g, '-').replace(/[$,\s]/g, '').replace(/c$/i, '');
       if (s === '') return null;
       var n = Number(s);
-      return isFinite(n) && n >= 0 ? n : null;
+      return isFinite(n) ? n : null;
+    }
+    /** Consumption figures (kWh) stay zero or more - bandNum without the sign. */
+    function bandNumPos(v) {
+      var n = bandNum(v);
+      return n === null || n < 0 ? null : n;
     }
 
     /** The rate typed for month m in column c: the month's own row, or its season's row in "by season" mode. */
@@ -4741,7 +4786,7 @@
       var st = wbSplitSt(bi); if (!st || !st.splitEdit) return;
       var ed = st.splitEdit, byType = {}, order = [];
       for (var i = 0; i < ed.lines.length; i++) {
-        var n = bandNum(ed.lines[i].kwh), ty = ed.lines[i].type;
+        var n = bandNumPos(ed.lines[i].kwh), ty = ed.lines[i].type;
         if (!ty && n === null) continue;
         if (!ty || n === null || !(n > 0)) { ed.msg = 'Each line needs a tariff and a kWh figure above zero.'; wbBandsRender(true); return; }
         if (byType[ty] === undefined) { byType[ty] = 0; order.push(ty); }
@@ -4841,7 +4886,7 @@
     function wbMeterMonthly(bi, ri, val) {
       var h = wbMeterRow(bi, ri); if (!h) return;
       var ov = wbMeterOv(h);
-      var n = bandNum(val);
+      var n = bandNumPos(val);
       delete ov.annual;
       if (n === null) delete ov.monthly; else ov.monthly = Math.round(n);
       wbMeterRowRefresh(bi, ri);
@@ -4850,7 +4895,7 @@
     function wbMeterAnnual(bi, ri, val) {
       var h = wbMeterRow(bi, ri); if (!h) return;
       var ov = wbMeterOv(h);
-      var n = bandNum(val);
+      var n = bandNumPos(val);
       if (n === null) { delete ov.annual; delete ov.monthly; }
       else { ov.annual = Math.round(n); ov.monthly = Math.round(n / 12); }
       wbMeterRowRefresh(bi, ri);
@@ -4859,7 +4904,7 @@
     function wbMeterSeason(bi, ri, which, val) {
       var h = wbMeterRow(bi, ri); if (!h) return;
       var ov = wbMeterOv(h);
-      var n = bandNum(val);
+      var n = bandNumPos(val);
       if (n === null) delete ov[which]; else ov[which] = Math.round(n);
       if (ov.winter === undefined && ov.summer === undefined) { delete ov.annual; delete ov.monthly; }
       else {
@@ -5877,7 +5922,7 @@
           kept++;
           var old = wbRates[icp];
           for (var m0 = 0; m0 < ld.meters.length; m0++) {
-            if (ld.meters[m0].unit > 0 && old.unit[ld.meters[m0].name] === undefined) old.unit[ld.meters[m0].name] = wbRateTyped(ld.meters[m0].unit, old.style.unit, old.style.gst);
+            if (ld.meters[m0].unit && old.unit[ld.meters[m0].name] === undefined) old.unit[ld.meters[m0].name] = wbRateTyped(ld.meters[m0].unit, old.style.unit, old.style.gst); // v2.32: negative rates load too
           }
           for (k in ld.fields) {
             if (!Object.prototype.hasOwnProperty.call(ld.fields, k) || !ld.fields[k] || old.fields[k] !== undefined) continue;
@@ -5886,7 +5931,7 @@
           continue;
         }
         var rec = { style: wbStyleAll('$', false), unit: {}, fields: {}, fromBetty: true };
-        for (var m = 0; m < ld.meters.length; m++) if (ld.meters[m].unit > 0) rec.unit[ld.meters[m].name] = String(ld.meters[m].unit);
+        for (var m = 0; m < ld.meters.length; m++) if (ld.meters[m].unit) rec.unit[ld.meters[m].name] = String(ld.meters[m].unit);
         for (k in ld.fields) if (Object.prototype.hasOwnProperty.call(ld.fields, k) && ld.fields[k]) rec.fields[k] = String(ld.fields[k]);
         wbRates[icp] = rec;
       }
@@ -5967,15 +6012,19 @@
         // Defaults apply only where nothing was loaded from Betty or typed; a blank default stays blank.
         if (fields.contractDays === undefined && wbNz(wbBetty.defaults.contractDays)) fields.contractDays = wbBetty.defaults.contractDays;
         if (fields.brokerage === undefined && wbNz(wbBetty.defaults.brokerage)) fields.brokerage = wbBetty.defaults.brokerage;
-        var fuel = 'ELEC', name = '';
+        var fuel = 'ELEC', name = '', trading = '';
         for (var r = 0; r < (wbLastRows || []).length; r++) {
-          if (wbLastRows[r].icp === e.icp) { fuel = wbLastRows[r].lookup.fuel || fuel; name = wbLastRows[r].lookup.registeredName || ''; break; }
+          if (wbLastRows[r].icp === e.icp) {
+            fuel = wbLastRows[r].lookup.fuel || fuel; name = wbLastRows[r].lookup.registeredName || '';
+            trading = wbLastRows[r].lookup.tradingName && wbLastRows[r].lookup.tradingName !== 'Not found' ? wbLastRows[r].lookup.tradingName : '';
+            break;
+          }
         }
         var retailer = wbBettyRetailerFor(e.icp);
         if (!meters.length) problems.push(e.icp + ': no meters to send');
         if (meters.length > 4) problems.push(e.icp + ': more than four meters');
         if (!retailer) problems.push(e.icp + ': no retailer picked');
-        out.push({ icp: e.icp, analysisId: ld ? ld.analysisId : '', customerId: e.custId, registeredName: ld && ld.registeredName ? ld.registeredName : name,
+        out.push({ icp: e.icp, analysisId: ld ? ld.analysisId : '', customerId: e.custId, registeredName: ld && ld.registeredName ? ld.registeredName : name, tradingName: trading,
           retailer: retailer, analysisType: /gas/i.test(fuel) ? 'GAS' : 'ELECTRICITY', comments: ld ? ld.comments : '', meters: meters, fields: fields });
       }
       return { rows: out, problems: problems };
@@ -6091,13 +6140,13 @@
           for (var i = 0; i < res.rows.length; i++) {
             var r = res.rows[i];
             if (r.deletedAt) {
-              h += '<tr class="muted"><td class="tL mono">' + esc(r.date) + '</td><td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+              h += '<tr class="muted"><td class="tL mono">' + esc(r.date) + '</td><td class="tL">' + esc(custLabel(r.customerId, r.customer, r.tradingName)) + '</td>' +
                 '<td class="tR">' + fmtNum(r.icpCount) + '</td><td class="tL" colspan="5"><span style="text-decoration:line-through">' + esc(r.fileName) + '</span><br>' +
                 'deleted ' + esc(r.deletedAt) + ' by ' + esc(r.deletedBy) + ' — ' + esc(r.deleteReason) + '</td></tr>';
               continue;
             }
             h += '<tr><td class="tL mono">' + esc(r.date) + '</td>' +
-              '<td class="tL">' + esc(r.customer) + '<div class="muted">' + esc(r.customerId) + '</div></td>' +
+              '<td class="tL">' + esc(custLabel(r.customerId, r.customer, r.tradingName)) + '</td>' +
               '<td class="tR">' + fmtNum(r.icpCount) + '</td>' +
               '<td class="tL"><b>' + esc(r.fileName) + '</b><br>' +
               (r.url ? '<a href="' + esc(r.url) + '" target="_blank">' + ICONS.open + ' open in new tab</a>' : '') +

@@ -318,7 +318,7 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData, rates) {
             if (bettyKey_(meterName) !== bettyKey_(nm)) continue;
             const val = Number(unit[meterName]);
             usedKeys[meterName] = true;
-            if (unit[meterName] === null || unit[meterName] === '' || !isFinite(val) || val < 0) continue;
+            if (unit[meterName] === null || unit[meterName] === '' || !isFinite(val)) continue;
             bulk.getRange(sheetRowR, s.unitCol + 1).setValue(val);
             row[s.unitCol] = val;
             unitN++;
@@ -358,13 +358,16 @@ function apiBettyFill(base64Data, uploadName, fileIds, bandData, rates) {
     // Export xlsx to the Betty files folder (v2.17: NOT the CDF output
     // folder - a filled template can hold the customer's rates, and
     // CDFs go out to retailers).
-    const custIds = {}; let custName = '';
+    const custIds = {}; let custName = '', custTrading = '';
     for (const u of summary.updated) {
       const g0 = (byIcp[u.icp] || [])[0];
-      if (g0 && g0.lookup.customerId) { custIds[g0.lookup.customerId] = true; custName = custName || g0.lookup.registeredName || ''; }
+      if (g0 && g0.lookup.customerId) {
+        custIds[g0.lookup.customerId] = true; custName = custName || g0.lookup.registeredName || '';
+        custTrading = custTrading || (g0.lookup.tradingName && g0.lookup.tradingName !== 'Not found' ? g0.lookup.tradingName : '');
+      }
     }
     const idList = Object.keys(custIds);
-    const betLabel = idList.length === 1 ? idList[0] + ' ' + custName : idList.length ? 'several customers' : 'no rows updated';
+    const betLabel = idList.length === 1 ? custLabel_(idList[0], custName, custTrading) : idList.length ? 'several customers' : 'no rows updated';
     const outName = 'BET - ' + betLabel.replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' +
       Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HHmm');
     const outBlob = exportXlsx_(temp.id).setName(outName + '.xlsx');
@@ -657,7 +660,7 @@ function apiBettyWrite(payload) {
   const canon = (list, v) => { const k = bettyKey_(v); for (const x of list) if (bettyKey_(x) === k) return x; return ''; };
   const errors = [], seen = {}, values = [], flagsLog = [];
   let ratesRows = 0, updates = 0, creates = 0;
-  const custIds = {}; let custName = '';
+  const custIds = {}; let custName = '', custTrading = '';
   const num = (v) => { const n = Number(v); return v === null || v === undefined || String(v).trim() === '' || !isFinite(n) ? 0 : n; };
   for (const r of rows) {
     const icp = String(r.icp || '').trim().toUpperCase();
@@ -688,8 +691,10 @@ function apiBettyWrite(payload) {
       else if (m.manual) flagsLog.push([icp, name || String(m.name || ''), 'MANUAL_FIGURE', String(m.src || '') + ' = ' + Math.round(Number(m.monthly) || 0)]);
       const monthly = Number(m.monthly), unit = num(m.unit);
       if (!isFinite(monthly) || monthly < 0) errors.push(tag + ': ' + String(m.name || '') + ' has no monthly figure');
-      if (unit < 0) errors.push(tag + ': ' + String(m.name || '') + ' has a negative unit cost');
-      if (unit > 0) anyRate = true;
+      // v2.32: a negative unit cost is written as typed - a solar buy-back
+      // (positive export kWh, negative rate); Betty accepts it on any meter
+      // and it is the operator's call (Peter, 19 Nov).
+      if (unit !== 0) anyRate = true;
       line.push(name, Math.round(monthly), unit);
     }
     const fields = r.fields || {};
@@ -706,13 +711,13 @@ function apiBettyWrite(payload) {
     values.push(line);
     if (anyRate) ratesRows++;
     if (line[0]) updates++; else { creates++; flagsLog.push([icp, '', 'NEW_ANALYSIS', 'no analysis ID - Betty creates the Current analysis']); }
-    if (custId) { custIds[custId] = true; custName = custName || String(r.registeredName || ''); }
+    if (custId) { custIds[custId] = true; custName = custName || String(r.registeredName || ''); custTrading = custTrading || String(r.tradingName || ''); }
   }
   if (errors.length) {
     throw new Error('Nothing was written — ' + errors.length + ' problem(s): ' + errors.slice(0, 6).join('; ') + (errors.length > 6 ? '; …' : ''));
   }
   const idList = Object.keys(custIds);
-  const label = idList.length === 1 ? idList[0] + ' ' + custName : 'several customers';
+  const label = idList.length === 1 ? custLabel_(idList[0], custName, custTrading) : 'several customers'; // v2.32: standard customer label in the file title
   const outName = 'BET - ' + label.replace(/[\\\/\[\]\*\?:]/g, ' ').slice(0, 80) + ' - ' +
     Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HHmm');
   const tmp = SpreadsheetApp.create('Walter Betty file ' + outName);
